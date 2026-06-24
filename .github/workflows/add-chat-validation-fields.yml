@@ -1,0 +1,35 @@
+name: Add chat and validation fields
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/add-chat-validation-fields.py
+      - .github/workflows/add-chat-validation-fields.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Apply field and validation patch
+        run: python3 scripts/add-chat-validation-fields.py
+
+      - name: Commit patched app and docs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html README.md
+          if git diff --cached --quiet; then
+            echo "No field-validation changes to commit."
+          else
+            git commit -m "Add chat session fields and validation"
+            git push
+          fi
