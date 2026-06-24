@@ -68,11 +68,15 @@ Columns, in this exact order:
 3. Email
 4. Gender
 5. Address
-6. Emergency Contact Name
-7. Emergency Contact Phone
-8. T-Shirt Size
-9. Dietary Requirements
-10. Notes
+6. Chat Session
+7. Chat Session Date Conducted
+8. Interests
+9. Languages Spoken
+10. Emergency Contact Name
+11. Emergency Contact Phone
+12. T-Shirt Size
+13. Dietary Requirements
+14. Notes
 
 #### `attendance_log.xlsx`
 
@@ -87,6 +91,8 @@ Columns, in this exact order:
 7. Role
 
 Rows are flagged as invalid when they do not have Name and at least one of Phone or Email. Invalid rows are previewed but not imported.
+
+Data validation checks Name, Phone or Email, email format, field length limits, tag limits, hours limits, and date-like values for Chat Session Date Conducted. Use YYYY-MM-DD for Chat Session Date Conducted.
 
 ### 2. Review before committing
 
@@ -140,6 +146,10 @@ For roster imports, supported batch-edit fields are:
 
 - Gender
 - Address
+- Chat Session
+- Chat Session Date Conducted
+- Interests
+- Languages Spoken
 - Emergency Contact Name
 - Emergency Contact Phone
 - T-Shirt Size
@@ -161,7 +171,7 @@ Go to **Central Database**.
 
 You can search, filter by tag, filter by gender, filter by T-shirt size, filter by attendance activity, click a row to expand a full profile, edit personal particulars inline, view the volunteer's full attendance log, edit attendance rows inline, and add or delete attendance rows.
 
-The table shows Name, Phone, Email, Gender, Address, Tags, T-Shirt, Dietary, Total Hours, and Last Active.
+The table shows Name, Phone, Email, Gender, Address, Chat Session, Chat Session Date Conducted, Interests, Languages Spoken, Tags, T-Shirt, Dietary, Total Hours, and Last Active.
 
 ### 5. Assign and recall tags after import
 
@@ -190,7 +200,7 @@ You can also search by tag in the search box.
 
 To sort by tags, use the **Sort** dropdown and choose **Tag then name**. Other sort options include Name A-Z, Total hours high-low, and Last active newest.
 
-Tags, gender, and address are included in:
+Tags, gender, address, chat session details, interests, and languages spoken are included in:
 
 - The Central Database table
 - Volunteer profile editing
@@ -296,11 +306,15 @@ const VOLUNTEER_SCHEMA = [
 ];
 ```
 
-Gender and Address are included in the schema and roster import template:
+Gender, Address, Chat Session, Chat Session Date Conducted, Interests, and Languages Spoken are included in the schema and roster import template:
 
 ```js
 { key:'gender', label:'Gender', type:'text' }
 { key:'address', label:'Address', type:'textarea' }
+{ key:'chatSession', label:'Chat Session', type:'text' }
+{ key:'chatSessionDate', label:'Chat Session Date Conducted', type:'date' }
+{ key:'interests', label:'Interests', type:'textarea' }
+{ key:'languagesSpoken', label:'Languages Spoken', type:'textarea' }
 ```
 
 To add another new field:
