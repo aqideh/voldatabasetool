@@ -31,11 +31,13 @@ Columns, in this exact order:
 1. Name
 2. Phone
 3. Email
-4. Emergency Contact Name
-5. Emergency Contact Phone
-6. T-Shirt Size
-7. Dietary Requirements
-8. Notes
+4. Gender
+5. Address
+6. Emergency Contact Name
+7. Emergency Contact Phone
+8. T-Shirt Size
+9. Dietary Requirements
+10. Notes
 
 #### `attendance_log.xlsx`
 
@@ -101,6 +103,8 @@ Choose a field, enter the new value, and click **Apply batch edit**.
 
 For roster imports, supported batch-edit fields are:
 
+- Gender
+- Address
 - Emergency Contact Name
 - Emergency Contact Phone
 - T-Shirt Size
@@ -114,15 +118,15 @@ For attendance imports, supported batch-edit fields are:
 - Hours
 - Role
 
-Name, Phone, and Email are not batch-edited at this stage because they are used for deduplication and matching. Change those in the source file or pasted cells before preparing the Merge Review.
+Name, Phone, and Email are not batch-edited in Merge Review because they are used for deduplication and matching. Change those in the source file or pasted cells before preparing the Merge Review.
 
 ### 4. Use the Central Database
 
 Go to **Central Database**.
 
-You can search, filter by T-shirt size, filter by attendance activity, click a row to expand a full profile, edit personal particulars inline, view the volunteer's full attendance log, edit attendance rows inline, and add or delete attendance rows.
+You can search, filter by tag, filter by gender, filter by T-shirt size, filter by attendance activity, click a row to expand a full profile, edit personal particulars inline, view the volunteer's full attendance log, edit attendance rows inline, and add or delete attendance rows.
 
-The table shows Name, Phone, Email, Tags, T-Shirt, Dietary, Total Hours, and Last Active.
+The table shows Name, Phone, Email, Gender, Address, Tags, T-Shirt, Dietary, Total Hours, and Last Active.
 
 ### 5. Assign and recall tags after import
 
@@ -151,13 +155,11 @@ You can also search by tag in the search box.
 
 To sort by tags, use the **Sort** dropdown and choose **Tag then name**. Other sort options include Name A-Z, Total hours high-low, and Last active newest.
 
-Tags are included in:
+Tags, gender, and address are included in:
 
 - The Central Database table
 - Volunteer profile editing
 - Search text
-- Tag recall dropdown
-- Tag sorting
 - `database.xlsx` export
 - JSON save files
 
@@ -169,7 +171,7 @@ Available exports:
 
 - **Export database.xlsx** — creates an Excel workbook with two sheets: Volunteer Particulars and Attendance Log
 - **Export merge log.xlsx** — exports merge and conflict review history
-- **Export JSON save file** — exports the full local database, suspected duplicate queue, merge log, and tags
+- **Export JSON save file** — exports the full local database, suspected duplicate queue, merge log, tags, gender, and address
 
 You can also import a JSON save file to restore or move the database to another browser.
 
@@ -243,34 +245,19 @@ const VOLUNTEER_SCHEMA = [
 ];
 ```
 
-Tags are already included in the schema as:
+Gender and Address are included in the schema and roster import template:
 
 ```js
-{ key:'tags', label:'Tags', type:'tags' }
+{ key:'gender', label:'Gender', type:'text' }
+{ key:'address', label:'Address', type:'textarea' }
 ```
 
 To add another new field:
 
 1. Add a new object to `VOLUNTEER_SCHEMA`.
-
-Example:
-
-```js
-{ key:'preferredLanguage', label:'Preferred Language', type:'text' }
-```
-
 2. If the field should be imported from `volunteer_roster.xlsx`, add the exact Excel header to `ROSTER_HEADERS`.
-
 3. Update `mapRosterRow()` so the new column is read into the matching field key.
-
-Example:
-
-```js
-preferredLanguage: cleanText(row[8])
-```
-
 4. Update `exportDatabaseXlsx()` if the field should appear in the exported workbook.
-
 5. Test with a sample roster file using the new exact header order.
 
 ## Development notes
