@@ -3,15 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
 <title>Volunteer Database Management Tool</title>
 <!--
   Volunteer Database Management Tool
-  Structure:
-  1. Schema constants define volunteer, roster, and attendance fields.
-  2. Upload and paste flows both validate exact fixed template headers.
-  3. Merge Review stages clean rows, conflicts, suspected duplicates, pre-merge tags, and batch edits.
-  4. Central Database stores data in localStorage, supports search, tag recall, sorting, inline editing, and attendance history.
-  5. Export supports XLSX database export, XLSX merge-log export, and JSON save/restore.
+  Hardened browser-local static app:
+  1. Exact fixed-template validation for Excel and pasted-cell imports.
+  2. File, paste, row, field-length, tag, and JSON restore limits.
+  3. Formula-safe XLSX export values.
+  4. Strict JSON restore normalisation.
+  5. Privacy and export warnings for local PII handling.
 -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
@@ -23,14 +24,15 @@
 <header><h1>Volunteer Database Management Tool</h1><p>Browser-local volunteer roster, attendance, tags, deduplication, review, and export tool.</p></header>
 <nav><button class="active" data-view="uploadView">Upload</button><button data-view="mergeView">Merge Review</button><button data-view="databaseView">Central Database</button><button data-view="exportView">Export</button><button data-view="duplicatesView">Suspected Duplicates <span id="dupCount" class="pill neutral">0</span></button></nav>
 <main>
+<div class="notice warn"><strong>Privacy notice:</strong> This tool stores volunteer data only in this browser's localStorage. Do not use shared devices for real personal data. Exported files contain personal data and should be protected.</div>
 <section id="uploadView" class="view active">
 <div class="card"><h2>Import Data</h2><p class="muted">Choose the template type, then upload an Excel workbook or paste copied spreadsheet cells. Both methods require exact headers in exact order.</p><div class="row"><div><label for="fileType">Template type</label><select id="fileType"><option value="roster">Volunteer roster</option><option value="attendance">Attendance log</option></select></div><div><label>&nbsp;</label><button id="downloadSampleRoster">Download sample roster</button><button id="downloadSampleAttendance">Download sample attendance</button></div></div></div>
-<div class="grid"><div class="card"><h3>Upload .xlsx</h3><div id="dropzone" class="dropzone" tabindex="0"><p><strong>Drop .xlsx here</strong> or click to select a file.</p><p class="muted">The first row must be the exact template header row.</p><input id="fileInput" class="hidden" type="file" accept=".xlsx,.xls"></div></div><div class="card"><h3>Paste spreadsheet cells</h3><p class="muted">Copy the header row and data rows from Excel or Google Sheets, then paste below.</p><label for="pasteBox">Pasted cells</label><textarea id="pasteBox" placeholder="Paste the full table here, including the header row."></textarea><div class="row"><button id="parsePaste" class="primary">Preview pasted cells</button><button id="clearPaste">Clear paste box</button></div></div></div>
+<div class="grid"><div class="card"><h3>Upload .xlsx</h3><div id="dropzone" class="dropzone" tabindex="0"><p><strong>Drop .xlsx here</strong> or click to select a file.</p><p class="muted">Maximum file size: 5 MB. First row must be the exact template header row.</p><input id="fileInput" class="hidden" type="file" accept=".xlsx,.xls"></div></div><div class="card"><h3>Paste spreadsheet cells</h3><p class="muted">Copy the header row and data rows from Excel or Google Sheets, then paste below. Maximum pasted text size: 1 MB.</p><label for="pasteBox">Pasted cells</label><textarea id="pasteBox" placeholder="Paste the full table here, including the header row."></textarea><div class="row"><button id="parsePaste" class="primary">Preview pasted cells</button><button id="clearPaste">Clear paste box</button></div></div></div>
 <div id="uploadStatus"></div><div id="previewCard" class="card hidden"><h3>Detected rows preview</h3><div id="previewMeta"></div><div id="previewTable" class="table-wrap"></div><p class="muted">Invalid rows are shown but will not be imported.</p><button id="prepareImport" class="primary">Prepare Merge Review</button></div>
 </section>
 <section id="mergeView" class="view"><div class="card"><h2>Merge Review</h2><p class="muted">Nothing is written to the database until Confirm Import is clicked. Use pre-merge edits before confirming.</p><div id="mergeSummary"></div><div class="row"><button id="confirmImport" class="primary">Confirm Import</button><button id="discardImport">Discard Pending Import</button></div></div><div id="batchEditBucket" class="card"></div><div id="cleanBucket" class="card"></div><div id="conflictBucket" class="card"></div><div id="suspectBucket" class="card"></div></section>
 <section id="databaseView" class="view"><div class="card"><h2>Central Database</h2><div class="grid"><div><label for="searchBox">Search</label><input id="searchBox" placeholder="Search name, phone, email, gender, address, notes, tags"></div><div><label for="tagFilter">Recall by tag</label><select id="tagFilter"><option value="">All tags</option></select></div><div><label for="genderFilter">Gender filter</label><select id="genderFilter"><option value="">All genders</option></select></div><div><label for="shirtFilter">T-Shirt filter</label><select id="shirtFilter"><option value="">All sizes</option></select></div><div><label for="activityFilter">Activity filter</label><select id="activityFilter"><option value="">All volunteers</option><option value="active">Has attendance</option><option value="inactive">No attendance</option></select></div><div><label for="sortSelect">Sort</label><select id="sortSelect"><option value="name">Name A-Z</option><option value="tag">Tag then name</option><option value="hours">Total hours high-low</option><option value="lastActive">Last active newest</option></select></div></div></div><div class="card"><div id="databaseTable" class="table-wrap"></div></div></section>
-<section id="exportView" class="view"><div class="grid"><div class="card"><h2>XLSX Export</h2><p class="muted">Exports Volunteer Particulars and Attendance Log sheets.</p><button id="exportXlsx" class="primary">Export database.xlsx</button><button id="exportMergeLog">Export merge log.xlsx</button></div><div class="card"><h2>JSON Save File</h2><p class="muted">Use JSON to back up and move the full browser database.</p><button id="exportJson" class="primary">Export JSON save file</button><label for="jsonInput">Import JSON save file</label><input id="jsonInput" type="file" accept=".json"></div><div class="card"><h2>Local Browser Data</h2><p class="muted">This clears only this browser's copy of the tool data.</p><button id="clearData" class="danger">Clear local database</button></div></div><div class="card"><h2>Merge and Conflict Log</h2><div id="mergeLogTable" class="table-wrap"></div></div></section>
+<section id="exportView" class="view"><div class="grid"><div class="card"><h2>XLSX Export</h2><p class="muted">Exports Volunteer Particulars and Attendance Log sheets. Formula-like cell values are neutralised.</p><button id="exportXlsx" class="primary">Export database.xlsx</button><button id="exportRedactedXlsx">Export redacted roster.xlsx</button><button id="exportMergeLog">Export merge log.xlsx</button></div><div class="card"><h2>JSON Save File</h2><p class="muted">Use JSON to back up and move the full browser database. Maximum restore file size: 10 MB.</p><button id="exportJson" class="primary">Export JSON save file</button><label for="jsonInput">Import JSON save file</label><input id="jsonInput" type="file" accept=".json"></div><div class="card"><h2>Local Browser Data</h2><p class="muted">This clears only this browser's copy of the tool data.</p><button id="clearData" class="danger">Clear local database</button></div></div><div class="card"><h2>Merge and Conflict Log</h2><div id="mergeLogTable" class="table-wrap"></div></div></section>
 <section id="duplicatesView" class="view"><div class="card"><h2>Persistent Suspected Duplicates</h2><p class="muted">Unresolved fuzzy or medium-confidence matches remain here until actioned.</p></div><div id="duplicateQueue"></div></section>
 </main>
 <script>
@@ -40,6 +42,7 @@ const ATTENDANCE_SCHEMA=[{key:'eventName',label:'Event Name',type:'text'},{key:'
 const ROSTER_HEADERS=['Name','Phone','Email','Gender','Address','Emergency Contact Name','Emergency Contact Phone','T-Shirt Size','Dietary Requirements','Notes'];
 const ATTENDANCE_HEADERS=['Name','Phone','Email','Event Name','Date','Hours','Role'];
 const STORAGE_KEY='volunteerDatabaseTool.v1';
+const MAX_FILE_BYTES=5*1024*1024,MAX_PASTE_CHARS=1024*1024,MAX_JSON_BYTES=10*1024*1024,MAX_IMPORT_ROWS=5000,MAX_VOLUNTEERS=20000,MAX_ATTENDANCE_PER_VOLUNTEER=2000,MAX_FIELD_LENGTH=500,MAX_LONG_FIELD_LENGTH=2000,MAX_TAGS=50,MAX_TAG_LENGTH=60,MAX_HOURS=100;
 let appData={volunteers:[],suspectedDuplicates:[],mergeLog:[]};
 let uploadedRows=[];let uploadedType='roster';let pendingImport=null;let expandedVolunteerId=null;
 
@@ -50,13 +53,13 @@ document.addEventListener('DOMContentLoaded',startApp);
 function startApp(){loadData();wireNavigation();wireUploadControls();wireMergeControls();wireDatabaseControls();wireExportControls();renderAll();}
 
 // Loads saved localStorage data and normalises missing newer fields.
-function loadData(){const saved=localStorage.getItem(STORAGE_KEY);if(!saved)return;try{const parsed=JSON.parse(saved);appData.volunteers=Array.isArray(parsed.volunteers)?parsed.volunteers:[];appData.suspectedDuplicates=Array.isArray(parsed.suspectedDuplicates)?parsed.suspectedDuplicates:[];appData.mergeLog=Array.isArray(parsed.mergeLog)?parsed.mergeLog:[];normaliseLoadedData();}catch(error){appData={volunteers:[],suspectedDuplicates:[],mergeLog:[]};}}
+function loadData(){const saved=localStorage.getItem(STORAGE_KEY);if(!saved)return;try{const parsed=JSON.parse(saved);appData=validateJsonSave(parsed);saveData();}catch(error){appData={volunteers:[],suspectedDuplicates:[],mergeLog:[]};showNotice('uploadStatus','bad','Saved browser data was invalid and was not loaded.');}}
 
 // Ensures saved volunteers have all current fields.
-function normaliseLoadedData(){appData.volunteers.forEach(function(v){VOLUNTEER_SCHEMA.forEach(function(f){if(f.key==='tags'){if(!Array.isArray(v.tags))v.tags=parseTags(v.tags||'');}else if(v[f.key]==null)v[f.key]='';});if(!Array.isArray(v.attendance))v.attendance=[];});}
+function normaliseLoadedData(){appData=validateJsonSave(appData);}
 
 // Saves all app data to localStorage.
-function saveData(){normaliseLoadedData();localStorage.setItem(STORAGE_KEY,JSON.stringify(appData));}
+function saveData(){appData=validateJsonSave(appData);localStorage.setItem(STORAGE_KEY,JSON.stringify(appData));}
 
 // Creates a unique local ID.
 function makeId(prefix){return prefix+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9);}
@@ -86,10 +89,10 @@ function handleDrop(e){e.preventDefault();document.getElementById('dropzone').cl
 function handleFileInputChange(e){if(e.target.files.length)readExcelFile(e.target.files[0]);e.target.value='';}
 
 // Reads an Excel workbook and validates rows.
-function readExcelFile(file){uploadedType=document.getElementById('fileType').value;if(!file.name.toLowerCase().endsWith('.xlsx')&&!file.name.toLowerCase().endsWith('.xls')){showNotice('uploadStatus','bad','Please upload an Excel .xlsx or .xls file.');return;}const reader=new FileReader();reader.onload=function(e){try{const workbook=XLSX.read(e.target.result,{type:'array',cellDates:true});const sheet=workbook.Sheets[workbook.SheetNames[0]];validateAndPreviewRows(XLSX.utils.sheet_to_json(sheet,{header:1,defval:''}));}catch(error){showNotice('uploadStatus','bad','The workbook could not be read as an Excel file.');}};reader.readAsArrayBuffer(file);}
+function readExcelFile(file){uploadedType=document.getElementById('fileType').value;if(!file.name.toLowerCase().endsWith('.xlsx')&&!file.name.toLowerCase().endsWith('.xls')){showNotice('uploadStatus','bad','Please upload an Excel .xlsx or .xls file.');return;}if(file.size>MAX_FILE_BYTES){showNotice('uploadStatus','bad','File rejected. Maximum file size is 5 MB.');return;}const reader=new FileReader();reader.onload=function(e){try{const workbook=XLSX.read(e.target.result,{type:'array',cellDates:true});const sheet=workbook.Sheets[workbook.SheetNames[0]];validateAndPreviewRows(XLSX.utils.sheet_to_json(sheet,{header:1,defval:''}));}catch(error){showNotice('uploadStatus','bad','The workbook could not be read as an Excel file.');}};reader.readAsArrayBuffer(file);}
 
 // Parses pasted cells and validates rows.
-function handlePastePreview(){uploadedType=document.getElementById('fileType').value;const text=document.getElementById('pasteBox').value;if(!text.trim()){showNotice('uploadStatus','bad','Paste cells including the header row before previewing.');return;}validateAndPreviewRows(parsePastedCells(text));}
+function handlePastePreview(){uploadedType=document.getElementById('fileType').value;const text=document.getElementById('pasteBox').value;if(!text.trim()){showNotice('uploadStatus','bad','Paste cells including the header row before previewing.');return;}if(text.length>MAX_PASTE_CHARS){showNotice('uploadStatus','bad','Paste rejected. Maximum pasted text size is 1 MB.');return;}validateAndPreviewRows(parsePastedCells(text));}
 
 // Converts copied spreadsheet text into rows using tabs as the only column separator.
 function parsePastedCells(text){return text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(function(line){return line.trim()!=='';}).map(function(line){return line.split('\t');});}
@@ -98,7 +101,7 @@ function parsePastedCells(text){return text.replace(/\r\n/g,'\n').replace(/\r/g,
 function clearPasteBox(){document.getElementById('pasteBox').value='';document.getElementById('uploadStatus').innerHTML='';}
 
 // Validates exact headers and maps rows for preview.
-function validateAndPreviewRows(rows){const expected=uploadedType==='roster'?ROSTER_HEADERS:ATTENDANCE_HEADERS;if(!rows.length||!headersMatch(rows[0],expected)){document.getElementById('previewCard').classList.add('hidden');showNotice('uploadStatus','bad','Template rejected. Expected columns in this exact order: '+expected.join(', '));return;}uploadedRows=[];for(let i=1;i<rows.length;i++){if(isBlankRow(rows[i]))continue;const mapped=uploadedType==='roster'?mapRosterRow(rows[i],i+1):mapAttendanceRow(rows[i],i+1);mapped.valid=hasCriticalFields(mapped);mapped.issue=mapped.valid?'':'Missing critical fields: Name and at least one of Phone or Email are required.';uploadedRows.push(mapped);}renderPreview();}
+function validateAndPreviewRows(rows){const expected=uploadedType==='roster'?ROSTER_HEADERS:ATTENDANCE_HEADERS;if(!rows.length||!headersMatch(rows[0],expected)){document.getElementById('previewCard').classList.add('hidden');showNotice('uploadStatus','bad','Template rejected. Expected columns in this exact order: '+expected.join(', '));return;}if(rows.length-1>MAX_IMPORT_ROWS){document.getElementById('previewCard').classList.add('hidden');showNotice('uploadStatus','bad','Import rejected. Maximum rows per import is '+MAX_IMPORT_ROWS+'.');return;}uploadedRows=[];for(let i=1;i<rows.length;i++){if(isBlankRow(rows[i]))continue;const mapped=uploadedType==='roster'?mapRosterRow(rows[i],i+1):mapAttendanceRow(rows[i],i+1);mapped.valid=hasCriticalFields(mapped);mapped.issue=mapped.valid?'':'Missing critical fields: Name and at least one of Phone or Email are required.';uploadedRows.push(mapped);}renderPreview();}
 
 // Checks exact header text and column count.
 function headersMatch(actual,expected){if(!actual||actual.length!==expected.length)return false;for(let i=0;i<expected.length;i++){if(String(actual[i]||'').trim()!==expected[i])return false;}return true;}
@@ -107,16 +110,25 @@ function headersMatch(actual,expected){if(!actual||actual.length!==expected.leng
 function isBlankRow(row){return !row||row.every(function(cell){return String(cell||'').trim()==='';});}
 
 // Converts one roster row into an import object.
-function mapRosterRow(row,rowNumber){return{rowNumber:rowNumber,name:cleanText(row[0]),phone:cleanText(row[1]),email:cleanText(row[2]),gender:cleanText(row[3]),address:cleanText(row[4]),emergencyName:cleanText(row[5]),emergencyPhone:cleanText(row[6]),shirtSize:cleanText(row[7]),dietary:cleanText(row[8]),notes:cleanText(row[9]),tags:[],attendance:[]};}
+function mapRosterRow(row,rowNumber){return sanitizeVolunteerRow({rowNumber:rowNumber,name:row[0],phone:row[1],email:row[2],gender:row[3],address:row[4],emergencyName:row[5],emergencyPhone:row[6],shirtSize:row[7],dietary:row[8],notes:row[9],tags:[],attendance:[]});}
 
 // Converts one attendance row into an import object.
-function mapAttendanceRow(row,rowNumber){return{rowNumber:rowNumber,name:cleanText(row[0]),phone:cleanText(row[1]),email:cleanText(row[2]),eventName:cleanText(row[3]),date:formatExcelDate(row[4]),hours:Number(row[5])||0,role:cleanText(row[6]),tags:[]};}
+function mapAttendanceRow(row,rowNumber){return{rowNumber:rowNumber,name:safeText(row[0],'name'),phone:safeText(row[1],'phone'),email:safeText(row[2],'email'),eventName:safeText(row[3],'eventName'),date:safeText(formatExcelDate(row[4]),'date'),hours:normaliseHours(row[5]),role:safeText(row[6],'role'),tags:[]};}
+
+// Sanitises a roster import row.
+function sanitizeVolunteerRow(row){return{rowNumber:row.rowNumber||0,name:safeText(row.name,'name'),phone:safeText(row.phone,'phone'),email:safeText(row.email,'email'),gender:safeText(row.gender,'gender'),address:safeText(row.address,'address'),emergencyName:safeText(row.emergencyName,'emergencyName'),emergencyPhone:safeText(row.emergencyPhone,'emergencyPhone'),shirtSize:safeText(row.shirtSize,'shirtSize'),dietary:safeText(row.dietary,'dietary'),notes:safeText(row.notes,'notes'),tags:sanitiseTags(row.tags),attendance:Array.isArray(row.attendance)?row.attendance:[]};}
 
 // Converts a value to trimmed text.
 function cleanText(value){return String(value==null?'':value).trim();}
 
+// Sanitises text and enforces field length limits.
+function safeText(value,key){const limit=(key==='address'||key==='notes')?MAX_LONG_FIELD_LENGTH:MAX_FIELD_LENGTH;return cleanText(value).slice(0,limit);}
+
 // Formats Excel dates or keeps text dates.
 function formatExcelDate(value){if(value instanceof Date)return value.toISOString().slice(0,10);if(typeof value==='number'){const p=XLSX.SSF.parse_date_code(value);if(p)return String(p.y).padStart(4,'0')+'-'+String(p.m).padStart(2,'0')+'-'+String(p.d).padStart(2,'0');}return cleanText(value);}
+
+// Normalises attendance hours.
+function normaliseHours(value){const n=Number(value);if(!Number.isFinite(n)||n<0)return 0;return Math.min(n,MAX_HOURS);}
 
 // Checks critical import fields.
 function hasCriticalFields(row){return cleanText(row.name)!==''&&(cleanText(row.phone)!==''||cleanText(row.email)!=='');}
@@ -161,7 +173,7 @@ function discardImport(){pendingImport=null;renderMergeReview();}
 function renderMergeReview(){if(!pendingImport){document.getElementById('mergeSummary').innerHTML='<div class="notice warn">No pending import. Upload or paste data first.</div>';document.getElementById('batchEditBucket').innerHTML='<h3>Pre-merge tags and batch edit</h3><p class="muted">No pending import to edit.</p>';document.getElementById('cleanBucket').innerHTML='<h3>Clean additions</h3><p class="muted">No pending rows.</p>';document.getElementById('conflictBucket').innerHTML='<h3>Conflicts</h3><p class="muted">No pending conflicts.</p>';document.getElementById('suspectBucket').innerHTML='<h3>Suspected duplicates</h3><p class="muted">No pending suspected duplicates.</p>';return;}document.getElementById('mergeSummary').innerHTML='<p><span class="pill ok">'+pendingImport.clean.length+' clean</span> <span class="pill warn">'+pendingImport.conflicts.length+' conflicts</span> <span class="pill neutral">'+pendingImport.suspects.length+' suspected</span></p>';renderBatchEditBucket();renderCleanBucket();renderConflictBucket();renderSuspectBucket();}
 
 // Renders pre-merge tag and batch edit controls.
-function renderBatchEditBucket(){let html='<h3>Pre-merge tags and batch edit</h3><p class="muted">These changes apply only to the staged import until Confirm Import is clicked.</p>';html+='<div class="grid"><div><label for="batchTarget">Apply to</label><select id="batchTarget"><option value="all">All pending rows</option><option value="clean">Clean additions</option><option value="conflicts">Conflicts</option><option value="suspects">Suspected duplicates</option></select></div><div><label for="batchTags">Tags to add</label><input id="batchTags" placeholder="youth, logistics, befriender"></div></div><div class="row"><button onclick="applyBatchTags()" class="primary">Add tags to selected rows</button></div>';html+='<hr><div class="grid"><div><label for="batchField">Field to edit</label><select id="batchField">'+getBatchEditableOptions()+'</select></div><div><label for="batchValue">New value</label><input id="batchValue" placeholder="Value to apply"></div></div><div class="row"><button onclick="applyBatchFieldEdit()">Apply batch edit</button></div>';html+='<h4>Pending row tags</h4><div class="table-wrap">'+renderPendingTagTable()+'</div>';document.getElementById('batchEditBucket').innerHTML=html;}
+function renderBatchEditBucket(){let html='<h3>Pre-merge tags and batch edit</h3><p class="muted">These changes apply only to the staged import until Confirm Import is clicked.</p>';html+='<div class="grid"><div><label for="batchTarget">Apply to</label><select id="batchTarget"><option value="all">All pending rows</option><option value="clean">Clean additions</option><option value="conflicts">Conflicts</option><option value="suspects">Suspected duplicates</option></select></div><div><label for="batchTags">Tags to add</label><input id="batchTags" maxlength="500" placeholder="youth, logistics, befriender"></div></div><div class="row"><button onclick="applyBatchTags()" class="primary">Add tags to selected rows</button></div>';html+='<hr><div class="grid"><div><label for="batchField">Field to edit</label><select id="batchField">'+getBatchEditableOptions()+'</select></div><div><label for="batchValue">New value</label><input id="batchValue" maxlength="2000" placeholder="Value to apply"></div></div><div class="row"><button onclick="applyBatchFieldEdit()">Apply batch edit</button></div>';html+='<h4>Pending row tags</h4><div class="table-wrap">'+renderPendingTagTable()+'</div>';document.getElementById('batchEditBucket').innerHTML=html;}
 
 // Returns batch editable field options.
 function getBatchEditableOptions(){const roster=[['gender','Gender'],['address','Address'],['emergencyName','Emergency Contact Name'],['emergencyPhone','Emergency Contact Phone'],['shirtSize','T-Shirt Size'],['dietary','Dietary Requirements'],['notes','Notes']];const attendance=[['eventName','Event Name'],['date','Date'],['hours','Hours'],['role','Role']];const fields=pendingImport&&pendingImport.type==='attendance'?attendance:roster;return fields.map(function(f){return'<option value="'+f[0]+'">'+f[1]+'</option>';}).join('');}
@@ -173,7 +185,7 @@ function renderPendingTagTable(){const rows=getPendingItemsByTarget('all').map(f
 function applyBatchTags(){if(!pendingImport)return;const tags=parseTags(document.getElementById('batchTags').value);const target=document.getElementById('batchTarget').value;if(!tags.length)return;getPendingItemsByTarget(target).forEach(function(item){item.incoming.tags=mergeTags(item.incoming.tags,tags);});renderMergeReview();}
 
 // Applies a field value to selected pending rows.
-function applyBatchFieldEdit(){if(!pendingImport)return;const target=document.getElementById('batchTarget').value,field=document.getElementById('batchField').value,value=document.getElementById('batchValue').value;getPendingItemsByTarget(target).forEach(function(item){item.incoming[field]=field==='hours'?Number(value)||0:value;});renderMergeReview();}
+function applyBatchFieldEdit(){if(!pendingImport)return;const target=document.getElementById('batchTarget').value,field=document.getElementById('batchField').value,value=document.getElementById('batchValue').value;getPendingItemsByTarget(target).forEach(function(item){item.incoming[field]=field==='hours'?normaliseHours(value):safeText(value,field);});renderMergeReview();}
 
 // Returns pending items by target bucket.
 function getPendingItemsByTarget(target){if(!pendingImport)return[];if(target==='clean')return pendingImport.clean;if(target==='conflicts')return pendingImport.conflicts;if(target==='suspects')return pendingImport.suspects;return pendingImport.clean.concat(pendingImport.conflicts).concat(pendingImport.suspects);}
@@ -188,7 +200,7 @@ function renderConflictBucket(){let html='<h3>Conflicts</h3>';if(!pendingImport.
 function chooseConflictValue(conflictId,fieldKey,source){const c=pendingImport.conflicts.find(function(x){return x.id===conflictId;});if(!c)return;const f=c.fields.find(function(x){return x.key===fieldKey;});c.resolvedValues[fieldKey]=source==='existing'?f.existing:f.incoming;renderConflictBucket();}
 
 // Stores a typed conflict resolution value.
-function typeConflictValue(conflictId,fieldKey,value){const c=pendingImport.conflicts.find(function(x){return x.id===conflictId;});if(c)c.resolvedValues[fieldKey]=value;}
+function typeConflictValue(conflictId,fieldKey,value){const c=pendingImport.conflicts.find(function(x){return x.id===conflictId;});if(c)c.resolvedValues[fieldKey]=safeText(value,fieldKey);}
 
 // Renders suspected duplicate bucket.
 function renderSuspectBucket(){let html='<h3>Suspected duplicates</h3>';if(!pendingImport.suspects.length){document.getElementById('suspectBucket').innerHTML=html+'<p class="muted">None.</p>';return;}pendingImport.suspects.forEach(function(s){html+=renderSuspectCard(s,'pending');});document.getElementById('suspectBucket').innerHTML=html;}
@@ -209,19 +221,19 @@ function confirmImport(){if(!pendingImport)return;pendingImport.clean.forEach(co
 function commitCleanItem(item){if(item.action==='add')addNewVolunteerFromRow(item.incoming,pendingImport.type);else mergeRowIntoVolunteer(getVolunteer(item.existingId),item.incoming,pendingImport.type);}
 
 // Commits one conflict item.
-function commitConflictItem(c){const v=getVolunteer(c.existingId);if(!v)return;mergeRowIntoVolunteer(v,c.incoming,pendingImport.type);Object.keys(c.resolvedValues).forEach(function(k){v[k]=c.resolvedValues[k];});appData.mergeLog.push({date:new Date().toISOString(),level:'conflict',action:'resolved conflict',existingName:v.name,incomingName:c.incoming.name,reason:'User resolved differing field values.'});}
+function commitConflictItem(c){const v=getVolunteer(c.existingId);if(!v)return;mergeRowIntoVolunteer(v,c.incoming,pendingImport.type);Object.keys(c.resolvedValues).forEach(function(k){v[k]=safeText(c.resolvedValues[k],k);});appData.mergeLog.push({date:new Date().toISOString(),level:'conflict',action:'resolved conflict',existingName:v.name,incomingName:c.incoming.name,reason:'User resolved differing field values.'});}
 
 // Commits one suspected duplicate item.
 function commitSuspectItem(s){const e=getVolunteer(s.existingId);if(s.decision==='merge'){mergeRowIntoVolunteer(e,s.incoming,pendingImport.type);appData.mergeLog.push({date:new Date().toISOString(),level:s.level,action:'suspect merged',existingName:e?e.name:'',incomingName:s.incoming.name,reason:s.reason});}else if(s.decision==='separate'){addNewVolunteerFromRow(s.incoming,pendingImport.type);appData.mergeLog.push({date:new Date().toISOString(),level:s.level,action:'kept separate',existingName:e?e.name:'',incomingName:s.incoming.name,reason:s.reason});}else appData.suspectedDuplicates.push(s);}
 
 // Adds a new volunteer record.
-function addNewVolunteerFromRow(row,type){const v={id:makeId('vol'),name:row.name,phone:row.phone,email:row.email,gender:row.gender||'',address:row.address||'',emergencyName:row.emergencyName||'',emergencyPhone:row.emergencyPhone||'',shirtSize:row.shirtSize||'',dietary:row.dietary||'',tags:Array.isArray(row.tags)?row.tags:[],notes:row.notes||'',attendance:[]};if(type==='attendance')v.attendance.push(makeAttendanceFromRow(row));appData.volunteers.push(v);}
+function addNewVolunteerFromRow(row,type){const v=validateVolunteer({id:makeId('vol'),name:row.name,phone:row.phone,email:row.email,gender:row.gender||'',address:row.address||'',emergencyName:row.emergencyName||'',emergencyPhone:row.emergencyPhone||'',shirtSize:row.shirtSize||'',dietary:row.dietary||'',tags:Array.isArray(row.tags)?row.tags:[],notes:row.notes||'',attendance:[]});if(type==='attendance')v.attendance.push(makeAttendanceFromRow(row));appData.volunteers.push(v);}
 
 // Merges imported data into an existing volunteer.
-function mergeRowIntoVolunteer(v,row,type){if(!v)return;if(!Array.isArray(v.tags))v.tags=[];v.tags=mergeTags(v.tags,row.tags||[]);if(type==='roster')VOLUNTEER_SCHEMA.forEach(function(f){if(f.key!=='tags'&&!v[f.key]&&row[f.key])v[f.key]=row[f.key];});if(type==='attendance')v.attendance.push(makeAttendanceFromRow(row));}
+function mergeRowIntoVolunteer(v,row,type){if(!v)return;if(!Array.isArray(v.tags))v.tags=[];v.tags=mergeTags(v.tags,row.tags||[]);if(type==='roster')VOLUNTEER_SCHEMA.forEach(function(f){if(f.key!=='tags'&&!v[f.key]&&row[f.key])v[f.key]=safeText(row[f.key],f.key);});if(type==='attendance'&&v.attendance.length<MAX_ATTENDANCE_PER_VOLUNTEER)v.attendance.push(makeAttendanceFromRow(row));}
 
 // Creates an attendance record.
-function makeAttendanceFromRow(row){return{id:makeId('att'),eventName:row.eventName||'',date:row.date||'',hours:Number(row.hours)||0,role:row.role||''};}
+function makeAttendanceFromRow(row){return{id:makeId('att'),eventName:safeText(row.eventName||'','eventName'),date:safeText(row.date||'','date'),hours:normaliseHours(row.hours),role:safeText(row.role||'','role')};}
 
 // Resolves a queued duplicate.
 function resolveQueuedSuspect(s){const type=s.incoming.eventName?'attendance':'roster';const e=getVolunteer(s.existingId);if(s.decision==='merge')mergeRowIntoVolunteer(e,s.incoming,type);if(s.decision==='separate')addNewVolunteerFromRow(s.incoming,type);appData.suspectedDuplicates=appData.suspectedDuplicates.filter(function(x){return x.id!==s.id;});appData.mergeLog.push({date:new Date().toISOString(),level:s.level,action:'queue resolved: '+s.decision,existingName:e?e.name:'',incomingName:s.incoming.name,reason:s.reason});saveData();}
@@ -254,10 +266,13 @@ function getAllTags(){const tags=[];appData.volunteers.forEach(function(v){(v.ta
 function getFirstTag(v){const tags=Array.isArray(v.tags)?v.tags.slice().sort():[];return tags.length?tags[0]:'zzzzzz';}
 
 // Parses comma-separated tags.
-function parseTags(text){const raw=cleanText(text).split(',').map(function(t){return t.trim().toLowerCase();}).filter(Boolean);const unique=[];raw.forEach(function(t){if(unique.indexOf(t)===-1)unique.push(t);});return unique.sort();}
+function parseTags(text){return sanitiseTags(cleanText(text).split(','));}
+
+// Sanitises tag arrays.
+function sanitiseTags(tags){const out=[];(Array.isArray(tags)?tags:[]).forEach(function(t){const clean=cleanText(t).toLowerCase().slice(0,MAX_TAG_LENGTH);if(clean&&out.indexOf(clean)===-1&&out.length<MAX_TAGS)out.push(clean);});return out.sort();}
 
 // Merges tag arrays.
-function mergeTags(a,b){const out=[];(a||[]).concat(b||[]).forEach(function(t){const clean=cleanText(t).toLowerCase();if(clean&&out.indexOf(clean)===-1)out.push(clean);});return out.sort();}
+function mergeTags(a,b){return sanitiseTags((a||[]).concat(b||[]));}
 
 // Converts tags to display text.
 function tagsToText(tags){return Array.isArray(tags)?tags.join(', '):'';}
@@ -269,19 +284,19 @@ function renderTagPills(tags){if(!Array.isArray(tags)||!tags.length)return'<span
 function toggleProfile(id){expandedVolunteerId=expandedVolunteerId===id?null:id;renderDatabase();}
 
 // Renders full editable profile.
-function renderFullProfile(v){let html='<h3>Full profile</h3><div class="grid">';VOLUNTEER_SCHEMA.forEach(function(f){const raw=f.key==='tags'?tagsToText(v.tags):(v[f.key]||'');const val=escapeHtml(raw);if(f.type==='textarea')html+='<div><label>'+f.label+'</label><textarea oninput="editVolunteerField(\''+v.id+'\',\''+f.key+'\', this.value)">'+val+'</textarea></div>';else html+='<div><label>'+f.label+'</label><input type="text" value="'+val+'" oninput="editVolunteerField(\''+v.id+'\',\''+f.key+'\', this.value)"><p class="muted">'+(f.key==='tags'?'Use comma-separated tags, for example: youth, logistics, befriender':'')+'</p></div>';});html+='</div><h3>Attendance log</h3>'+renderAttendanceEditor(v);return html;}
+function renderFullProfile(v){let html='<h3>Full profile</h3><div class="grid">';VOLUNTEER_SCHEMA.forEach(function(f){const raw=f.key==='tags'?tagsToText(v.tags):(v[f.key]||'');const val=escapeHtml(raw);if(f.type==='textarea')html+='<div><label>'+f.label+'</label><textarea maxlength="'+MAX_LONG_FIELD_LENGTH+'" oninput="editVolunteerField(\''+v.id+'\',\''+f.key+'\', this.value)">'+val+'</textarea></div>';else html+='<div><label>'+f.label+'</label><input type="text" maxlength="'+(f.key==='tags'?500:MAX_FIELD_LENGTH)+'" value="'+val+'" oninput="editVolunteerField(\''+v.id+'\',\''+f.key+'\', this.value)"><p class="muted">'+(f.key==='tags'?'Use comma-separated tags, for example: youth, logistics, befriender':'')+'</p></div>';});html+='</div><h3>Attendance log</h3>'+renderAttendanceEditor(v);return html;}
 
 // Renders editable attendance rows.
-function renderAttendanceEditor(v){let html='<table><thead><tr><th>Event</th><th>Date</th><th>Hours</th><th>Role</th><th></th></tr></thead><tbody>';(v.attendance||[]).forEach(function(a){html+='<tr><td><input value="'+escapeHtml(a.eventName)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'eventName\', this.value)"></td><td><input value="'+escapeHtml(a.date)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'date\', this.value)"></td><td><input type="number" value="'+escapeHtml(a.hours)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'hours\', this.value)"></td><td><input value="'+escapeHtml(a.role)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'role\', this.value)"></td><td><button class="small danger" onclick="deleteAttendance(\''+v.id+'\',\''+a.id+'\')">Delete</button></td></tr>';});return html+'</tbody></table><button class="small" onclick="addAttendance(\''+v.id+'\')">Add attendance row</button>';}
+function renderAttendanceEditor(v){let html='<table><thead><tr><th>Event</th><th>Date</th><th>Hours</th><th>Role</th><th></th></tr></thead><tbody>';(v.attendance||[]).forEach(function(a){html+='<tr><td><input maxlength="500" value="'+escapeHtml(a.eventName)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'eventName\', this.value)"></td><td><input maxlength="500" value="'+escapeHtml(a.date)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'date\', this.value)"></td><td><input type="number" min="0" max="100" value="'+escapeHtml(a.hours)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'hours\', this.value)"></td><td><input maxlength="500" value="'+escapeHtml(a.role)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'role\', this.value)"></td><td><button class="small danger" onclick="deleteAttendance(\''+v.id+'\',\''+a.id+'\')">Delete</button></td></tr>';});return html+'</tbody></table><button class="small" onclick="addAttendance(\''+v.id+'\')">Add attendance row</button>';}
 
 // Edits one volunteer field.
-function editVolunteerField(id,key,value){const v=getVolunteer(id);if(!v)return;v[key]=key==='tags'?parseTags(value):value;saveData();if(['tags','gender','shirtSize'].indexOf(key)>-1)renderDatabase();}
+function editVolunteerField(id,key,value){const v=getVolunteer(id);if(!v)return;v[key]=key==='tags'?parseTags(value):safeText(value,key);saveData();if(['tags','gender','shirtSize'].indexOf(key)>-1)renderDatabase();}
 
 // Edits one attendance field.
-function editAttendanceField(id,attId,key,value){const v=getVolunteer(id);if(!v)return;const a=v.attendance.find(function(x){return x.id===attId;});if(!a)return;a[key]=key==='hours'?Number(value)||0:value;saveData();}
+function editAttendanceField(id,attId,key,value){const v=getVolunteer(id);if(!v)return;const a=v.attendance.find(function(x){return x.id===attId;});if(!a)return;a[key]=key==='hours'?normaliseHours(value):safeText(value,key);saveData();}
 
 // Adds blank attendance.
-function addAttendance(id){const v=getVolunteer(id);if(!v)return;v.attendance.push({id:makeId('att'),eventName:'',date:'',hours:0,role:''});saveData();renderDatabase();}
+function addAttendance(id){const v=getVolunteer(id);if(!v||v.attendance.length>=MAX_ATTENDANCE_PER_VOLUNTEER)return;v.attendance.push({id:makeId('att'),eventName:'',date:'',hours:0,role:''});saveData();renderDatabase();}
 
 // Deletes attendance.
 function deleteAttendance(id,attId){const v=getVolunteer(id);if(!v)return;v.attendance=v.attendance.filter(function(a){return a.id!==attId;});saveData();renderDatabase();}
@@ -296,19 +311,46 @@ function getTotalHours(v){return(v.attendance||[]).reduce(function(t,a){return t
 function getLastActive(v){const dates=(v.attendance||[]).map(function(a){return a.date;}).filter(Boolean).sort();return dates.length?dates[dates.length-1]:'';}
 
 // Wires export controls.
-function wireExportControls(){document.getElementById('exportXlsx').addEventListener('click',exportDatabaseXlsx);document.getElementById('exportMergeLog').addEventListener('click',exportMergeLogXlsx);document.getElementById('exportJson').addEventListener('click',exportJsonSave);document.getElementById('jsonInput').addEventListener('change',importJsonSave);document.getElementById('clearData').addEventListener('click',clearLocalData);}
+function wireExportControls(){document.getElementById('exportXlsx').addEventListener('click',exportDatabaseXlsx);document.getElementById('exportRedactedXlsx').addEventListener('click',exportRedactedXlsx);document.getElementById('exportMergeLog').addEventListener('click',exportMergeLogXlsx);document.getElementById('exportJson').addEventListener('click',exportJsonSave);document.getElementById('jsonInput').addEventListener('change',importJsonSave);document.getElementById('clearData').addEventListener('click',clearLocalData);}
 
-// Exports database to XLSX.
-function exportDatabaseXlsx(){const particulars=appData.volunteers.map(function(v){return{Name:v.name,Phone:v.phone,Email:v.email,Gender:v.gender,Address:v.address,Tags:tagsToText(v.tags),'Emergency Contact Name':v.emergencyName,'Emergency Contact Phone':v.emergencyPhone,'T-Shirt Size':v.shirtSize,'Dietary Requirements':v.dietary,Notes:v.notes,'Total Hours':getTotalHours(v),'Last Active':getLastActive(v)};});const attendance=[];appData.volunteers.forEach(function(v){(v.attendance||[]).forEach(function(a){attendance.push({Name:v.name,Phone:v.phone,Email:v.email,Gender:v.gender,Address:v.address,Tags:tagsToText(v.tags),'Event Name':a.eventName,Date:a.date,Hours:a.hours,Role:a.role});});});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(particulars),'Volunteer Particulars');XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(attendance),'Attendance Log');XLSX.writeFile(wb,'volunteer_database.xlsx');}
+// Exports database to XLSX with formula-safe values.
+function exportDatabaseXlsx(){if(!confirm('Export full database? This file will contain volunteer personal data.'))return;const particulars=appData.volunteers.map(function(v){return safeExportRow({Name:v.name,Phone:v.phone,Email:v.email,Gender:v.gender,Address:v.address,Tags:tagsToText(v.tags),'Emergency Contact Name':v.emergencyName,'Emergency Contact Phone':v.emergencyPhone,'T-Shirt Size':v.shirtSize,'Dietary Requirements':v.dietary,Notes:v.notes,'Total Hours':getTotalHours(v),'Last Active':getLastActive(v)});});const attendance=[];appData.volunteers.forEach(function(v){(v.attendance||[]).forEach(function(a){attendance.push(safeExportRow({Name:v.name,Phone:v.phone,Email:v.email,Gender:v.gender,Address:v.address,Tags:tagsToText(v.tags),'Event Name':a.eventName,Date:a.date,Hours:a.hours,Role:a.role}));});});writeWorkbook('volunteer_database.xlsx',[['Volunteer Particulars',particulars],['Attendance Log',attendance]]);}
+
+// Exports a redacted roster with contact and address fields removed.
+function exportRedactedXlsx(){const rows=appData.volunteers.map(function(v){return safeExportRow({Name:v.name,Gender:v.gender,Tags:tagsToText(v.tags),'T-Shirt Size':v.shirtSize,'Dietary Requirements':v.dietary,'Total Hours':getTotalHours(v),'Last Active':getLastActive(v)});});writeWorkbook('volunteer_redacted_roster.xlsx',[['Redacted Roster',rows]]);}
 
 // Exports merge log to XLSX.
-function exportMergeLogXlsx(){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(appData.mergeLog),'Merge Conflict Log');XLSX.writeFile(wb,'merge_conflict_log.xlsx');}
+function exportMergeLogXlsx(){const rows=appData.mergeLog.map(safeExportRow);writeWorkbook('merge_conflict_log.xlsx',[['Merge Conflict Log',rows]]);}
+
+// Writes an XLSX workbook.
+function writeWorkbook(filename,sheets){const wb=XLSX.utils.book_new();sheets.forEach(function(pair){XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(pair[1]),pair[0]);});XLSX.writeFile(wb,filename);}
+
+// Makes all exported cells formula-safe.
+function safeExportRow(row){const out={};Object.keys(row).forEach(function(k){out[k]=safeSheetValue(row[k]);});return out;}
+
+// Prefixes formula-like spreadsheet values with an apostrophe.
+function safeSheetValue(value){if(typeof value==='number')return value;const text=String(value==null?'':value);return /^[=+\-@\t\r]/.test(text)?"'"+text:text;}
 
 // Exports JSON save file.
-function exportJsonSave(){downloadBlob(new Blob([JSON.stringify(appData,null,2)],{type:'application/json'}),'volunteer_database_save.json');}
+function exportJsonSave(){if(!confirm('Export full JSON backup? This file contains the complete local database.'))return;downloadBlob(new Blob([JSON.stringify(validateJsonSave(appData),null,2)],{type:'application/json'}),'volunteer_database_save.json');}
 
 // Imports JSON save file.
-function importJsonSave(e){const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=function(load){try{const parsed=JSON.parse(load.target.result);if(!Array.isArray(parsed.volunteers))throw new Error('Invalid');if(!confirm('Replace the current local database with this JSON save file?'))return;appData={volunteers:parsed.volunteers||[],suspectedDuplicates:parsed.suspectedDuplicates||[],mergeLog:parsed.mergeLog||[]};normaliseLoadedData();saveData();renderAll();}catch(error){alert('This JSON file is not a valid save file.');}};reader.readAsText(file);e.target.value='';}
+function importJsonSave(e){const file=e.target.files[0];if(!file)return;if(file.size>MAX_JSON_BYTES){alert('JSON restore file rejected. Maximum file size is 10 MB.');e.target.value='';return;}const reader=new FileReader();reader.onload=function(load){try{const parsed=JSON.parse(load.target.result);const cleaned=validateJsonSave(parsed);if(!confirm('Replace the current local database with this validated JSON save file?'))return;appData=cleaned;saveData();renderAll();}catch(error){alert('This JSON file is not a valid save file.');}};reader.readAsText(file);e.target.value='';}
+
+// Validates and sanitises a JSON save object.
+function validateJsonSave(raw){const source=raw&&typeof raw==='object'?raw:{};const volunteers=Array.isArray(source.volunteers)?source.volunteers.slice(0,MAX_VOLUNTEERS).map(validateVolunteer):[];const suspected=Array.isArray(source.suspectedDuplicates)?source.suspectedDuplicates.slice(0,MAX_IMPORT_ROWS).map(validateSuspect):[];const log=Array.isArray(source.mergeLog)?source.mergeLog.slice(0,MAX_IMPORT_ROWS).map(validateMergeLog):[];return{volunteers:volunteers,suspectedDuplicates:suspected,mergeLog:log};}
+
+// Validates one volunteer object.
+function validateVolunteer(raw){const v={id:safeText(raw&&raw.id||makeId('vol'),'id'),attendance:[]};VOLUNTEER_SCHEMA.forEach(function(f){if(f.key==='tags')v.tags=sanitiseTags(raw&&raw.tags);else v[f.key]=safeText(raw&&raw[f.key],f.key);});const attendance=Array.isArray(raw&&raw.attendance)?raw.attendance.slice(0,MAX_ATTENDANCE_PER_VOLUNTEER):[];v.attendance=attendance.map(validateAttendance);return v;}
+
+// Validates one attendance object.
+function validateAttendance(raw){return{id:safeText(raw&&raw.id||makeId('att'),'id'),eventName:safeText(raw&&raw.eventName,'eventName'),date:safeText(raw&&raw.date,'date'),hours:normaliseHours(raw&&raw.hours),role:safeText(raw&&raw.role,'role')};}
+
+// Validates one suspected duplicate queue item.
+function validateSuspect(raw){return{id:safeText(raw&&raw.id||makeId('suspect'),'id'),level:safeText(raw&&raw.level,'level'),existingId:safeText(raw&&raw.existingId,'existingId'),incoming:sanitizeVolunteerRow(raw&&raw.incoming||{}),decision:safeText(raw&&raw.decision,'decision'),reason:safeText(raw&&raw.reason,'reason')};}
+
+// Validates one merge log row.
+function validateMergeLog(raw){return{date:safeText(raw&&raw.date,'date'),level:safeText(raw&&raw.level,'level'),action:safeText(raw&&raw.action,'action'),existingName:safeText(raw&&raw.existingName,'existingName'),incomingName:safeText(raw&&raw.incomingName,'incomingName'),reason:safeText(raw&&raw.reason,'reason')};}
 
 // Clears local data.
 function clearLocalData(){if(!confirm('Clear the local volunteer database in this browser?'))return;appData={volunteers:[],suspectedDuplicates:[],mergeLog:[]};pendingImport=null;expandedVolunteerId=null;saveData();renderAll();}
@@ -335,7 +377,7 @@ function renderAll(){renderMergeReview();renderDatabase();renderDuplicateQueue()
 function makeTable(headers,rows){let html='<table><thead><tr>';headers.forEach(function(h){html+='<th>'+escapeHtml(h)+'</th>';});html+='</tr></thead><tbody>';rows.forEach(function(r){html+='<tr>';r.forEach(function(c){html+='<td>'+escapeHtml(c)+'</td>';});html+='</tr>';});return html+'</tbody></table>';}
 
 // Shows a status notice.
-function showNotice(id,type,message){document.getElementById(id).innerHTML='<div class="notice '+type+'">'+escapeHtml(message)+'</div>';}
+function showNotice(id,type,message){const el=document.getElementById(id);if(el)el.innerHTML='<div class="notice '+type+'">'+escapeHtml(message)+'</div>';}
 
 // Escapes HTML-sensitive characters.
 function escapeHtml(value){return String(value==null?'':value).replace(/[&<>"]/g,function(ch){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];});}
