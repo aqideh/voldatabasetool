@@ -13,11 +13,16 @@ The app uses SheetJS from CDN for `.xlsx` import/export, Fuse.js from CDN for fu
 
 Open the hosted page or open `index.html` directly in a browser.
 
-### 1. Upload a standard Excel template
+### 1. Import a standard template
 
-Go to **Upload**. Choose either **Volunteer roster** or **Attendance log**, then drag and drop a workbook or click the upload area.
+Go to **Upload**. Choose either **Volunteer roster** or **Attendance log**.
 
-The tool accepts only fixed column structures. There is no flexible column mapping.
+You can import data in either of these ways:
+
+- Upload an Excel `.xlsx` or `.xls` workbook
+- Paste copied spreadsheet cells from Excel or Google Sheets into the paste box
+
+Both methods use the same strict validation. The first row must be the exact header row for the selected template. Column names and order must match exactly.
 
 #### `volunteer_roster.xlsx`
 
@@ -48,7 +53,7 @@ Rows are flagged as invalid when they do not have Name and at least one of Phone
 
 ### 2. Review before committing
 
-After upload, click **Prepare Merge Review**.
+After upload or pasted-cell preview, click **Prepare Merge Review**.
 
 The review is split into three buckets:
 
@@ -87,6 +92,12 @@ You can also import a JSON save file to restore or move the database to another 
 ### 5. Resolve suspected duplicates later
 
 Go to **Suspected Duplicates**. This page shows unresolved fuzzy or medium-confidence matches that were skipped during import.
+
+## Pasted-cell import rules
+
+When pasting cells, copy the full table from Excel or Google Sheets, including the header row. The app treats tabs as column separators and line breaks as row separators. It does not infer, rename, reorder, or map columns.
+
+The pasted first row must exactly match the selected template headers. If the pasted headers do not match, the preview is rejected.
 
 ## Deduplication logic
 
