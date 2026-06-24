@@ -1,1158 +1,347 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Volunteer Database Management Tool</title>
-  <!--
-    Volunteer Database Management Tool
-    Overall structure:
-    1. The schema section below defines volunteer, tag, and attendance fields in one place.
-    2. Data is stored in browser localStorage and is only changed after explicit user actions.
-    3. Upload and paste import paths both produce the same two-dimensional row structure.
-    4. The same strict header validator handles Excel and pasted spreadsheet cells.
-    5. Merge Review stages clean additions, conflicts, suspected duplicates, and pre-merge batch edits before saving.
-    6. Central Database provides search, tags, filters, sorting, expandable profiles, and inline editing.
-    7. Export provides XLSX database export, XLSX merge-log export, and JSON save files.
-  -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
-  <style>
-    :root { --bg:#f5f7fb; --panel:#fff; --text:#1f2937; --muted:#6b7280; --line:#d8dee9; --brand:#1d4ed8; --soft:#eaf1ff; --warn:#92400e; --warnbg:#fff7ed; --bad:#991b1b; --badbg:#fef2f2; --ok:#166534; --okbg:#f0fdf4; }
-    * { box-sizing:border-box; }
-    body { margin:0; background:var(--bg); color:var(--text); font-family:Arial, Helvetica, sans-serif; }
-    header { padding:22px 28px; background:#111827; color:#fff; }
-    header h1 { margin:0 0 6px; font-size:24px; }
-    header p { margin:0; color:#d1d5db; }
-    nav { display:flex; flex-wrap:wrap; gap:8px; padding:14px 28px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:3; }
-    button { border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--text); padding:9px 12px; cursor:pointer; font-size:14px; }
-    button:hover { border-color:var(--brand); }
-    button.primary { background:var(--brand); color:#fff; border-color:var(--brand); }
-    button.danger { background:var(--bad); color:#fff; border-color:var(--bad); }
-    button.small { padding:5px 8px; font-size:12px; }
-    button.active { background:var(--soft); border-color:var(--brand); color:var(--brand); }
-    main { padding:24px 28px 40px; }
-    section.view { display:none; }
-    section.view.active { display:block; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:16px; }
-    .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.03); margin-bottom:16px; }
-    .card h2, .card h3 { margin-top:0; }
-    .muted { color:var(--muted); }
-    .dropzone { border:2px dashed #9ca3af; border-radius:14px; padding:28px; text-align:center; background:#fafafa; cursor:pointer; }
-    .dropzone.drag { background:var(--soft); border-color:var(--brand); }
-    input, select, textarea { width:100%; border:1px solid var(--line); border-radius:7px; padding:8px; font:inherit; background:#fff; }
-    textarea { min-height:120px; }
-    label { display:block; margin:9px 0 5px; font-weight:bold; font-size:13px; }
-    table { width:100%; border-collapse:collapse; background:#fff; }
-    th, td { padding:9px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
-    th { background:#f9fafb; font-size:13px; }
-    tr.clickable { cursor:pointer; }
-    tr.clickable:hover { background:#f9fafb; }
-    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:10px; }
-    .pill { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin:2px; white-space:nowrap; }
-    .pill.ok { background:var(--okbg); color:var(--ok); }
-    .pill.warn { background:var(--warnbg); color:var(--warn); }
-    .pill.bad { background:var(--badbg); color:var(--bad); }
-    .pill.neutral { background:#eef2f7; color:#374151; }
-    .pill.tag { background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; }
-    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .choice-box { border:1px solid var(--line); border-radius:8px; padding:10px; background:#fafafa; margin-bottom:10px; }
-    .profile { background:#fbfdff; }
-    .notice { padding:10px 12px; border-radius:8px; margin:10px 0; }
-    .notice.ok { background:var(--okbg); color:var(--ok); }
-    .notice.warn { background:var(--warnbg); color:var(--warn); }
-    .notice.bad { background:var(--badbg); color:var(--bad); }
-    .hidden { display:none; }
-    @media (max-width:700px){ main, nav, header { padding-left:14px; padding-right:14px; } .two-col { grid-template-columns:1fr; } }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Volunteer Database Management Tool</title>
+<!--
+  Volunteer Database Management Tool
+  Structure:
+  1. Schema constants define volunteer, roster, and attendance fields.
+  2. Upload and paste flows both validate exact fixed template headers.
+  3. Merge Review stages clean rows, conflicts, suspected duplicates, pre-merge tags, and batch edits.
+  4. Central Database stores data in localStorage, supports search, tag recall, sorting, inline editing, and attendance history.
+  5. Export supports XLSX database export, XLSX merge-log export, and JSON save/restore.
+-->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+<style>
+:root{--bg:#f5f7fb;--panel:#fff;--text:#1f2937;--muted:#6b7280;--line:#d8dee9;--brand:#1d4ed8;--soft:#eaf1ff;--bad:#991b1b;--badbg:#fef2f2;--ok:#166534;--okbg:#f0fdf4;--warn:#92400e;--warnbg:#fff7ed}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif}header{padding:22px 28px;background:#111827;color:#fff}header h1{margin:0 0 6px;font-size:24px}header p{margin:0;color:#d1d5db}nav{display:flex;flex-wrap:wrap;gap:8px;padding:14px 28px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:3}button{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text);padding:9px 12px;cursor:pointer;font-size:14px}button:hover{border-color:var(--brand)}button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}button.danger{background:var(--bad);color:#fff;border-color:var(--bad)}button.small{padding:5px 8px;font-size:12px}button.active{background:var(--soft);border-color:var(--brand);color:var(--brand)}main{padding:24px 28px 40px}.view{display:none}.view.active{display:block}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.03);margin-bottom:16px}.muted{color:var(--muted)}.dropzone{border:2px dashed #9ca3af;border-radius:14px;padding:28px;text-align:center;background:#fafafa;cursor:pointer}.dropzone.drag{background:var(--soft);border-color:var(--brand)}input,select,textarea{width:100%;border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit;background:#fff}textarea{min-height:120px}label{display:block;margin:9px 0 5px;font-weight:bold;font-size:13px}table{width:100%;border-collapse:collapse;background:#fff}th,td{padding:9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:#f9fafb;font-size:13px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}tr.clickable{cursor:pointer}tr.clickable:hover{background:#f9fafb}.pill{display:inline-block;border-radius:999px;padding:3px 8px;font-size:12px;margin:2px;white-space:nowrap}.pill.ok{background:var(--okbg);color:var(--ok)}.pill.warn{background:var(--warnbg);color:var(--warn)}.pill.bad{background:var(--badbg);color:var(--bad)}.pill.neutral{background:#eef2f7;color:#374151}.pill.tag{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.choice-box{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fafafa;margin-bottom:10px}.profile{background:#fbfdff}.notice{padding:10px 12px;border-radius:8px;margin:10px 0}.notice.ok{background:var(--okbg);color:var(--ok)}.notice.warn{background:var(--warnbg);color:var(--warn)}.notice.bad{background:var(--badbg);color:var(--bad)}.hidden{display:none}@media(max-width:700px){main,nav,header{padding-left:14px;padding-right:14px}.two-col{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
-  <header>
-    <h1>Volunteer Database Management Tool</h1>
-    <p>Browser-local volunteer roster, attendance, tags, deduplication, review, and export tool.</p>
-  </header>
-
-  <nav>
-    <button class="active" data-view="uploadView">Upload</button>
-    <button data-view="mergeView">Merge Review</button>
-    <button data-view="databaseView">Central Database</button>
-    <button data-view="exportView">Export</button>
-    <button data-view="duplicatesView">Suspected Duplicates <span id="dupCount" class="pill neutral">0</span></button>
-  </nav>
-
-  <main>
-    <section id="uploadView" class="view active">
-      <div class="card">
-        <h2>Import Data</h2>
-        <p class="muted">Choose the template type, then upload an Excel workbook or paste copied spreadsheet cells. Both methods require the exact standard headers in the exact order.</p>
-        <div class="row">
-          <div>
-            <label for="fileType">Template type</label>
-            <select id="fileType"><option value="roster">Volunteer roster</option><option value="attendance">Attendance log</option></select>
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button id="downloadSampleRoster">Download sample roster</button>
-            <button id="downloadSampleAttendance">Download sample attendance</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid">
-        <div class="card">
-          <h3>Upload .xlsx</h3>
-          <div id="dropzone" class="dropzone" tabindex="0">
-            <p><strong>Drop .xlsx here</strong> or click to select a file.</p>
-            <p class="muted">The first row must be the exact template header row.</p>
-            <input id="fileInput" class="hidden" type="file" accept=".xlsx,.xls">
-          </div>
-        </div>
-        <div class="card">
-          <h3>Paste spreadsheet cells</h3>
-          <p class="muted">Copy the header row and data rows from Excel or Google Sheets, then paste below.</p>
-          <label for="pasteBox">Pasted cells</label>
-          <textarea id="pasteBox" placeholder="Paste the full table here, including the header row."></textarea>
-          <div class="row">
-            <button id="parsePaste" class="primary">Preview pasted cells</button>
-            <button id="clearPaste">Clear paste box</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="uploadStatus"></div>
-      <div id="previewCard" class="card hidden">
-        <h3>Detected rows preview</h3>
-        <div id="previewMeta"></div>
-        <div id="previewTable" class="table-wrap"></div>
-        <p class="muted">Invalid rows are shown but will not be imported.</p>
-        <button id="prepareImport" class="primary">Prepare Merge Review</button>
-      </div>
-    </section>
-
-    <section id="mergeView" class="view">
-      <div class="card">
-        <h2>Merge Review</h2>
-        <p class="muted">Nothing is written to the database until Confirm Import is clicked. Use pre-merge edits before confirming.</p>
-        <div id="mergeSummary"></div>
-        <div class="row"><button id="confirmImport" class="primary">Confirm Import</button><button id="discardImport">Discard Pending Import</button></div>
-      </div>
-      <div id="batchEditBucket" class="card"></div>
-      <div id="cleanBucket" class="card"></div>
-      <div id="conflictBucket" class="card"></div>
-      <div id="suspectBucket" class="card"></div>
-    </section>
-
-    <section id="databaseView" class="view">
-      <div class="card">
-        <h2>Central Database</h2>
-        <div class="grid">
-          <div><label for="searchBox">Search</label><input id="searchBox" placeholder="Search name, phone, email, notes, tags"></div>
-          <div><label for="tagFilter">Recall by tag</label><select id="tagFilter"><option value="">All tags</option></select></div>
-          <div><label for="shirtFilter">T-Shirt filter</label><select id="shirtFilter"><option value="">All sizes</option></select></div>
-          <div><label for="activityFilter">Activity filter</label><select id="activityFilter"><option value="">All volunteers</option><option value="active">Has attendance</option><option value="inactive">No attendance</option></select></div>
-          <div><label for="sortSelect">Sort</label><select id="sortSelect"><option value="name">Name A-Z</option><option value="tag">Tag then name</option><option value="hours">Total hours high-low</option><option value="lastActive">Last active newest</option></select></div>
-        </div>
-      </div>
-      <div class="card"><div id="databaseTable" class="table-wrap"></div></div>
-    </section>
-
-    <section id="exportView" class="view">
-      <div class="grid">
-        <div class="card"><h2>XLSX Export</h2><p class="muted">Exports Volunteer Particulars and Attendance Log sheets.</p><button id="exportXlsx" class="primary">Export database.xlsx</button><button id="exportMergeLog">Export merge log.xlsx</button></div>
-        <div class="card"><h2>JSON Save File</h2><p class="muted">Use JSON to back up and move the full browser database.</p><button id="exportJson" class="primary">Export JSON save file</button><label for="jsonInput">Import JSON save file</label><input id="jsonInput" type="file" accept=".json"></div>
-        <div class="card"><h2>Local Browser Data</h2><p class="muted">This clears only this browser's copy of the tool data.</p><button id="clearData" class="danger">Clear local database</button></div>
-      </div>
-      <div class="card"><h2>Merge and Conflict Log</h2><div id="mergeLogTable" class="table-wrap"></div></div>
-    </section>
-
-    <section id="duplicatesView" class="view">
-      <div class="card"><h2>Persistent Suspected Duplicates</h2><p class="muted">Unresolved fuzzy or medium-confidence matches remain here until actioned.</p></div>
-      <div id="duplicateQueue"></div>
-    </section>
-  </main>
-
+<header><h1>Volunteer Database Management Tool</h1><p>Browser-local volunteer roster, attendance, tags, deduplication, review, and export tool.</p></header>
+<nav><button class="active" data-view="uploadView">Upload</button><button data-view="mergeView">Merge Review</button><button data-view="databaseView">Central Database</button><button data-view="exportView">Export</button><button data-view="duplicatesView">Suspected Duplicates <span id="dupCount" class="pill neutral">0</span></button></nav>
+<main>
+<section id="uploadView" class="view active">
+<div class="card"><h2>Import Data</h2><p class="muted">Choose the template type, then upload an Excel workbook or paste copied spreadsheet cells. Both methods require exact headers in exact order.</p><div class="row"><div><label for="fileType">Template type</label><select id="fileType"><option value="roster">Volunteer roster</option><option value="attendance">Attendance log</option></select></div><div><label>&nbsp;</label><button id="downloadSampleRoster">Download sample roster</button><button id="downloadSampleAttendance">Download sample attendance</button></div></div></div>
+<div class="grid"><div class="card"><h3>Upload .xlsx</h3><div id="dropzone" class="dropzone" tabindex="0"><p><strong>Drop .xlsx here</strong> or click to select a file.</p><p class="muted">The first row must be the exact template header row.</p><input id="fileInput" class="hidden" type="file" accept=".xlsx,.xls"></div></div><div class="card"><h3>Paste spreadsheet cells</h3><p class="muted">Copy the header row and data rows from Excel or Google Sheets, then paste below.</p><label for="pasteBox">Pasted cells</label><textarea id="pasteBox" placeholder="Paste the full table here, including the header row."></textarea><div class="row"><button id="parsePaste" class="primary">Preview pasted cells</button><button id="clearPaste">Clear paste box</button></div></div></div>
+<div id="uploadStatus"></div><div id="previewCard" class="card hidden"><h3>Detected rows preview</h3><div id="previewMeta"></div><div id="previewTable" class="table-wrap"></div><p class="muted">Invalid rows are shown but will not be imported.</p><button id="prepareImport" class="primary">Prepare Merge Review</button></div>
+</section>
+<section id="mergeView" class="view"><div class="card"><h2>Merge Review</h2><p class="muted">Nothing is written to the database until Confirm Import is clicked. Use pre-merge edits before confirming.</p><div id="mergeSummary"></div><div class="row"><button id="confirmImport" class="primary">Confirm Import</button><button id="discardImport">Discard Pending Import</button></div></div><div id="batchEditBucket" class="card"></div><div id="cleanBucket" class="card"></div><div id="conflictBucket" class="card"></div><div id="suspectBucket" class="card"></div></section>
+<section id="databaseView" class="view"><div class="card"><h2>Central Database</h2><div class="grid"><div><label for="searchBox">Search</label><input id="searchBox" placeholder="Search name, phone, email, gender, address, notes, tags"></div><div><label for="tagFilter">Recall by tag</label><select id="tagFilter"><option value="">All tags</option></select></div><div><label for="genderFilter">Gender filter</label><select id="genderFilter"><option value="">All genders</option></select></div><div><label for="shirtFilter">T-Shirt filter</label><select id="shirtFilter"><option value="">All sizes</option></select></div><div><label for="activityFilter">Activity filter</label><select id="activityFilter"><option value="">All volunteers</option><option value="active">Has attendance</option><option value="inactive">No attendance</option></select></div><div><label for="sortSelect">Sort</label><select id="sortSelect"><option value="name">Name A-Z</option><option value="tag">Tag then name</option><option value="hours">Total hours high-low</option><option value="lastActive">Last active newest</option></select></div></div></div><div class="card"><div id="databaseTable" class="table-wrap"></div></div></section>
+<section id="exportView" class="view"><div class="grid"><div class="card"><h2>XLSX Export</h2><p class="muted">Exports Volunteer Particulars and Attendance Log sheets.</p><button id="exportXlsx" class="primary">Export database.xlsx</button><button id="exportMergeLog">Export merge log.xlsx</button></div><div class="card"><h2>JSON Save File</h2><p class="muted">Use JSON to back up and move the full browser database.</p><button id="exportJson" class="primary">Export JSON save file</button><label for="jsonInput">Import JSON save file</label><input id="jsonInput" type="file" accept=".json"></div><div class="card"><h2>Local Browser Data</h2><p class="muted">This clears only this browser's copy of the tool data.</p><button id="clearData" class="danger">Clear local database</button></div></div><div class="card"><h2>Merge and Conflict Log</h2><div id="mergeLogTable" class="table-wrap"></div></div></section>
+<section id="duplicatesView" class="view"><div class="card"><h2>Persistent Suspected Duplicates</h2><p class="muted">Unresolved fuzzy or medium-confidence matches remain here until actioned.</p></div><div id="duplicateQueue"></div></section>
+</main>
 <script>
-/* ========================= VOLUNTEER DATA SCHEMA =========================
-   Add new volunteer fields here first. Tags are stored as an array and edited
-   as comma-separated text in the profile. Update roster headers, mapRosterRow,
-   and exportDatabaseXlsx when a new field should be imported or exported.
-*/
-const VOLUNTEER_SCHEMA = [
-  { key:'name', label:'Name', type:'text' },
-  { key:'phone', label:'Phone', type:'text' },
-  { key:'email', label:'Email', type:'email' },
-  { key:'emergencyName', label:'Emergency Contact Name', type:'text' },
-  { key:'emergencyPhone', label:'Emergency Contact Phone', type:'text' },
-  { key:'shirtSize', label:'T-Shirt Size', type:'text' },
-  { key:'dietary', label:'Dietary Requirements', type:'text' },
-  { key:'tags', label:'Tags', type:'tags' },
-  { key:'notes', label:'Notes', type:'textarea' }
-];
-const ATTENDANCE_SCHEMA = [
-  { key:'eventName', label:'Event Name', type:'text' },
-  { key:'date', label:'Date', type:'date' },
-  { key:'hours', label:'Hours', type:'number' },
-  { key:'role', label:'Role', type:'text' }
-];
-const ROSTER_HEADERS = ['Name','Phone','Email','Emergency Contact Name','Emergency Contact Phone','T-Shirt Size','Dietary Requirements','Notes'];
-const ATTENDANCE_HEADERS = ['Name','Phone','Email','Event Name','Date','Hours','Role'];
-const STORAGE_KEY = 'volunteerDatabaseTool.v1';
-let appData = { volunteers: [], suspectedDuplicates: [], mergeLog: [] };
-let uploadedRows = [];
-let uploadedType = 'roster';
-let pendingImport = null;
-let expandedVolunteerId = null;
+/* ========================= VOLUNTEER DATA SCHEMA ========================= */
+const VOLUNTEER_SCHEMA=[{key:'name',label:'Name',type:'text'},{key:'phone',label:'Phone',type:'text'},{key:'email',label:'Email',type:'email'},{key:'gender',label:'Gender',type:'text'},{key:'address',label:'Address',type:'textarea'},{key:'emergencyName',label:'Emergency Contact Name',type:'text'},{key:'emergencyPhone',label:'Emergency Contact Phone',type:'text'},{key:'shirtSize',label:'T-Shirt Size',type:'text'},{key:'dietary',label:'Dietary Requirements',type:'text'},{key:'tags',label:'Tags',type:'tags'},{key:'notes',label:'Notes',type:'textarea'}];
+const ATTENDANCE_SCHEMA=[{key:'eventName',label:'Event Name',type:'text'},{key:'date',label:'Date',type:'date'},{key:'hours',label:'Hours',type:'number'},{key:'role',label:'Role',type:'text'}];
+const ROSTER_HEADERS=['Name','Phone','Email','Gender','Address','Emergency Contact Name','Emergency Contact Phone','T-Shirt Size','Dietary Requirements','Notes'];
+const ATTENDANCE_HEADERS=['Name','Phone','Email','Event Name','Date','Hours','Role'];
+const STORAGE_KEY='volunteerDatabaseTool.v1';
+let appData={volunteers:[],suspectedDuplicates:[],mergeLog:[]};
+let uploadedRows=[];let uploadedType='roster';let pendingImport=null;let expandedVolunteerId=null;
 
-// Starts the application after the document has loaded.
-document.addEventListener('DOMContentLoaded', startApp);
+// Starts the app when the document is ready.
+document.addEventListener('DOMContentLoaded',startApp);
 
-// Loads saved data, connects controls, and renders the app.
-function startApp() {
-  loadData();
-  wireNavigation();
-  wireUploadControls();
-  wireMergeControls();
-  wireDatabaseControls();
-  wireExportControls();
-  renderAll();
-}
+// Loads data, wires controls, and renders the app.
+function startApp(){loadData();wireNavigation();wireUploadControls();wireMergeControls();wireDatabaseControls();wireExportControls();renderAll();}
 
-// Reads saved application data from browser localStorage.
-function loadData() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return;
-  try {
-    const parsed = JSON.parse(saved);
-    appData.volunteers = Array.isArray(parsed.volunteers) ? parsed.volunteers : [];
-    appData.suspectedDuplicates = Array.isArray(parsed.suspectedDuplicates) ? parsed.suspectedDuplicates : [];
-    appData.mergeLog = Array.isArray(parsed.mergeLog) ? parsed.mergeLog : [];
-    normaliseLoadedData();
-  } catch (error) {
-    appData = { volunteers: [], suspectedDuplicates: [], mergeLog: [] };
-  }
-}
+// Loads saved localStorage data and normalises missing newer fields.
+function loadData(){const saved=localStorage.getItem(STORAGE_KEY);if(!saved)return;try{const parsed=JSON.parse(saved);appData.volunteers=Array.isArray(parsed.volunteers)?parsed.volunteers:[];appData.suspectedDuplicates=Array.isArray(parsed.suspectedDuplicates)?parsed.suspectedDuplicates:[];appData.mergeLog=Array.isArray(parsed.mergeLog)?parsed.mergeLog:[];normaliseLoadedData();}catch(error){appData={volunteers:[],suspectedDuplicates:[],mergeLog:[]};}}
 
-// Ensures older saved data has newer fields such as tags and attendance arrays.
-function normaliseLoadedData() {
-  appData.volunteers.forEach(function normaliseVolunteer(volunteer) {
-    if (!Array.isArray(volunteer.tags)) volunteer.tags = parseTags(volunteer.tags || '');
-    if (!Array.isArray(volunteer.attendance)) volunteer.attendance = [];
-  });
-}
+// Ensures saved volunteers have all current fields.
+function normaliseLoadedData(){appData.volunteers.forEach(function(v){VOLUNTEER_SCHEMA.forEach(function(f){if(f.key==='tags'){if(!Array.isArray(v.tags))v.tags=parseTags(v.tags||'');}else if(v[f.key]==null)v[f.key]='';});if(!Array.isArray(v.attendance))v.attendance=[];});}
 
-// Saves the complete application database to browser localStorage.
-function saveData() {
-  normaliseLoadedData();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
-}
+// Saves all app data to localStorage.
+function saveData(){normaliseLoadedData();localStorage.setItem(STORAGE_KEY,JSON.stringify(appData));}
 
-// Creates a unique local identifier for records.
-function makeId(prefix) {
-  return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
-}
+// Creates a unique local ID.
+function makeId(prefix){return prefix+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9);}
 
-// Connects navigation buttons to their matching views.
-function wireNavigation() {
-  document.querySelectorAll('nav button[data-view]').forEach(function attachNav(button) {
-    button.addEventListener('click', function handleClick() { showView(button.dataset.view); });
-  });
-}
+// Wires navigation buttons to views.
+function wireNavigation(){document.querySelectorAll('nav button[data-view]').forEach(function(button){button.addEventListener('click',function(){showView(button.dataset.view);});});}
 
-// Shows one view and hides all other views.
-function showView(viewId) {
-  document.querySelectorAll('section.view').forEach(function hide(section) { section.classList.remove('active'); });
-  document.querySelectorAll('nav button[data-view]').forEach(function clear(button) { button.classList.remove('active'); });
-  document.getElementById(viewId).classList.add('active');
-  document.querySelector('nav button[data-view="' + viewId + '"]').classList.add('active');
-  renderAll();
-}
+// Shows one view and hides the rest.
+function showView(viewId){document.querySelectorAll('.view').forEach(function(s){s.classList.remove('active');});document.querySelectorAll('nav button[data-view]').forEach(function(b){b.classList.remove('active');});document.getElementById(viewId).classList.add('active');document.querySelector('nav button[data-view="'+viewId+'"]').classList.add('active');renderAll();}
 
-// Connects Excel upload, pasted-cell import, and sample-template controls.
-function wireUploadControls() {
-  const dropzone = document.getElementById('dropzone');
-  document.getElementById('fileType').addEventListener('change', function setType(event) { uploadedType = event.target.value; });
-  dropzone.addEventListener('click', function openPicker() { document.getElementById('fileInput').click(); });
-  dropzone.addEventListener('keydown', handleDropzoneKeydown);
-  dropzone.addEventListener('dragover', handleDragOver);
-  dropzone.addEventListener('dragleave', handleDragLeave);
-  dropzone.addEventListener('drop', handleDrop);
-  document.getElementById('fileInput').addEventListener('change', handleFileInputChange);
-  document.getElementById('parsePaste').addEventListener('click', handlePastePreview);
-  document.getElementById('clearPaste').addEventListener('click', clearPasteBox);
-  document.getElementById('prepareImport').addEventListener('click', prepareMergeReview);
-  document.getElementById('downloadSampleRoster').addEventListener('click', downloadSampleRoster);
-  document.getElementById('downloadSampleAttendance').addEventListener('click', downloadSampleAttendance);
-}
+// Wires upload, paste, sample, and preview controls.
+function wireUploadControls(){const dz=document.getElementById('dropzone');document.getElementById('fileType').addEventListener('change',function(e){uploadedType=e.target.value;});dz.addEventListener('click',function(){document.getElementById('fileInput').click();});dz.addEventListener('keydown',handleDropzoneKeydown);dz.addEventListener('dragover',handleDragOver);dz.addEventListener('dragleave',handleDragLeave);dz.addEventListener('drop',handleDrop);document.getElementById('fileInput').addEventListener('change',handleFileInputChange);document.getElementById('parsePaste').addEventListener('click',handlePastePreview);document.getElementById('clearPaste').addEventListener('click',clearPasteBox);document.getElementById('prepareImport').addEventListener('click',prepareMergeReview);document.getElementById('downloadSampleRoster').addEventListener('click',downloadSampleRoster);document.getElementById('downloadSampleAttendance').addEventListener('click',downloadSampleAttendance);}
 
-// Opens the file picker when the upload area receives Enter or Space.
-function handleDropzoneKeydown(event) {
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault();
-    document.getElementById('fileInput').click();
-  }
-}
+// Opens the file picker from keyboard interaction.
+function handleDropzoneKeydown(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('fileInput').click();}}
 
-// Shows the drag-over state for the upload dropzone.
-function handleDragOver(event) {
-  event.preventDefault();
-  document.getElementById('dropzone').classList.add('drag');
-}
+// Marks the dropzone during drag-over.
+function handleDragOver(e){e.preventDefault();document.getElementById('dropzone').classList.add('drag');}
 
-// Removes the drag-over state from the upload dropzone.
-function handleDragLeave() {
-  document.getElementById('dropzone').classList.remove('drag');
-}
+// Clears the dropzone drag state.
+function handleDragLeave(){document.getElementById('dropzone').classList.remove('drag');}
 
-// Reads a dropped Excel file.
-function handleDrop(event) {
-  event.preventDefault();
-  document.getElementById('dropzone').classList.remove('drag');
-  if (event.dataTransfer.files.length) readExcelFile(event.dataTransfer.files[0]);
-}
+// Reads a dropped file.
+function handleDrop(e){e.preventDefault();document.getElementById('dropzone').classList.remove('drag');if(e.dataTransfer.files.length)readExcelFile(e.dataTransfer.files[0]);}
 
-// Reads an Excel file selected through the file picker.
-function handleFileInputChange(event) {
-  if (event.target.files.length) readExcelFile(event.target.files[0]);
-  event.target.value = '';
-}
+// Reads a file selected from the input.
+function handleFileInputChange(e){if(e.target.files.length)readExcelFile(e.target.files[0]);e.target.value='';}
 
-// Reads an Excel workbook and sends its first worksheet rows to strict validation.
-function readExcelFile(file) {
-  uploadedType = document.getElementById('fileType').value;
-  if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
-    showNotice('uploadStatus', 'bad', 'Please upload an Excel .xlsx or .xls file.');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = function handleWorkbookLoad(event) {
-    try {
-      const workbook = XLSX.read(event.target.result, { type:'array', cellDates:true });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(firstSheet, { header:1, defval:'' });
-      validateAndPreviewRows(rows);
-    } catch (error) {
-      showNotice('uploadStatus', 'bad', 'The workbook could not be read as an Excel file.');
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
+// Reads an Excel workbook and validates rows.
+function readExcelFile(file){uploadedType=document.getElementById('fileType').value;if(!file.name.toLowerCase().endsWith('.xlsx')&&!file.name.toLowerCase().endsWith('.xls')){showNotice('uploadStatus','bad','Please upload an Excel .xlsx or .xls file.');return;}const reader=new FileReader();reader.onload=function(e){try{const workbook=XLSX.read(e.target.result,{type:'array',cellDates:true});const sheet=workbook.Sheets[workbook.SheetNames[0]];validateAndPreviewRows(XLSX.utils.sheet_to_json(sheet,{header:1,defval:''}));}catch(error){showNotice('uploadStatus','bad','The workbook could not be read as an Excel file.');}};reader.readAsArrayBuffer(file);}
 
-// Parses pasted spreadsheet cells as tab-separated rows and sends them to strict validation.
-function handlePastePreview() {
-  uploadedType = document.getElementById('fileType').value;
-  const pastedText = document.getElementById('pasteBox').value;
-  if (!pastedText.trim()) {
-    showNotice('uploadStatus', 'bad', 'Paste cells including the header row before previewing.');
-    return;
-  }
-  const rows = parsePastedCells(pastedText);
-  validateAndPreviewRows(rows);
-}
+// Parses pasted cells and validates rows.
+function handlePastePreview(){uploadedType=document.getElementById('fileType').value;const text=document.getElementById('pasteBox').value;if(!text.trim()){showNotice('uploadStatus','bad','Paste cells including the header row before previewing.');return;}validateAndPreviewRows(parsePastedCells(text));}
 
-// Converts copied spreadsheet text into a two-dimensional array using tabs as the only column separator.
-function parsePastedCells(text) {
-  const clean = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  return clean.split('\n').filter(function keepLine(line) { return line.trim() !== ''; }).map(function splitLine(line) { return line.split('\t'); });
-}
+// Converts copied spreadsheet text into rows using tabs as the only column separator.
+function parsePastedCells(text){return text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(function(line){return line.trim()!=='';}).map(function(line){return line.split('\t');});}
 
-// Clears the pasted-cell textarea and status area.
-function clearPasteBox() {
-  document.getElementById('pasteBox').value = '';
-  document.getElementById('uploadStatus').innerHTML = '';
-}
+// Clears pasted text and status.
+function clearPasteBox(){document.getElementById('pasteBox').value='';document.getElementById('uploadStatus').innerHTML='';}
 
-// Validates exact headers and prepares valid and invalid rows for preview.
-function validateAndPreviewRows(rows) {
-  const expected = uploadedType === 'roster' ? ROSTER_HEADERS : ATTENDANCE_HEADERS;
-  if (!rows.length || !headersMatch(rows[0], expected)) {
-    document.getElementById('previewCard').classList.add('hidden');
-    showNotice('uploadStatus', 'bad', 'Template rejected. Expected columns in this exact order: ' + expected.join(', '));
-    return;
-  }
-  uploadedRows = [];
-  for (let i = 1; i < rows.length; i++) {
-    if (isBlankRow(rows[i])) continue;
-    const mapped = uploadedType === 'roster' ? mapRosterRow(rows[i], i + 1) : mapAttendanceRow(rows[i], i + 1);
-    mapped.valid = hasCriticalFields(mapped);
-    mapped.issue = mapped.valid ? '' : 'Missing critical fields: Name and at least one of Phone or Email are required.';
-    uploadedRows.push(mapped);
-  }
-  renderPreview();
-}
+// Validates exact headers and maps rows for preview.
+function validateAndPreviewRows(rows){const expected=uploadedType==='roster'?ROSTER_HEADERS:ATTENDANCE_HEADERS;if(!rows.length||!headersMatch(rows[0],expected)){document.getElementById('previewCard').classList.add('hidden');showNotice('uploadStatus','bad','Template rejected. Expected columns in this exact order: '+expected.join(', '));return;}uploadedRows=[];for(let i=1;i<rows.length;i++){if(isBlankRow(rows[i]))continue;const mapped=uploadedType==='roster'?mapRosterRow(rows[i],i+1):mapAttendanceRow(rows[i],i+1);mapped.valid=hasCriticalFields(mapped);mapped.issue=mapped.valid?'':'Missing critical fields: Name and at least one of Phone or Email are required.';uploadedRows.push(mapped);}renderPreview();}
 
-// Checks that the uploaded or pasted header row exactly matches the selected template.
-function headersMatch(actual, expected) {
-  if (!actual || actual.length !== expected.length) return false;
-  for (let i = 0; i < expected.length; i++) {
-    if (String(actual[i] || '').trim() !== expected[i]) return false;
-  }
-  return true;
-}
+// Checks exact header text and column count.
+function headersMatch(actual,expected){if(!actual||actual.length!==expected.length)return false;for(let i=0;i<expected.length;i++){if(String(actual[i]||'').trim()!==expected[i])return false;}return true;}
 
-// Checks whether every cell in a row is blank.
-function isBlankRow(row) {
-  return !row || row.every(function isBlankCell(cell) { return String(cell || '').trim() === ''; });
-}
+// Checks whether a row is blank.
+function isBlankRow(row){return !row||row.every(function(cell){return String(cell||'').trim()==='';});}
 
-// Converts one roster row to the internal import shape.
-function mapRosterRow(row, rowNumber) {
-  return { rowNumber:rowNumber, name:cleanText(row[0]), phone:cleanText(row[1]), email:cleanText(row[2]), emergencyName:cleanText(row[3]), emergencyPhone:cleanText(row[4]), shirtSize:cleanText(row[5]), dietary:cleanText(row[6]), notes:cleanText(row[7]), tags:[], attendance:[] };
-}
+// Converts one roster row into an import object.
+function mapRosterRow(row,rowNumber){return{rowNumber:rowNumber,name:cleanText(row[0]),phone:cleanText(row[1]),email:cleanText(row[2]),gender:cleanText(row[3]),address:cleanText(row[4]),emergencyName:cleanText(row[5]),emergencyPhone:cleanText(row[6]),shirtSize:cleanText(row[7]),dietary:cleanText(row[8]),notes:cleanText(row[9]),tags:[],attendance:[]};}
 
-// Converts one attendance row to the internal import shape.
-function mapAttendanceRow(row, rowNumber) {
-  return { rowNumber:rowNumber, name:cleanText(row[0]), phone:cleanText(row[1]), email:cleanText(row[2]), eventName:cleanText(row[3]), date:formatExcelDate(row[4]), hours:Number(row[5]) || 0, role:cleanText(row[6]), tags:[] };
-}
+// Converts one attendance row into an import object.
+function mapAttendanceRow(row,rowNumber){return{rowNumber:rowNumber,name:cleanText(row[0]),phone:cleanText(row[1]),email:cleanText(row[2]),eventName:cleanText(row[3]),date:formatExcelDate(row[4]),hours:Number(row[5])||0,role:cleanText(row[6]),tags:[]};}
 
-// Trims a value and returns a string.
-function cleanText(value) {
-  return String(value == null ? '' : value).trim();
-}
+// Converts a value to trimmed text.
+function cleanText(value){return String(value==null?'':value).trim();}
 
-// Formats Excel date objects, Excel serial dates, or text dates for display and storage.
-function formatExcelDate(value) {
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  if (typeof value === 'number') {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed) return String(parsed.y).padStart(4, '0') + '-' + String(parsed.m).padStart(2, '0') + '-' + String(parsed.d).padStart(2, '0');
-  }
-  return cleanText(value);
-}
+// Formats Excel dates or keeps text dates.
+function formatExcelDate(value){if(value instanceof Date)return value.toISOString().slice(0,10);if(typeof value==='number'){const p=XLSX.SSF.parse_date_code(value);if(p)return String(p.y).padStart(4,'0')+'-'+String(p.m).padStart(2,'0')+'-'+String(p.d).padStart(2,'0');}return cleanText(value);}
 
-// Checks whether an import row has name and at least one contact method.
-function hasCriticalFields(row) {
-  return cleanText(row.name) !== '' && (cleanText(row.phone) !== '' || cleanText(row.email) !== '');
-}
+// Checks critical import fields.
+function hasCriticalFields(row){return cleanText(row.name)!==''&&(cleanText(row.phone)!==''||cleanText(row.email)!=='');}
 
-// Shows the preview table and row validation summary.
-function renderPreview() {
-  const invalidCount = uploadedRows.filter(function countInvalid(row) { return !row.valid; }).length;
-  const headers = uploadedType === 'roster' ? ['Row','Status'].concat(ROSTER_HEADERS) : ['Row','Status'].concat(ATTENDANCE_HEADERS);
-  const rows = uploadedRows.map(function previewRow(row) {
-    if (uploadedType === 'roster') return [row.rowNumber, row.valid ? 'Ready' : row.issue, row.name, row.phone, row.email, row.emergencyName, row.emergencyPhone, row.shirtSize, row.dietary, row.notes];
-    return [row.rowNumber, row.valid ? 'Ready' : row.issue, row.name, row.phone, row.email, row.eventName, row.date, row.hours, row.role];
-  });
-  document.getElementById('previewCard').classList.remove('hidden');
-  document.getElementById('previewMeta').innerHTML = '<p><span class="pill neutral">' + uploadedRows.length + ' rows</span> <span class="pill ' + (invalidCount ? 'bad' : 'ok') + '">' + invalidCount + ' invalid rows</span></p>';
-  document.getElementById('previewTable').innerHTML = makeTable(headers, rows);
-  showNotice('uploadStatus', invalidCount ? 'warn' : 'ok', invalidCount ? 'Preview created. Invalid rows are flagged and will not be imported.' : 'Preview created. All rows have required critical fields.');
-}
+// Renders uploaded row preview.
+function renderPreview(){const invalid=uploadedRows.filter(function(r){return !r.valid;}).length;const headers=uploadedType==='roster'?['Row','Status'].concat(ROSTER_HEADERS):['Row','Status'].concat(ATTENDANCE_HEADERS);const rows=uploadedRows.map(function(r){return uploadedType==='roster'?[r.rowNumber,r.valid?'Ready':r.issue,r.name,r.phone,r.email,r.gender,r.address,r.emergencyName,r.emergencyPhone,r.shirtSize,r.dietary,r.notes]:[r.rowNumber,r.valid?'Ready':r.issue,r.name,r.phone,r.email,r.eventName,r.date,r.hours,r.role];});document.getElementById('previewCard').classList.remove('hidden');document.getElementById('previewMeta').innerHTML='<p><span class="pill neutral">'+uploadedRows.length+' rows</span> <span class="pill '+(invalid?'bad':'ok')+'">'+invalid+' invalid rows</span></p>';document.getElementById('previewTable').innerHTML=makeTable(headers,rows);showNotice('uploadStatus',invalid?'warn':'ok',invalid?'Preview created. Invalid rows are flagged and will not be imported.':'Preview created. All rows have required critical fields.');}
 
-// Builds the staged merge review from valid preview rows.
-function prepareMergeReview() {
-  const validRows = uploadedRows.filter(function keepValid(row) { return row.valid; });
-  if (!validRows.length) {
-    showNotice('uploadStatus', 'bad', 'No valid rows are available to import.');
-    return;
-  }
-  pendingImport = { type:uploadedType, clean:[], conflicts:[], suspects:[], autoMergeLog:[] };
-  validRows.forEach(function processRow(row) { processImportRow(row); });
-  showView('mergeView');
-}
+// Builds staged merge review from valid rows.
+function prepareMergeReview(){const valid=uploadedRows.filter(function(r){return r.valid;});if(!valid.length){showNotice('uploadStatus','bad','No valid rows are available to import.');return;}pendingImport={type:uploadedType,clean:[],conflicts:[],suspects:[],autoMergeLog:[]};valid.forEach(processImportRow);showView('mergeView');}
 
-// Places one import row into clean, conflict, or suspected-duplicate buckets.
-function processImportRow(row) {
-  const highMatch = findHighConfidenceMatch(row);
-  if (highMatch) {
-    const conflict = findFieldConflicts(highMatch, row, pendingImport.type);
-    if (conflict.fields.length) pendingImport.conflicts.push({ id:makeId('conflict'), existingId:highMatch.id, incoming:row, fields:conflict.fields, resolvedValues:conflict.resolvedValues });
-    else pendingImport.clean.push({ action:'merge', existingId:highMatch.id, incoming:row, reason:'High-confidence match with no differing fields.' });
-    pendingImport.autoMergeLog.push({ date:new Date().toISOString(), level:'high', action:'auto-merge prepared', existingName:highMatch.name, incomingName:row.name, reason:highMatch.matchReason });
-    return;
-  }
-  const mediumMatch = findMediumConfidenceMatch(row);
-  if (mediumMatch) {
-    pendingImport.suspects.push({ id:makeId('suspect'), level:'medium', existingId:mediumMatch.id, incoming:row, decision:'pending', reason:'Phone and email match, but name differs.' });
-    return;
-  }
-  const fuzzyMatches = findFuzzyNameMatches(row);
-  if (fuzzyMatches.length) {
-    pendingImport.suspects.push({ id:makeId('suspect'), level:'low', existingId:fuzzyMatches[0].item.id, incoming:row, decision:'pending', reason:'Fuzzy name match only. Score: ' + fuzzyMatches[0].score.toFixed(2) });
-    return;
-  }
-  pendingImport.clean.push({ action:'add', incoming:row, reason:'New record with no match.' });
-}
+// Assigns an import row to a review bucket.
+function processImportRow(row){const high=findHighConfidenceMatch(row);if(high){const conflict=findFieldConflicts(high,row,pendingImport.type);if(conflict.fields.length)pendingImport.conflicts.push({id:makeId('conflict'),existingId:high.id,incoming:row,fields:conflict.fields,resolvedValues:conflict.resolvedValues});else pendingImport.clean.push({action:'merge',existingId:high.id,incoming:row,reason:'High-confidence match with no differing fields.'});pendingImport.autoMergeLog.push({date:new Date().toISOString(),level:'high',action:'auto-merge prepared',existingName:high.name,incomingName:row.name,reason:high.matchReason});return;}const med=findMediumConfidenceMatch(row);if(med){pendingImport.suspects.push({id:makeId('suspect'),level:'medium',existingId:med.id,incoming:row,decision:'pending',reason:'Phone and email match, but name differs.'});return;}const fuzzy=findFuzzyNameMatches(row);if(fuzzy.length){pendingImport.suspects.push({id:makeId('suspect'),level:'low',existingId:fuzzy[0].item.id,incoming:row,decision:'pending',reason:'Fuzzy name match only. Score: '+fuzzy[0].score.toFixed(2)});return;}pendingImport.clean.push({action:'add',incoming:row,reason:'New record with no match.'});}
 
 // Finds a high-confidence match by name+phone or name+email.
-function findHighConfidenceMatch(row) {
-  const incomingName = normalizeName(row.name);
-  const incomingPhone = normalizePhone(row.phone);
-  const incomingEmail = normalizeEmail(row.email);
-  for (let i = 0; i < appData.volunteers.length; i++) {
-    const volunteer = appData.volunteers[i];
-    const sameName = normalizeName(volunteer.name) === incomingName;
-    if (sameName && incomingPhone && normalizePhone(volunteer.phone) === incomingPhone) { volunteer.matchReason = 'Name + Phone'; return volunteer; }
-    if (sameName && incomingEmail && normalizeEmail(volunteer.email) === incomingEmail) { volunteer.matchReason = 'Name + Email'; return volunteer; }
-  }
-  return null;
-}
-
-// Finds a medium-confidence match by phone+email with a different normalised name.
-function findMediumConfidenceMatch(row) {
-  const incomingName = normalizeName(row.name);
-  const incomingPhone = normalizePhone(row.phone);
-  const incomingEmail = normalizeEmail(row.email);
-  if (!incomingPhone || !incomingEmail) return null;
-  for (let i = 0; i < appData.volunteers.length; i++) {
-    const volunteer = appData.volunteers[i];
-    if (normalizePhone(volunteer.phone) === incomingPhone && normalizeEmail(volunteer.email) === incomingEmail && normalizeName(volunteer.name) !== incomingName) return volunteer;
-  }
-  return null;
-}
-
-// Finds low-confidence fuzzy name-only matches with Fuse.js.
-function findFuzzyNameMatches(row) {
-  if (!row.name || !appData.volunteers.length) return [];
-  const incomingPhone = normalizePhone(row.phone);
-  const incomingEmail = normalizeEmail(row.email);
-  const candidates = appData.volunteers.filter(function keepCandidate(volunteer) {
-    const phoneMatches = incomingPhone && normalizePhone(volunteer.phone) === incomingPhone;
-    const emailMatches = incomingEmail && normalizeEmail(volunteer.email) === incomingEmail;
-    return !phoneMatches && !emailMatches;
-  }).map(function addSearchName(volunteer) {
-    volunteer.normalizedName = normalizeName(volunteer.name);
-    return volunteer;
-  });
-  const fuse = new Fuse(candidates, { keys:['normalizedName'], threshold:0.28, includeScore:true });
-  return fuse.search(normalizeName(row.name)).slice(0, 3);
-}
-
-// Detects differing non-blank fields for high-confidence matches.
-function findFieldConflicts(existing, incoming, type) {
-  const fields = type === 'roster' ? ['name','phone','email','emergencyName','emergencyPhone','shirtSize','dietary','notes'] : ['name','phone','email'];
-  const result = { fields:[], resolvedValues:{} };
-  fields.forEach(function checkField(key) {
-    const existingValue = cleanText(existing[key]);
-    const incomingValue = cleanText(incoming[key]);
-    if (existingValue && incomingValue && existingValue !== incomingValue) {
-      result.fields.push({ key:key, label:getVolunteerLabel(key), existing:existingValue, incoming:incomingValue });
-      result.resolvedValues[key] = existingValue;
-    }
-  });
-  return result;
-}
-
-// Normalises names by removing common titles, lowercasing, and handling comma-flipped names.
-function normalizeName(name) {
-  let text = cleanText(name).toLowerCase();
-  text = text.replace(/\b(mr|mrs|ms|dr)\.?\s+/g, '');
-  if (text.indexOf(',') > -1) {
-    const parts = text.split(',');
-    text = cleanText(parts[1]) + ' ' + cleanText(parts[0]);
-  }
-  return text.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-// Normalises phone numbers by stripping spaces, dashes, brackets, and Singapore country prefixes.
-function normalizePhone(phone) {
-  let text = cleanText(phone).replace(/[\s\-()]/g, '');
-  if (text.indexOf('+65') === 0) text = text.slice(3);
-  if (text.indexOf('65') === 0 && text.length > 8) text = text.slice(2);
-  return text;
-}
-
-// Normalises email addresses by trimming and lowercasing.
-function normalizeEmail(email) {
-  return cleanText(email).toLowerCase();
-}
-
-// Connects merge-review action buttons.
-function wireMergeControls() {
-  document.getElementById('confirmImport').addEventListener('click', confirmImport);
-  document.getElementById('discardImport').addEventListener('click', discardImport);
-}
-
-// Discards the staged import without changing saved data.
-function discardImport() {
-  pendingImport = null;
-  renderMergeReview();
-}
-
-// Renders all merge-review buckets.
-function renderMergeReview() {
-  if (!pendingImport) {
-    document.getElementById('mergeSummary').innerHTML = '<div class="notice warn">No pending import. Upload or paste data first.</div>';
-    document.getElementById('batchEditBucket').innerHTML = '<h3>Pre-merge tags and batch edit</h3><p class="muted">No pending import to edit.</p>';
-    document.getElementById('cleanBucket').innerHTML = '<h3>Clean additions</h3><p class="muted">No pending rows.</p>';
-    document.getElementById('conflictBucket').innerHTML = '<h3>Conflicts</h3><p class="muted">No pending conflicts.</p>';
-    document.getElementById('suspectBucket').innerHTML = '<h3>Suspected duplicates</h3><p class="muted">No pending suspected duplicates.</p>';
-    return;
-  }
-  document.getElementById('mergeSummary').innerHTML = '<p><span class="pill ok">' + pendingImport.clean.length + ' clean</span> <span class="pill warn">' + pendingImport.conflicts.length + ' conflicts</span> <span class="pill neutral">' + pendingImport.suspects.length + ' suspected</span></p>';
-  renderBatchEditBucket();
-  renderCleanBucket();
-  renderConflictBucket();
-  renderSuspectBucket();
-}
-
-// Renders controls for adding tags and batch-editing pending import rows before saving.
-function renderBatchEditBucket() {
-  let html = '<h3>Pre-merge tags and batch edit</h3>';
-  html += '<p class="muted">These changes apply only to the staged import until Confirm Import is clicked.</p>';
-  html += '<div class="grid"><div><label for="batchTarget">Apply to</label><select id="batchTarget"><option value="all">All pending rows</option><option value="clean">Clean additions</option><option value="conflicts">Conflicts</option><option value="suspects">Suspected duplicates</option></select></div>';
-  html += '<div><label for="batchTags">Tags to add</label><input id="batchTags" placeholder="youth, logistics, befriender"></div></div>';
-  html += '<div class="row"><button onclick="applyBatchTags()" class="primary">Add tags to selected rows</button></div>';
-  html += '<hr><div class="grid"><div><label for="batchField">Field to edit</label><select id="batchField">' + getBatchEditableOptions() + '</select></div><div><label for="batchValue">New value</label><input id="batchValue" placeholder="Value to apply"></div></div>';
-  html += '<div class="row"><button onclick="applyBatchFieldEdit()">Apply batch edit</button></div>';
-  html += '<h4>Pending row tags</h4><div class="table-wrap">' + renderPendingTagTable() + '</div>';
-  document.getElementById('batchEditBucket').innerHTML = html;
-}
-
-// Returns HTML options for fields that can be safely batch edited after matching is staged.
-function getBatchEditableOptions() {
-  const rosterFields = [
-    ['emergencyName','Emergency Contact Name'],
-    ['emergencyPhone','Emergency Contact Phone'],
-    ['shirtSize','T-Shirt Size'],
-    ['dietary','Dietary Requirements'],
-    ['notes','Notes']
-  ];
-  const attendanceFields = [
-    ['eventName','Event Name'],
-    ['date','Date'],
-    ['hours','Hours'],
-    ['role','Role']
-  ];
-  const fields = pendingImport && pendingImport.type === 'attendance' ? attendanceFields : rosterFields;
-  return fields.map(function option(field) { return '<option value="' + field[0] + '">' + field[1] + '</option>'; }).join('');
-}
-
-// Renders a compact table showing pending rows and their staged tags.
-function renderPendingTagTable() {
-  const rows = getPendingItemsByTarget('all').map(function rowForTable(item) { return [item.incoming.name, item.incoming.phone, item.incoming.email, tagsToText(item.incoming.tags)]; });
-  return rows.length ? makeTable(['Name','Phone','Email','Staged tags'], rows) : '<p class="muted">No pending rows.</p>';
-}
-
-// Adds comma-separated tags to all pending rows in the selected batch target.
-function applyBatchTags() {
-  if (!pendingImport) return;
-  const tags = parseTags(document.getElementById('batchTags').value);
-  const target = document.getElementById('batchTarget').value;
-  if (!tags.length) return;
-  getPendingItemsByTarget(target).forEach(function addTagsToItem(item) { item.incoming.tags = mergeTags(item.incoming.tags, tags); });
-  renderMergeReview();
-}
-
-// Applies one batch field edit to all pending rows in the selected batch target.
-function applyBatchFieldEdit() {
-  if (!pendingImport) return;
-  const target = document.getElementById('batchTarget').value;
-  const field = document.getElementById('batchField').value;
-  const value = document.getElementById('batchValue').value;
-  getPendingItemsByTarget(target).forEach(function editItem(item) { setIncomingField(item.incoming, field, value); });
-  renderMergeReview();
-}
-
-// Returns clean, conflict, suspect, or all pending items as a unified list.
-function getPendingItemsByTarget(target) {
-  if (!pendingImport) return [];
-  const clean = pendingImport.clean;
-  const conflicts = pendingImport.conflicts;
-  const suspects = pendingImport.suspects;
-  if (target === 'clean') return clean;
-  if (target === 'conflicts') return conflicts;
-  if (target === 'suspects') return suspects;
-  return clean.concat(conflicts).concat(suspects);
-}
-
-// Updates an incoming staged row field with the correct value type.
-function setIncomingField(incoming, field, value) {
-  incoming[field] = field === 'hours' ? Number(value) || 0 : value;
-}
-
-// Renders rows that can be added or merged without conflict choices.
-function renderCleanBucket() {
-  const rows = pendingImport.clean.map(function row(item) { return [item.action, item.incoming.name, item.incoming.phone, item.incoming.email, tagsToText(item.incoming.tags), item.reason]; });
-  document.getElementById('cleanBucket').innerHTML = '<h3>Clean additions</h3>' + (rows.length ? makeTable(['Action','Name','Phone','Email','Staged tags','Reason'], rows) : '<p class="muted">None.</p>');
-}
-
-// Renders side-by-side conflict controls for user choice or typed correction.
-function renderConflictBucket() {
-  let html = '<h3>Conflicts</h3>';
-  if (!pendingImport.conflicts.length) {
-    document.getElementById('conflictBucket').innerHTML = html + '<p class="muted">None.</p>';
-    return;
-  }
-  pendingImport.conflicts.forEach(function renderConflict(conflict) {
-    const existing = getVolunteer(conflict.existingId);
-    html += '<div class="choice-box"><h4>' + escapeHtml(existing.name) + ' vs ' + escapeHtml(conflict.incoming.name) + '</h4><p><strong>Staged tags:</strong> ' + escapeHtml(tagsToText(conflict.incoming.tags)) + '</p>';
-    conflict.fields.forEach(function renderField(field) {
-      html += '<label>' + escapeHtml(field.label) + '</label><div class="two-col"><button class="small" onclick="chooseConflictValue(\'' + conflict.id + '\',\'' + field.key + '\',\'existing\')">Use existing: ' + escapeHtml(field.existing) + '</button><button class="small" onclick="chooseConflictValue(\'' + conflict.id + '\',\'' + field.key + '\',\'incoming\')">Use incoming: ' + escapeHtml(field.incoming) + '</button></div><input value="' + escapeHtml(conflict.resolvedValues[field.key] || '') + '" oninput="typeConflictValue(\'' + conflict.id + '\',\'' + field.key + '\', this.value)">';
-    });
-    html += '</div>';
-  });
-  document.getElementById('conflictBucket').innerHTML = html;
-}
-
-// Stores an existing or incoming value as the resolved conflict value.
-function chooseConflictValue(conflictId, fieldKey, source) {
-  const conflict = pendingImport.conflicts.find(function match(item) { return item.id === conflictId; });
-  if (!conflict) return;
-  const field = conflict.fields.find(function matchField(item) { return item.key === fieldKey; });
-  conflict.resolvedValues[fieldKey] = source === 'existing' ? field.existing : field.incoming;
-  renderConflictBucket();
-}
-
-// Stores a typed value as the resolved conflict value.
-function typeConflictValue(conflictId, fieldKey, value) {
-  const conflict = pendingImport.conflicts.find(function match(item) { return item.id === conflictId; });
-  if (conflict) conflict.resolvedValues[fieldKey] = value;
-}
-
-// Renders suspected duplicates from the staged import.
-function renderSuspectBucket() {
-  let html = '<h3>Suspected duplicates</h3>';
-  if (!pendingImport.suspects.length) {
-    document.getElementById('suspectBucket').innerHTML = html + '<p class="muted">None.</p>';
-    return;
-  }
-  pendingImport.suspects.forEach(function render(suspect) { html += renderSuspectCard(suspect, 'pending'); });
-  document.getElementById('suspectBucket').innerHTML = html;
-}
-
-// Renders one suspected duplicate action card.
-function renderSuspectCard(suspect, context) {
-  const existing = getVolunteer(suspect.existingId);
-  let html = '<div class="choice-box"><p><span class="pill ' + (suspect.level === 'medium' ? 'warn' : 'neutral') + '">' + escapeHtml(suspect.level) + '</span> ' + escapeHtml(suspect.reason) + '</p>';
-  html += '<div class="two-col"><div><h4>Existing</h4>' + renderMiniProfile(existing) + '</div><div><h4>Incoming</h4>' + renderMiniProfile(suspect.incoming) + '</div></div>';
-  html += '<p><strong>Decision:</strong> ' + escapeHtml(suspect.decision || 'pending') + '</p>';
-  html += '<button class="small" onclick="setSuspectDecision(\'' + suspect.id + '\',\'' + context + '\',\'merge\')">Confirm merge</button> ';
-  html += '<button class="small" onclick="setSuspectDecision(\'' + suspect.id + '\',\'' + context + '\',\'separate\')">Keep separate</button> ';
-  html += '<button class="small" onclick="setSuspectDecision(\'' + suspect.id + '\',\'' + context + '\',\'skip\')">Skip for now</button></div>';
-  return html;
-}
-
-// Renders a compact profile block for duplicate comparison.
-function renderMiniProfile(person) {
-  if (!person) return '<p class="muted">Missing record</p>';
-  return '<p>Name: ' + escapeHtml(person.name) + '<br>Phone: ' + escapeHtml(person.phone) + '<br>Email: ' + escapeHtml(person.email) + '<br>Tags: ' + escapeHtml(tagsToText(person.tags)) + '</p>';
-}
-
-// Sets the decision for a staged or queued suspected duplicate.
-function setSuspectDecision(id, context, decision) {
-  const list = context === 'queue' ? appData.suspectedDuplicates : pendingImport.suspects;
-  const suspect = list.find(function match(item) { return item.id === id; });
-  if (!suspect) return;
-  suspect.decision = decision;
-  if (context === 'queue' && decision !== 'skip') resolveQueuedSuspect(suspect);
-  renderAll();
-}
-
-// Commits the staged import into the saved database.
-function confirmImport() {
-  if (!pendingImport) return;
-  pendingImport.clean.forEach(function commit(item) { commitCleanItem(item); });
-  pendingImport.conflicts.forEach(function commit(conflict) { commitConflictItem(conflict); });
-  pendingImport.suspects.forEach(function commit(suspect) { commitSuspectItem(suspect); });
-  appData.mergeLog = appData.mergeLog.concat(pendingImport.autoMergeLog);
-  appData.mergeLog.push({ date:new Date().toISOString(), level:'info', action:'import confirmed', existingName:'', incomingName:'', reason:'Confirmed ' + pendingImport.type + ' import.' });
-  pendingImport = null;
-  saveData();
-  showView('databaseView');
-}
-
-// Commits one clean add or clean merge row.
-function commitCleanItem(item) {
-  if (item.action === 'add') addNewVolunteerFromRow(item.incoming, pendingImport.type);
-  else mergeRowIntoVolunteer(getVolunteer(item.existingId), item.incoming, pendingImport.type);
-}
-
-// Commits one resolved conflict row.
-function commitConflictItem(conflict) {
-  const volunteer = getVolunteer(conflict.existingId);
-  if (!volunteer) return;
-  mergeRowIntoVolunteer(volunteer, conflict.incoming, pendingImport.type);
-  Object.keys(conflict.resolvedValues).forEach(function applyValue(key) { volunteer[key] = conflict.resolvedValues[key]; });
-  appData.mergeLog.push({ date:new Date().toISOString(), level:'conflict', action:'resolved conflict', existingName:volunteer.name, incomingName:conflict.incoming.name, reason:'User resolved differing field values.' });
-}
-
-// Commits or queues one suspected duplicate according to the user decision.
-function commitSuspectItem(suspect) {
-  const existing = getVolunteer(suspect.existingId);
-  if (suspect.decision === 'merge') {
-    mergeRowIntoVolunteer(existing, suspect.incoming, pendingImport.type);
-    appData.mergeLog.push({ date:new Date().toISOString(), level:suspect.level, action:'suspect merged', existingName:existing ? existing.name : '', incomingName:suspect.incoming.name, reason:suspect.reason });
-  } else if (suspect.decision === 'separate') {
-    addNewVolunteerFromRow(suspect.incoming, pendingImport.type);
-    appData.mergeLog.push({ date:new Date().toISOString(), level:suspect.level, action:'kept separate', existingName:existing ? existing.name : '', incomingName:suspect.incoming.name, reason:suspect.reason });
-  } else {
-    appData.suspectedDuplicates.push(suspect);
-  }
-}
-
-// Adds a new volunteer from an imported row.
-function addNewVolunteerFromRow(row, type) {
-  const volunteer = { id:makeId('vol'), name:row.name, phone:row.phone, email:row.email, emergencyName:row.emergencyName || '', emergencyPhone:row.emergencyPhone || '', shirtSize:row.shirtSize || '', dietary:row.dietary || '', tags:Array.isArray(row.tags) ? row.tags : [], notes:row.notes || '', attendance:[] };
-  if (type === 'attendance') volunteer.attendance.push(makeAttendanceFromRow(row));
-  appData.volunteers.push(volunteer);
-}
-
-// Merges imported row data into an existing volunteer.
-function mergeRowIntoVolunteer(volunteer, row, type) {
-  if (!volunteer) return;
-  if (!Array.isArray(volunteer.tags)) volunteer.tags = [];
-  volunteer.tags = mergeTags(volunteer.tags, row.tags || []);
-  if (type === 'roster') VOLUNTEER_SCHEMA.forEach(function fill(field) { if (field.key !== 'tags' && !volunteer[field.key] && row[field.key]) volunteer[field.key] = row[field.key]; });
-  if (type === 'attendance') volunteer.attendance.push(makeAttendanceFromRow(row));
-}
-
-// Creates one saved attendance record from an imported attendance row.
-function makeAttendanceFromRow(row) {
-  return { id:makeId('att'), eventName:row.eventName || '', date:row.date || '', hours:Number(row.hours) || 0, role:row.role || '' };
-}
-
-// Resolves a suspected duplicate from the persistent queue.
-function resolveQueuedSuspect(suspect) {
-  const type = suspect.incoming.eventName ? 'attendance' : 'roster';
-  const existing = getVolunteer(suspect.existingId);
-  if (suspect.decision === 'merge') mergeRowIntoVolunteer(existing, suspect.incoming, type);
-  if (suspect.decision === 'separate') addNewVolunteerFromRow(suspect.incoming, type);
-  appData.suspectedDuplicates = appData.suspectedDuplicates.filter(function keep(item) { return item.id !== suspect.id; });
-  appData.mergeLog.push({ date:new Date().toISOString(), level:suspect.level, action:'queue resolved: ' + suspect.decision, existingName:existing ? existing.name : '', incomingName:suspect.incoming.name, reason:suspect.reason });
-  saveData();
-}
-
-// Connects central database search, tag recall, filter, and sort controls.
-function wireDatabaseControls() {
-  document.getElementById('searchBox').addEventListener('input', renderDatabase);
-  document.getElementById('tagFilter').addEventListener('change', renderDatabase);
-  document.getElementById('shirtFilter').addEventListener('change', renderDatabase);
-  document.getElementById('activityFilter').addEventListener('change', renderDatabase);
-  document.getElementById('sortSelect').addEventListener('change', renderDatabase);
-}
-
-// Renders the searchable, tag-filterable, sortable, and expandable volunteer table.
-function renderDatabase() {
-  populateTagFilter();
-  populateShirtFilter();
-  const rows = getFilteredVolunteers();
-  let html = '<table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Tags</th><th>T-Shirt</th><th>Dietary</th><th>Total Hours</th><th>Last Active</th></tr></thead><tbody>';
-  rows.forEach(function renderVolunteer(volunteer) {
-    html += '<tr class="clickable" onclick="toggleProfile(\'' + volunteer.id + '\')"><td>' + escapeHtml(volunteer.name) + '</td><td>' + escapeHtml(volunteer.phone) + '</td><td>' + escapeHtml(volunteer.email) + '</td><td>' + renderTagPills(volunteer.tags) + '</td><td>' + escapeHtml(volunteer.shirtSize) + '</td><td>' + escapeHtml(volunteer.dietary) + '</td><td>' + getTotalHours(volunteer) + '</td><td>' + escapeHtml(getLastActive(volunteer)) + '</td></tr>';
-    if (expandedVolunteerId === volunteer.id) html += '<tr><td colspan="8" class="profile">' + renderFullProfile(volunteer) + '</td></tr>';
-  });
-  html += '</tbody></table>';
-  document.getElementById('databaseTable').innerHTML = rows.length ? html : '<p class="muted">No volunteers match the current filters.</p>';
-}
-
-// Returns volunteers matching the current search, tag recall, filters, and sort order.
-function getFilteredVolunteers() {
-  const query = document.getElementById('searchBox').value.toLowerCase().trim();
-  const tag = document.getElementById('tagFilter').value;
-  const shirt = document.getElementById('shirtFilter').value;
-  const activity = document.getElementById('activityFilter').value;
-  const sort = document.getElementById('sortSelect').value;
-  const filtered = appData.volunteers.filter(function keep(volunteer) {
-    const tags = Array.isArray(volunteer.tags) ? volunteer.tags : [];
-    const searchText = [volunteer.name, volunteer.phone, volunteer.email, volunteer.notes, volunteer.dietary, tags.join(' ')].join(' ').toLowerCase();
-    const hasAttendance = volunteer.attendance && volunteer.attendance.length > 0;
-    return (!query || searchText.indexOf(query) > -1) && (!tag || tags.indexOf(tag) > -1) && (!shirt || volunteer.shirtSize === shirt) && (!activity || (activity === 'active' && hasAttendance) || (activity === 'inactive' && !hasAttendance));
-  });
-  sortVolunteers(filtered, sort);
-  return filtered;
-}
-
-// Sorts a volunteer array in place according to the selected sort option.
-function sortVolunteers(volunteers, sort) {
-  volunteers.sort(function compare(a, b) {
-    if (sort === 'hours') return getTotalHours(b) - getTotalHours(a) || a.name.localeCompare(b.name);
-    if (sort === 'lastActive') return getLastActive(b).localeCompare(getLastActive(a)) || a.name.localeCompare(b.name);
-    if (sort === 'tag') return getFirstTag(a).localeCompare(getFirstTag(b)) || a.name.localeCompare(b.name);
-    return a.name.localeCompare(b.name);
-  });
-}
-
-// Populates the tag recall filter from all saved volunteer tags.
-function populateTagFilter() {
-  const select = document.getElementById('tagFilter');
-  const current = select.value;
-  const tags = getAllTags();
-  select.innerHTML = '<option value="">All tags</option>' + tags.map(function option(tag) { return '<option value="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</option>'; }).join('');
-  select.value = tags.indexOf(current) > -1 ? current : '';
-}
-
-// Populates the T-shirt size filter from database values.
-function populateShirtFilter() {
-  const select = document.getElementById('shirtFilter');
-  const current = select.value;
-  const sizes = [];
-  appData.volunteers.forEach(function collect(volunteer) { if (volunteer.shirtSize && sizes.indexOf(volunteer.shirtSize) === -1) sizes.push(volunteer.shirtSize); });
-  select.innerHTML = '<option value="">All sizes</option>' + sizes.sort().map(function option(size) { return '<option value="' + escapeHtml(size) + '">' + escapeHtml(size) + '</option>'; }).join('');
-  select.value = current;
-}
-
-// Returns all unique tags across all volunteers in alphabetical order.
-function getAllTags() {
-  const tags = [];
-  appData.volunteers.forEach(function collect(volunteer) {
-    (volunteer.tags || []).forEach(function collectTag(tag) { if (tags.indexOf(tag) === -1) tags.push(tag); });
-  });
-  return tags.sort();
-}
-
-// Returns the first tag for sorting purposes.
-function getFirstTag(volunteer) {
-  const tags = Array.isArray(volunteer.tags) ? volunteer.tags.slice().sort() : [];
-  return tags.length ? tags[0] : 'zzzzzz';
-}
-
-// Converts comma-separated tag text into a unique sorted array.
-function parseTags(text) {
-  const tags = cleanText(text).split(',').map(function normaliseTag(tag) { return tag.trim().toLowerCase(); }).filter(Boolean);
-  const unique = [];
-  tags.forEach(function addUnique(tag) { if (unique.indexOf(tag) === -1) unique.push(tag); });
-  return unique.sort();
-}
-
-// Merges two tag arrays into one unique sorted tag array.
-function mergeTags(existingTags, newTags) {
-  const combined = [];
-  (existingTags || []).concat(newTags || []).forEach(function addTag(tag) {
-    const cleanTag = cleanText(tag).toLowerCase();
-    if (cleanTag && combined.indexOf(cleanTag) === -1) combined.push(cleanTag);
-  });
-  return combined.sort();
-}
-
-// Converts a tag array into comma-separated text for editing and export.
-function tagsToText(tags) {
-  return Array.isArray(tags) ? tags.join(', ') : '';
-}
-
-// Renders tag pills for table display.
-function renderTagPills(tags) {
-  if (!Array.isArray(tags) || !tags.length) return '<span class="muted">No tags</span>';
-  return tags.map(function tagPill(tag) { return '<span class="pill tag">' + escapeHtml(tag) + '</span>'; }).join('');
-}
-
-// Expands or collapses one volunteer profile.
-function toggleProfile(id) {
-  expandedVolunteerId = expandedVolunteerId === id ? null : id;
-  renderDatabase();
-}
-
-// Renders editable volunteer fields and editable attendance rows.
-function renderFullProfile(volunteer) {
-  let html = '<h3>Full profile</h3><div class="grid">';
-  VOLUNTEER_SCHEMA.forEach(function fieldHtml(field) {
-    const rawValue = field.key === 'tags' ? tagsToText(volunteer.tags) : (volunteer[field.key] || '');
-    const value = escapeHtml(rawValue);
-    if (field.type === 'textarea') html += '<div><label>' + field.label + '</label><textarea oninput="editVolunteerField(\'' + volunteer.id + '\',\'' + field.key + '\', this.value)">' + value + '</textarea></div>';
-    else html += '<div><label>' + field.label + '</label><input type="text" value="' + value + '" oninput="editVolunteerField(\'' + volunteer.id + '\',\'' + field.key + '\', this.value)"><p class="muted">' + (field.key === 'tags' ? 'Use comma-separated tags, for example: youth, logistics, befriender' : '') + '</p></div>';
-  });
-  html += '</div><h3>Attendance log</h3>' + renderAttendanceEditor(volunteer);
-  return html;
-}
-
-// Renders attendance rows with inline editing controls.
-function renderAttendanceEditor(volunteer) {
-  let html = '<table><thead><tr><th>Event</th><th>Date</th><th>Hours</th><th>Role</th><th></th></tr></thead><tbody>';
-  (volunteer.attendance || []).forEach(function row(att) {
-    html += '<tr><td><input value="' + escapeHtml(att.eventName) + '" oninput="editAttendanceField(\'' + volunteer.id + '\',\'' + att.id + '\',\'eventName\', this.value)"></td><td><input value="' + escapeHtml(att.date) + '" oninput="editAttendanceField(\'' + volunteer.id + '\',\'' + att.id + '\',\'date\', this.value)"></td><td><input type="number" value="' + escapeHtml(att.hours) + '" oninput="editAttendanceField(\'' + volunteer.id + '\',\'' + att.id + '\',\'hours\', this.value)"></td><td><input value="' + escapeHtml(att.role) + '" oninput="editAttendanceField(\'' + volunteer.id + '\',\'' + att.id + '\',\'role\', this.value)"></td><td><button class="small danger" onclick="deleteAttendance(\'' + volunteer.id + '\',\'' + att.id + '\')">Delete</button></td></tr>';
-  });
-  return html + '</tbody></table><button class="small" onclick="addAttendance(\'' + volunteer.id + '\')">Add attendance row</button>';
-}
-
-// Updates one volunteer field and saves the database.
-function editVolunteerField(volunteerId, key, value) {
-  const volunteer = getVolunteer(volunteerId);
-  if (!volunteer) return;
-  volunteer[key] = key === 'tags' ? parseTags(value) : value;
-  saveData();
-  if (key === 'tags') renderDatabase();
-}
-
-// Updates one attendance field and saves the database.
-function editAttendanceField(volunteerId, attendanceId, key, value) {
-  const volunteer = getVolunteer(volunteerId);
-  if (!volunteer) return;
-  const attendance = volunteer.attendance.find(function match(att) { return att.id === attendanceId; });
-  if (!attendance) return;
-  attendance[key] = key === 'hours' ? Number(value) || 0 : value;
-  saveData();
-}
-
-// Adds a blank attendance row to one volunteer.
-function addAttendance(volunteerId) {
-  const volunteer = getVolunteer(volunteerId);
-  if (!volunteer) return;
-  volunteer.attendance.push({ id:makeId('att'), eventName:'', date:'', hours:0, role:'' });
-  saveData();
-  renderDatabase();
-}
-
-// Deletes one attendance row from one volunteer.
-function deleteAttendance(volunteerId, attendanceId) {
-  const volunteer = getVolunteer(volunteerId);
-  if (!volunteer) return;
-  volunteer.attendance = volunteer.attendance.filter(function keep(att) { return att.id !== attendanceId; });
-  saveData();
-  renderDatabase();
-}
-
-// Retrieves a volunteer by local ID.
-function getVolunteer(id) {
-  return appData.volunteers.find(function match(volunteer) { return volunteer.id === id; });
-}
-
-// Calculates total attendance hours for one volunteer.
-function getTotalHours(volunteer) {
-  return (volunteer.attendance || []).reduce(function sum(total, att) { return total + (Number(att.hours) || 0); }, 0);
-}
-
-// Returns the latest attendance date for one volunteer.
-function getLastActive(volunteer) {
-  const dates = (volunteer.attendance || []).map(function date(att) { return att.date; }).filter(Boolean).sort();
-  return dates.length ? dates[dates.length - 1] : '';
-}
-
-// Connects export, import, and clearing controls.
-function wireExportControls() {
-  document.getElementById('exportXlsx').addEventListener('click', exportDatabaseXlsx);
-  document.getElementById('exportMergeLog').addEventListener('click', exportMergeLogXlsx);
-  document.getElementById('exportJson').addEventListener('click', exportJsonSave);
-  document.getElementById('jsonInput').addEventListener('change', importJsonSave);
-  document.getElementById('clearData').addEventListener('click', clearLocalData);
-}
-
-// Exports the volunteer database as an Excel workbook with two sheets.
-function exportDatabaseXlsx() {
-  const particulars = appData.volunteers.map(function exportVolunteer(volunteer) { return { Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, Tags:tagsToText(volunteer.tags), 'Emergency Contact Name':volunteer.emergencyName, 'Emergency Contact Phone':volunteer.emergencyPhone, 'T-Shirt Size':volunteer.shirtSize, 'Dietary Requirements':volunteer.dietary, Notes:volunteer.notes, 'Total Hours':getTotalHours(volunteer), 'Last Active':getLastActive(volunteer) }; });
-  const attendance = [];
-  appData.volunteers.forEach(function exportAttendance(volunteer) { (volunteer.attendance || []).forEach(function add(att) { attendance.push({ Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, Tags:tagsToText(volunteer.tags), 'Event Name':att.eventName, Date:att.date, Hours:att.hours, Role:att.role }); }); });
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(particulars), 'Volunteer Particulars');
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(attendance), 'Attendance Log');
-  XLSX.writeFile(workbook, 'volunteer_database.xlsx');
-}
-
-// Exports the merge and conflict log as an Excel workbook.
-function exportMergeLogXlsx() {
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(appData.mergeLog), 'Merge Conflict Log');
-  XLSX.writeFile(workbook, 'merge_conflict_log.xlsx');
-}
-
-// Exports the full local database as a JSON save file.
-function exportJsonSave() {
-  downloadBlob(new Blob([JSON.stringify(appData, null, 2)], { type:'application/json' }), 'volunteer_database_save.json');
-}
-
-// Imports a JSON save file after explicit user confirmation.
-function importJsonSave(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function readJson(loadEvent) {
-    try {
-      const parsed = JSON.parse(loadEvent.target.result);
-      if (!Array.isArray(parsed.volunteers)) throw new Error('Invalid save file');
-      if (!confirm('Replace the current local database with this JSON save file?')) return;
-      appData = { volunteers:parsed.volunteers || [], suspectedDuplicates:parsed.suspectedDuplicates || [], mergeLog:parsed.mergeLog || [] };
-      normaliseLoadedData();
-      saveData();
-      renderAll();
-    } catch (error) {
-      alert('This JSON file is not a valid save file.');
-    }
-  };
-  reader.readAsText(file);
-  event.target.value = '';
-}
-
-// Clears the local browser database after explicit user confirmation.
-function clearLocalData() {
-  if (!confirm('Clear the local volunteer database in this browser?')) return;
-  appData = { volunteers: [], suspectedDuplicates: [], mergeLog: [] };
-  pendingImport = null;
-  expandedVolunteerId = null;
-  saveData();
-  renderAll();
-}
-
-// Downloads a generated file blob.
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-// Downloads a sample roster workbook with the exact required headers.
-function downloadSampleRoster() {
-  const sheet = XLSX.utils.aoa_to_sheet([ROSTER_HEADERS, ['Jane Tan', '+65 9123 4567', 'jane@example.com', 'John Tan', '8123 4567', 'M', 'Halal', 'Sample only']]);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Volunteer Roster');
-  XLSX.writeFile(workbook, 'volunteer_roster.xlsx');
-}
-
-// Downloads a sample attendance workbook with the exact required headers.
-function downloadSampleAttendance() {
-  const sheet = XLSX.utils.aoa_to_sheet([ATTENDANCE_HEADERS, ['Jane Tan', '+65 9123 4567', 'jane@example.com', 'Community Event', '2026-01-15', 4, 'Usher']]);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, 'Attendance Log');
-  XLSX.writeFile(workbook, 'attendance_log.xlsx');
-}
-
-// Renders unresolved suspected duplicates from the persistent queue.
-function renderDuplicateQueue() {
-  document.getElementById('dupCount').textContent = appData.suspectedDuplicates.length;
-  if (!appData.suspectedDuplicates.length) {
-    document.getElementById('duplicateQueue').innerHTML = '<div class="card"><p class="muted">No unresolved suspected duplicates.</p></div>';
-    return;
-  }
-  let html = '';
-  appData.suspectedDuplicates.forEach(function render(suspect) { html += '<div class="card">' + renderSuspectCard(suspect, 'queue') + '</div>'; });
-  document.getElementById('duplicateQueue').innerHTML = html;
-}
-
-// Renders the merge and conflict log table.
-function renderMergeLog() {
-  const rows = appData.mergeLog.map(function row(log) { return [log.date, log.level, log.action, log.existingName, log.incomingName, log.reason]; });
-  document.getElementById('mergeLogTable').innerHTML = rows.length ? makeTable(['Date','Level','Action','Existing','Incoming','Reason'], rows) : '<p class="muted">No merge or conflict log entries yet.</p>';
-}
-
-// Renders all dynamic app areas.
-function renderAll() {
-  renderMergeReview();
-  renderDatabase();
-  renderDuplicateQueue();
-  renderMergeLog();
-}
-
-// Builds a simple HTML table from header and row arrays.
-function makeTable(headers, rows) {
-  let html = '<table><thead><tr>';
-  headers.forEach(function header(cell) { html += '<th>' + escapeHtml(cell) + '</th>'; });
-  html += '</tr></thead><tbody>';
-  rows.forEach(function row(cells) {
-    html += '<tr>';
-    cells.forEach(function cell(value) { html += '<td>' + escapeHtml(value) + '</td>'; });
-    html += '</tr>';
-  });
-  return html + '</tbody></table>';
-}
-
-// Shows a status notice in the requested element.
-function showNotice(elementId, type, message) {
-  document.getElementById(elementId).innerHTML = '<div class="notice ' + type + '">' + escapeHtml(message) + '</div>';
-}
-
-// Escapes text before inserting it into HTML.
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"]/g, function replace(character) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[character]; });
-}
-
-// Finds the display label for a volunteer schema key.
-function getVolunteerLabel(key) {
-  const field = VOLUNTEER_SCHEMA.find(function match(item) { return item.key === key; });
-  return field ? field.label : key;
-}
+function findHighConfidenceMatch(row){const n=normalizeName(row.name),p=normalizePhone(row.phone),e=normalizeEmail(row.email);for(let i=0;i<appData.volunteers.length;i++){const v=appData.volunteers[i],same=normalizeName(v.name)===n;if(same&&p&&normalizePhone(v.phone)===p){v.matchReason='Name + Phone';return v;}if(same&&e&&normalizeEmail(v.email)===e){v.matchReason='Name + Email';return v;}}return null;}
+
+// Finds a medium-confidence match by phone+email with different name.
+function findMediumConfidenceMatch(row){const n=normalizeName(row.name),p=normalizePhone(row.phone),e=normalizeEmail(row.email);if(!p||!e)return null;for(let i=0;i<appData.volunteers.length;i++){const v=appData.volunteers[i];if(normalizePhone(v.phone)===p&&normalizeEmail(v.email)===e&&normalizeName(v.name)!==n)return v;}return null;}
+
+// Finds fuzzy name-only matches.
+function findFuzzyNameMatches(row){if(!row.name||!appData.volunteers.length)return[];const p=normalizePhone(row.phone),e=normalizeEmail(row.email);const candidates=appData.volunteers.filter(function(v){return !(p&&normalizePhone(v.phone)===p)&&!(e&&normalizeEmail(v.email)===e);}).map(function(v){v.normalizedName=normalizeName(v.name);return v;});return new Fuse(candidates,{keys:['normalizedName'],threshold:.28,includeScore:true}).search(normalizeName(row.name)).slice(0,3);}
+
+// Finds differing non-blank fields for matched rows.
+function findFieldConflicts(existing,incoming,type){const fields=type==='roster'?['name','phone','email','gender','address','emergencyName','emergencyPhone','shirtSize','dietary','notes']:['name','phone','email'];const result={fields:[],resolvedValues:{}};fields.forEach(function(k){const a=cleanText(existing[k]),b=cleanText(incoming[k]);if(a&&b&&a!==b){result.fields.push({key:k,label:getVolunteerLabel(k),existing:a,incoming:b});result.resolvedValues[k]=a;}});return result;}
+
+// Normalises names for matching.
+function normalizeName(name){let t=cleanText(name).toLowerCase().replace(/\b(mr|mrs|ms|dr)\.?\s+/g,'');if(t.indexOf(',')>-1){const p=t.split(',');t=cleanText(p[1])+' '+cleanText(p[0]);}return t.replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();}
+
+// Normalises phone numbers for matching.
+function normalizePhone(phone){let t=cleanText(phone).replace(/[\s\-()]/g,'');if(t.indexOf('+65')===0)t=t.slice(3);if(t.indexOf('65')===0&&t.length>8)t=t.slice(2);return t;}
+
+// Normalises email addresses for matching.
+function normalizeEmail(email){return cleanText(email).toLowerCase();}
+
+// Wires merge review action buttons.
+function wireMergeControls(){document.getElementById('confirmImport').addEventListener('click',confirmImport);document.getElementById('discardImport').addEventListener('click',discardImport);}
+
+// Discards the pending import.
+function discardImport(){pendingImport=null;renderMergeReview();}
+
+// Renders merge review buckets.
+function renderMergeReview(){if(!pendingImport){document.getElementById('mergeSummary').innerHTML='<div class="notice warn">No pending import. Upload or paste data first.</div>';document.getElementById('batchEditBucket').innerHTML='<h3>Pre-merge tags and batch edit</h3><p class="muted">No pending import to edit.</p>';document.getElementById('cleanBucket').innerHTML='<h3>Clean additions</h3><p class="muted">No pending rows.</p>';document.getElementById('conflictBucket').innerHTML='<h3>Conflicts</h3><p class="muted">No pending conflicts.</p>';document.getElementById('suspectBucket').innerHTML='<h3>Suspected duplicates</h3><p class="muted">No pending suspected duplicates.</p>';return;}document.getElementById('mergeSummary').innerHTML='<p><span class="pill ok">'+pendingImport.clean.length+' clean</span> <span class="pill warn">'+pendingImport.conflicts.length+' conflicts</span> <span class="pill neutral">'+pendingImport.suspects.length+' suspected</span></p>';renderBatchEditBucket();renderCleanBucket();renderConflictBucket();renderSuspectBucket();}
+
+// Renders pre-merge tag and batch edit controls.
+function renderBatchEditBucket(){let html='<h3>Pre-merge tags and batch edit</h3><p class="muted">These changes apply only to the staged import until Confirm Import is clicked.</p>';html+='<div class="grid"><div><label for="batchTarget">Apply to</label><select id="batchTarget"><option value="all">All pending rows</option><option value="clean">Clean additions</option><option value="conflicts">Conflicts</option><option value="suspects">Suspected duplicates</option></select></div><div><label for="batchTags">Tags to add</label><input id="batchTags" placeholder="youth, logistics, befriender"></div></div><div class="row"><button onclick="applyBatchTags()" class="primary">Add tags to selected rows</button></div>';html+='<hr><div class="grid"><div><label for="batchField">Field to edit</label><select id="batchField">'+getBatchEditableOptions()+'</select></div><div><label for="batchValue">New value</label><input id="batchValue" placeholder="Value to apply"></div></div><div class="row"><button onclick="applyBatchFieldEdit()">Apply batch edit</button></div>';html+='<h4>Pending row tags</h4><div class="table-wrap">'+renderPendingTagTable()+'</div>';document.getElementById('batchEditBucket').innerHTML=html;}
+
+// Returns batch editable field options.
+function getBatchEditableOptions(){const roster=[['gender','Gender'],['address','Address'],['emergencyName','Emergency Contact Name'],['emergencyPhone','Emergency Contact Phone'],['shirtSize','T-Shirt Size'],['dietary','Dietary Requirements'],['notes','Notes']];const attendance=[['eventName','Event Name'],['date','Date'],['hours','Hours'],['role','Role']];const fields=pendingImport&&pendingImport.type==='attendance'?attendance:roster;return fields.map(function(f){return'<option value="'+f[0]+'">'+f[1]+'</option>';}).join('');}
+
+// Renders pending row tag summary.
+function renderPendingTagTable(){const rows=getPendingItemsByTarget('all').map(function(item){return[item.incoming.name,item.incoming.phone,item.incoming.email,tagsToText(item.incoming.tags)];});return rows.length?makeTable(['Name','Phone','Email','Staged tags'],rows):'<p class="muted">No pending rows.</p>';}
+
+// Applies tags to selected pending rows.
+function applyBatchTags(){if(!pendingImport)return;const tags=parseTags(document.getElementById('batchTags').value);const target=document.getElementById('batchTarget').value;if(!tags.length)return;getPendingItemsByTarget(target).forEach(function(item){item.incoming.tags=mergeTags(item.incoming.tags,tags);});renderMergeReview();}
+
+// Applies a field value to selected pending rows.
+function applyBatchFieldEdit(){if(!pendingImport)return;const target=document.getElementById('batchTarget').value,field=document.getElementById('batchField').value,value=document.getElementById('batchValue').value;getPendingItemsByTarget(target).forEach(function(item){item.incoming[field]=field==='hours'?Number(value)||0:value;});renderMergeReview();}
+
+// Returns pending items by target bucket.
+function getPendingItemsByTarget(target){if(!pendingImport)return[];if(target==='clean')return pendingImport.clean;if(target==='conflicts')return pendingImport.conflicts;if(target==='suspects')return pendingImport.suspects;return pendingImport.clean.concat(pendingImport.conflicts).concat(pendingImport.suspects);}
+
+// Renders clean additions bucket.
+function renderCleanBucket(){const rows=pendingImport.clean.map(function(item){return[item.action,item.incoming.name,item.incoming.phone,item.incoming.email,item.incoming.gender,item.incoming.address,tagsToText(item.incoming.tags),item.reason];});document.getElementById('cleanBucket').innerHTML='<h3>Clean additions</h3>'+(rows.length?makeTable(['Action','Name','Phone','Email','Gender','Address','Staged tags','Reason'],rows):'<p class="muted">None.</p>');}
+
+// Renders conflict bucket.
+function renderConflictBucket(){let html='<h3>Conflicts</h3>';if(!pendingImport.conflicts.length){document.getElementById('conflictBucket').innerHTML=html+'<p class="muted">None.</p>';return;}pendingImport.conflicts.forEach(function(c){const e=getVolunteer(c.existingId);html+='<div class="choice-box"><h4>'+escapeHtml(e.name)+' vs '+escapeHtml(c.incoming.name)+'</h4><p><strong>Staged tags:</strong> '+escapeHtml(tagsToText(c.incoming.tags))+'</p>';c.fields.forEach(function(f){html+='<label>'+escapeHtml(f.label)+'</label><div class="two-col"><button class="small" onclick="chooseConflictValue(\''+c.id+'\',\''+f.key+'\',\'existing\')">Use existing: '+escapeHtml(f.existing)+'</button><button class="small" onclick="chooseConflictValue(\''+c.id+'\',\''+f.key+'\',\'incoming\')">Use incoming: '+escapeHtml(f.incoming)+'</button></div><input value="'+escapeHtml(c.resolvedValues[f.key]||'')+'" oninput="typeConflictValue(\''+c.id+'\',\''+f.key+'\', this.value)">';});html+='</div>';});document.getElementById('conflictBucket').innerHTML=html;}
+
+// Chooses a conflict value from existing or incoming data.
+function chooseConflictValue(conflictId,fieldKey,source){const c=pendingImport.conflicts.find(function(x){return x.id===conflictId;});if(!c)return;const f=c.fields.find(function(x){return x.key===fieldKey;});c.resolvedValues[fieldKey]=source==='existing'?f.existing:f.incoming;renderConflictBucket();}
+
+// Stores a typed conflict resolution value.
+function typeConflictValue(conflictId,fieldKey,value){const c=pendingImport.conflicts.find(function(x){return x.id===conflictId;});if(c)c.resolvedValues[fieldKey]=value;}
+
+// Renders suspected duplicate bucket.
+function renderSuspectBucket(){let html='<h3>Suspected duplicates</h3>';if(!pendingImport.suspects.length){document.getElementById('suspectBucket').innerHTML=html+'<p class="muted">None.</p>';return;}pendingImport.suspects.forEach(function(s){html+=renderSuspectCard(s,'pending');});document.getElementById('suspectBucket').innerHTML=html;}
+
+// Renders one suspected duplicate card.
+function renderSuspectCard(s,context){const e=getVolunteer(s.existingId);let html='<div class="choice-box"><p><span class="pill '+(s.level==='medium'?'warn':'neutral')+'">'+escapeHtml(s.level)+'</span> '+escapeHtml(s.reason)+'</p><div class="two-col"><div><h4>Existing</h4>'+renderMiniProfile(e)+'</div><div><h4>Incoming</h4>'+renderMiniProfile(s.incoming)+'</div></div><p><strong>Decision:</strong> '+escapeHtml(s.decision||'pending')+'</p>';html+='<button class="small" onclick="setSuspectDecision(\''+s.id+'\',\''+context+'\',\'merge\')">Confirm merge</button> <button class="small" onclick="setSuspectDecision(\''+s.id+'\',\''+context+'\',\'separate\')">Keep separate</button> <button class="small" onclick="setSuspectDecision(\''+s.id+'\',\''+context+'\',\'skip\')">Skip for now</button></div>';return html;}
+
+// Renders compact profile text.
+function renderMiniProfile(p){if(!p)return'<p class="muted">Missing record</p>';return'<p>Name: '+escapeHtml(p.name)+'<br>Phone: '+escapeHtml(p.phone)+'<br>Email: '+escapeHtml(p.email)+'<br>Gender: '+escapeHtml(p.gender||'')+'<br>Address: '+escapeHtml(p.address||'')+'<br>Tags: '+escapeHtml(tagsToText(p.tags))+'</p>';}
+
+// Sets a suspect decision.
+function setSuspectDecision(id,context,decision){const list=context==='queue'?appData.suspectedDuplicates:pendingImport.suspects;const s=list.find(function(x){return x.id===id;});if(!s)return;s.decision=decision;if(context==='queue'&&decision!=='skip')resolveQueuedSuspect(s);renderAll();}
+
+// Commits staged import to database.
+function confirmImport(){if(!pendingImport)return;pendingImport.clean.forEach(commitCleanItem);pendingImport.conflicts.forEach(commitConflictItem);pendingImport.suspects.forEach(commitSuspectItem);appData.mergeLog=appData.mergeLog.concat(pendingImport.autoMergeLog);appData.mergeLog.push({date:new Date().toISOString(),level:'info',action:'import confirmed',existingName:'',incomingName:'',reason:'Confirmed '+pendingImport.type+' import.'});pendingImport=null;saveData();showView('databaseView');}
+
+// Commits one clean item.
+function commitCleanItem(item){if(item.action==='add')addNewVolunteerFromRow(item.incoming,pendingImport.type);else mergeRowIntoVolunteer(getVolunteer(item.existingId),item.incoming,pendingImport.type);}
+
+// Commits one conflict item.
+function commitConflictItem(c){const v=getVolunteer(c.existingId);if(!v)return;mergeRowIntoVolunteer(v,c.incoming,pendingImport.type);Object.keys(c.resolvedValues).forEach(function(k){v[k]=c.resolvedValues[k];});appData.mergeLog.push({date:new Date().toISOString(),level:'conflict',action:'resolved conflict',existingName:v.name,incomingName:c.incoming.name,reason:'User resolved differing field values.'});}
+
+// Commits one suspected duplicate item.
+function commitSuspectItem(s){const e=getVolunteer(s.existingId);if(s.decision==='merge'){mergeRowIntoVolunteer(e,s.incoming,pendingImport.type);appData.mergeLog.push({date:new Date().toISOString(),level:s.level,action:'suspect merged',existingName:e?e.name:'',incomingName:s.incoming.name,reason:s.reason});}else if(s.decision==='separate'){addNewVolunteerFromRow(s.incoming,pendingImport.type);appData.mergeLog.push({date:new Date().toISOString(),level:s.level,action:'kept separate',existingName:e?e.name:'',incomingName:s.incoming.name,reason:s.reason});}else appData.suspectedDuplicates.push(s);}
+
+// Adds a new volunteer record.
+function addNewVolunteerFromRow(row,type){const v={id:makeId('vol'),name:row.name,phone:row.phone,email:row.email,gender:row.gender||'',address:row.address||'',emergencyName:row.emergencyName||'',emergencyPhone:row.emergencyPhone||'',shirtSize:row.shirtSize||'',dietary:row.dietary||'',tags:Array.isArray(row.tags)?row.tags:[],notes:row.notes||'',attendance:[]};if(type==='attendance')v.attendance.push(makeAttendanceFromRow(row));appData.volunteers.push(v);}
+
+// Merges imported data into an existing volunteer.
+function mergeRowIntoVolunteer(v,row,type){if(!v)return;if(!Array.isArray(v.tags))v.tags=[];v.tags=mergeTags(v.tags,row.tags||[]);if(type==='roster')VOLUNTEER_SCHEMA.forEach(function(f){if(f.key!=='tags'&&!v[f.key]&&row[f.key])v[f.key]=row[f.key];});if(type==='attendance')v.attendance.push(makeAttendanceFromRow(row));}
+
+// Creates an attendance record.
+function makeAttendanceFromRow(row){return{id:makeId('att'),eventName:row.eventName||'',date:row.date||'',hours:Number(row.hours)||0,role:row.role||''};}
+
+// Resolves a queued duplicate.
+function resolveQueuedSuspect(s){const type=s.incoming.eventName?'attendance':'roster';const e=getVolunteer(s.existingId);if(s.decision==='merge')mergeRowIntoVolunteer(e,s.incoming,type);if(s.decision==='separate')addNewVolunteerFromRow(s.incoming,type);appData.suspectedDuplicates=appData.suspectedDuplicates.filter(function(x){return x.id!==s.id;});appData.mergeLog.push({date:new Date().toISOString(),level:s.level,action:'queue resolved: '+s.decision,existingName:e?e.name:'',incomingName:s.incoming.name,reason:s.reason});saveData();}
+
+// Wires database controls.
+function wireDatabaseControls(){['searchBox','tagFilter','genderFilter','shirtFilter','activityFilter','sortSelect'].forEach(function(id){document.getElementById(id).addEventListener('input',renderDatabase);document.getElementById(id).addEventListener('change',renderDatabase);});}
+
+// Renders central database table.
+function renderDatabase(){populateTagFilter();populateGenderFilter();populateShirtFilter();const rows=getFilteredVolunteers();let html='<table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Gender</th><th>Address</th><th>Tags</th><th>T-Shirt</th><th>Dietary</th><th>Total Hours</th><th>Last Active</th></tr></thead><tbody>';rows.forEach(function(v){html+='<tr class="clickable" onclick="toggleProfile(\''+v.id+'\')"><td>'+escapeHtml(v.name)+'</td><td>'+escapeHtml(v.phone)+'</td><td>'+escapeHtml(v.email)+'</td><td>'+escapeHtml(v.gender)+'</td><td>'+escapeHtml(v.address)+'</td><td>'+renderTagPills(v.tags)+'</td><td>'+escapeHtml(v.shirtSize)+'</td><td>'+escapeHtml(v.dietary)+'</td><td>'+getTotalHours(v)+'</td><td>'+escapeHtml(getLastActive(v))+'</td></tr>';if(expandedVolunteerId===v.id)html+='<tr><td colspan="10" class="profile">'+renderFullProfile(v)+'</td></tr>';});html+='</tbody></table>';document.getElementById('databaseTable').innerHTML=rows.length?html:'<p class="muted">No volunteers match the current filters.</p>';}
+
+// Returns filtered and sorted volunteers.
+function getFilteredVolunteers(){const q=document.getElementById('searchBox').value.toLowerCase().trim(),tag=document.getElementById('tagFilter').value,gender=document.getElementById('genderFilter').value,shirt=document.getElementById('shirtFilter').value,activity=document.getElementById('activityFilter').value,sort=document.getElementById('sortSelect').value;const filtered=appData.volunteers.filter(function(v){const tags=Array.isArray(v.tags)?v.tags:[];const text=[v.name,v.phone,v.email,v.gender,v.address,v.notes,v.dietary,tags.join(' ')].join(' ').toLowerCase();const has=v.attendance&&v.attendance.length>0;return(!q||text.indexOf(q)>-1)&&(!tag||tags.indexOf(tag)>-1)&&(!gender||v.gender===gender)&&(!shirt||v.shirtSize===shirt)&&(!activity||(activity==='active'&&has)||(activity==='inactive'&&!has));});sortVolunteers(filtered,sort);return filtered;}
+
+// Sorts volunteers in place.
+function sortVolunteers(rows,sort){rows.sort(function(a,b){if(sort==='hours')return getTotalHours(b)-getTotalHours(a)||a.name.localeCompare(b.name);if(sort==='lastActive')return getLastActive(b).localeCompare(getLastActive(a))||a.name.localeCompare(b.name);if(sort==='tag')return getFirstTag(a).localeCompare(getFirstTag(b))||a.name.localeCompare(b.name);return a.name.localeCompare(b.name);});}
+
+// Populates tag filter.
+function populateTagFilter(){const s=document.getElementById('tagFilter'),cur=s.value,tags=getAllTags();s.innerHTML='<option value="">All tags</option>'+tags.map(function(t){return'<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>';}).join('');s.value=tags.indexOf(cur)>-1?cur:'';}
+
+// Populates gender filter.
+function populateGenderFilter(){const s=document.getElementById('genderFilter'),cur=s.value,values=[];appData.volunteers.forEach(function(v){if(v.gender&&values.indexOf(v.gender)===-1)values.push(v.gender);});values.sort();s.innerHTML='<option value="">All genders</option>'+values.map(function(v){return'<option value="'+escapeHtml(v)+'">'+escapeHtml(v)+'</option>';}).join('');s.value=values.indexOf(cur)>-1?cur:'';}
+
+// Populates shirt filter.
+function populateShirtFilter(){const s=document.getElementById('shirtFilter'),cur=s.value,values=[];appData.volunteers.forEach(function(v){if(v.shirtSize&&values.indexOf(v.shirtSize)===-1)values.push(v.shirtSize);});values.sort();s.innerHTML='<option value="">All sizes</option>'+values.map(function(v){return'<option value="'+escapeHtml(v)+'">'+escapeHtml(v)+'</option>';}).join('');s.value=values.indexOf(cur)>-1?cur:'';}
+
+// Returns unique tags.
+function getAllTags(){const tags=[];appData.volunteers.forEach(function(v){(v.tags||[]).forEach(function(t){if(tags.indexOf(t)===-1)tags.push(t);});});return tags.sort();}
+
+// Returns first tag for sorting.
+function getFirstTag(v){const tags=Array.isArray(v.tags)?v.tags.slice().sort():[];return tags.length?tags[0]:'zzzzzz';}
+
+// Parses comma-separated tags.
+function parseTags(text){const raw=cleanText(text).split(',').map(function(t){return t.trim().toLowerCase();}).filter(Boolean);const unique=[];raw.forEach(function(t){if(unique.indexOf(t)===-1)unique.push(t);});return unique.sort();}
+
+// Merges tag arrays.
+function mergeTags(a,b){const out=[];(a||[]).concat(b||[]).forEach(function(t){const clean=cleanText(t).toLowerCase();if(clean&&out.indexOf(clean)===-1)out.push(clean);});return out.sort();}
+
+// Converts tags to display text.
+function tagsToText(tags){return Array.isArray(tags)?tags.join(', '):'';}
+
+// Renders tag pills.
+function renderTagPills(tags){if(!Array.isArray(tags)||!tags.length)return'<span class="muted">No tags</span>';return tags.map(function(t){return'<span class="pill tag">'+escapeHtml(t)+'</span>';}).join('');}
+
+// Expands or collapses profile.
+function toggleProfile(id){expandedVolunteerId=expandedVolunteerId===id?null:id;renderDatabase();}
+
+// Renders full editable profile.
+function renderFullProfile(v){let html='<h3>Full profile</h3><div class="grid">';VOLUNTEER_SCHEMA.forEach(function(f){const raw=f.key==='tags'?tagsToText(v.tags):(v[f.key]||'');const val=escapeHtml(raw);if(f.type==='textarea')html+='<div><label>'+f.label+'</label><textarea oninput="editVolunteerField(\''+v.id+'\',\''+f.key+'\', this.value)">'+val+'</textarea></div>';else html+='<div><label>'+f.label+'</label><input type="text" value="'+val+'" oninput="editVolunteerField(\''+v.id+'\',\''+f.key+'\', this.value)"><p class="muted">'+(f.key==='tags'?'Use comma-separated tags, for example: youth, logistics, befriender':'')+'</p></div>';});html+='</div><h3>Attendance log</h3>'+renderAttendanceEditor(v);return html;}
+
+// Renders editable attendance rows.
+function renderAttendanceEditor(v){let html='<table><thead><tr><th>Event</th><th>Date</th><th>Hours</th><th>Role</th><th></th></tr></thead><tbody>';(v.attendance||[]).forEach(function(a){html+='<tr><td><input value="'+escapeHtml(a.eventName)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'eventName\', this.value)"></td><td><input value="'+escapeHtml(a.date)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'date\', this.value)"></td><td><input type="number" value="'+escapeHtml(a.hours)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'hours\', this.value)"></td><td><input value="'+escapeHtml(a.role)+'" oninput="editAttendanceField(\''+v.id+'\',\''+a.id+'\',\'role\', this.value)"></td><td><button class="small danger" onclick="deleteAttendance(\''+v.id+'\',\''+a.id+'\')">Delete</button></td></tr>';});return html+'</tbody></table><button class="small" onclick="addAttendance(\''+v.id+'\')">Add attendance row</button>';}
+
+// Edits one volunteer field.
+function editVolunteerField(id,key,value){const v=getVolunteer(id);if(!v)return;v[key]=key==='tags'?parseTags(value):value;saveData();if(['tags','gender','shirtSize'].indexOf(key)>-1)renderDatabase();}
+
+// Edits one attendance field.
+function editAttendanceField(id,attId,key,value){const v=getVolunteer(id);if(!v)return;const a=v.attendance.find(function(x){return x.id===attId;});if(!a)return;a[key]=key==='hours'?Number(value)||0:value;saveData();}
+
+// Adds blank attendance.
+function addAttendance(id){const v=getVolunteer(id);if(!v)return;v.attendance.push({id:makeId('att'),eventName:'',date:'',hours:0,role:''});saveData();renderDatabase();}
+
+// Deletes attendance.
+function deleteAttendance(id,attId){const v=getVolunteer(id);if(!v)return;v.attendance=v.attendance.filter(function(a){return a.id!==attId;});saveData();renderDatabase();}
+
+// Gets volunteer by ID.
+function getVolunteer(id){return appData.volunteers.find(function(v){return v.id===id;});}
+
+// Sums volunteer hours.
+function getTotalHours(v){return(v.attendance||[]).reduce(function(t,a){return t+(Number(a.hours)||0);},0);}
+
+// Gets latest attendance date.
+function getLastActive(v){const dates=(v.attendance||[]).map(function(a){return a.date;}).filter(Boolean).sort();return dates.length?dates[dates.length-1]:'';}
+
+// Wires export controls.
+function wireExportControls(){document.getElementById('exportXlsx').addEventListener('click',exportDatabaseXlsx);document.getElementById('exportMergeLog').addEventListener('click',exportMergeLogXlsx);document.getElementById('exportJson').addEventListener('click',exportJsonSave);document.getElementById('jsonInput').addEventListener('change',importJsonSave);document.getElementById('clearData').addEventListener('click',clearLocalData);}
+
+// Exports database to XLSX.
+function exportDatabaseXlsx(){const particulars=appData.volunteers.map(function(v){return{Name:v.name,Phone:v.phone,Email:v.email,Gender:v.gender,Address:v.address,Tags:tagsToText(v.tags),'Emergency Contact Name':v.emergencyName,'Emergency Contact Phone':v.emergencyPhone,'T-Shirt Size':v.shirtSize,'Dietary Requirements':v.dietary,Notes:v.notes,'Total Hours':getTotalHours(v),'Last Active':getLastActive(v)};});const attendance=[];appData.volunteers.forEach(function(v){(v.attendance||[]).forEach(function(a){attendance.push({Name:v.name,Phone:v.phone,Email:v.email,Gender:v.gender,Address:v.address,Tags:tagsToText(v.tags),'Event Name':a.eventName,Date:a.date,Hours:a.hours,Role:a.role});});});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(particulars),'Volunteer Particulars');XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(attendance),'Attendance Log');XLSX.writeFile(wb,'volunteer_database.xlsx');}
+
+// Exports merge log to XLSX.
+function exportMergeLogXlsx(){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(appData.mergeLog),'Merge Conflict Log');XLSX.writeFile(wb,'merge_conflict_log.xlsx');}
+
+// Exports JSON save file.
+function exportJsonSave(){downloadBlob(new Blob([JSON.stringify(appData,null,2)],{type:'application/json'}),'volunteer_database_save.json');}
+
+// Imports JSON save file.
+function importJsonSave(e){const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=function(load){try{const parsed=JSON.parse(load.target.result);if(!Array.isArray(parsed.volunteers))throw new Error('Invalid');if(!confirm('Replace the current local database with this JSON save file?'))return;appData={volunteers:parsed.volunteers||[],suspectedDuplicates:parsed.suspectedDuplicates||[],mergeLog:parsed.mergeLog||[]};normaliseLoadedData();saveData();renderAll();}catch(error){alert('This JSON file is not a valid save file.');}};reader.readAsText(file);e.target.value='';}
+
+// Clears local data.
+function clearLocalData(){if(!confirm('Clear the local volunteer database in this browser?'))return;appData={volunteers:[],suspectedDuplicates:[],mergeLog:[]};pendingImport=null;expandedVolunteerId=null;saveData();renderAll();}
+
+// Downloads a blob file.
+function downloadBlob(blob,filename){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);}
+
+// Downloads sample roster with exact headers.
+function downloadSampleRoster(){const sheet=XLSX.utils.aoa_to_sheet([ROSTER_HEADERS,['Jane Tan','+65 9123 4567','jane@example.com','Female','Blk 123 Example Street #01-01','John Tan','8123 4567','M','Halal','Sample only']]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,sheet,'Volunteer Roster');XLSX.writeFile(wb,'volunteer_roster.xlsx');}
+
+// Downloads sample attendance with exact headers.
+function downloadSampleAttendance(){const sheet=XLSX.utils.aoa_to_sheet([ATTENDANCE_HEADERS,['Jane Tan','+65 9123 4567','jane@example.com','Community Event','2026-01-15',4,'Usher']]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,sheet,'Attendance Log');XLSX.writeFile(wb,'attendance_log.xlsx');}
+
+// Renders queued suspected duplicates.
+function renderDuplicateQueue(){document.getElementById('dupCount').textContent=appData.suspectedDuplicates.length;if(!appData.suspectedDuplicates.length){document.getElementById('duplicateQueue').innerHTML='<div class="card"><p class="muted">No unresolved suspected duplicates.</p></div>';return;}let html='';appData.suspectedDuplicates.forEach(function(s){html+='<div class="card">'+renderSuspectCard(s,'queue')+'</div>';});document.getElementById('duplicateQueue').innerHTML=html;}
+
+// Renders merge log table.
+function renderMergeLog(){const rows=appData.mergeLog.map(function(l){return[l.date,l.level,l.action,l.existingName,l.incomingName,l.reason];});document.getElementById('mergeLogTable').innerHTML=rows.length?makeTable(['Date','Level','Action','Existing','Incoming','Reason'],rows):'<p class="muted">No merge or conflict log entries yet.</p>';}
+
+// Renders all dynamic UI.
+function renderAll(){renderMergeReview();renderDatabase();renderDuplicateQueue();renderMergeLog();}
+
+// Builds a basic table.
+function makeTable(headers,rows){let html='<table><thead><tr>';headers.forEach(function(h){html+='<th>'+escapeHtml(h)+'</th>';});html+='</tr></thead><tbody>';rows.forEach(function(r){html+='<tr>';r.forEach(function(c){html+='<td>'+escapeHtml(c)+'</td>';});html+='</tr>';});return html+'</tbody></table>';}
+
+// Shows a status notice.
+function showNotice(id,type,message){document.getElementById(id).innerHTML='<div class="notice '+type+'">'+escapeHtml(message)+'</div>';}
+
+// Escapes HTML-sensitive characters.
+function escapeHtml(value){return String(value==null?'':value).replace(/[&<>"]/g,function(ch){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];});}
+
+// Gets a volunteer field label.
+function getVolunteerLabel(key){const f=VOLUNTEER_SCHEMA.find(function(item){return item.key===key;});return f?f.label:key;}
 </script>
 </body>
 </html>
