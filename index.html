@@ -21,6 +21,17 @@
 <body>
 <header><h1>Volunteer Database Management Tool</h1><p>Browser-local volunteer roster, attendance, tags, deduplication, review, and export tool.</p></header>
 <nav><button class="active" data-view="uploadView">Upload</button><button data-view="mergeView">Merge Review</button><button data-view="databaseView">Central Database</button><button data-view="exportView">Export</button><button data-view="duplicatesView">Suspected Duplicates <span id="dupCount" class="pill neutral">0</span></button></nav>
+<button id="infoTab" class="info-tab" type="button" aria-expanded="false" aria-controls="infoPanel">Info</button>
+<div id="infoPanel" class="info-panel hidden" role="dialog" aria-modal="false" aria-labelledby="infoTitle">
+  <div class="info-card">
+    <div class="info-header"><h2 id="infoTitle">How this tool works</h2><button id="closeInfoPanel" class="small" type="button">Close</button></div>
+    <p>This tool runs in your browser and stores its working database locally on this device. It does not send volunteer data to a server.</p>
+    <p>Use Upload to import a roster or attendance template. The tool validates headers, previews rows, and stages clean records, conflicts, and suspected duplicates for review before saving.</p>
+    <p>Use Merge Review to add tags, batch-edit staged rows, resolve conflicts, and confirm the import. Use Central Database to search, filter, edit profiles, and manage attendance.</p>
+    <p>Use Export to download full, redacted, merge-log, or JSON backup files. Exported files may contain personal data and should be handled securely.</p>
+    <p class="info-credit">designed and maintained by @aqideh 2026</p>
+  </div>
+</div>
 <main>
 <div class="notice warn"><strong>Privacy notice:</strong> This tool stores volunteer data only in this browser's localStorage. Do not use shared devices for real personal data. Exported files contain personal data and should be protected.</div>
 <section id="uploadView" class="view active">
@@ -34,5 +45,6 @@
 <section id="duplicatesView" class="view"><div class="card"><h2>Persistent Suspected Duplicates</h2><p class="muted">Unresolved fuzzy or medium-confidence matches remain here until actioned.</p></div><div id="duplicateQueue"></div></section>
 </main>
 <script src="assets/app.js"></script>
+<script src="assets/info.js"></script>
 </body>
 </html>
