@@ -55,8 +55,9 @@ Rows are flagged as invalid when they do not have Name and at least one of Phone
 
 After upload or pasted-cell preview, click **Prepare Merge Review**.
 
-The review is split into three buckets:
+The review is split into these areas:
 
+- **Pre-merge tags and batch edit** — apply tags or batch field changes to staged rows before saving
 - **Clean additions** — new rows or high-confidence merges without field conflicts
 - **Conflicts** — same person, but fields differ; choose existing, incoming, or type a correction
 - **Suspected duplicates** — medium or low confidence matches requiring a human decision
@@ -69,7 +70,53 @@ For suspected duplicates, choose one of:
 - **Keep separate** — create a separate volunteer record
 - **Skip for now** — keep the item in the persistent Suspected Duplicates queue
 
-### 3. Use the Central Database
+### 3. Add tags and batch edit before merge
+
+In **Merge Review**, use **Pre-merge tags and batch edit** before clicking **Confirm Import**.
+
+You can apply changes to:
+
+- All pending rows
+- Clean additions
+- Conflicts
+- Suspected duplicates
+
+#### Add tags before merge
+
+Enter comma-separated tags, for example:
+
+```text
+youth, logistics, befriender
+```
+
+Then click **Add tags to selected rows**.
+
+The tags are staged on the incoming import rows. They are not saved to the database until **Confirm Import** is clicked.
+
+If a staged row is merged into an existing volunteer, the staged tags are added to that existing volunteer. If a staged row is kept separate or imported as a new volunteer, the staged tags are saved on the new volunteer record.
+
+#### Batch edit before merge
+
+Choose a field, enter the new value, and click **Apply batch edit**.
+
+For roster imports, supported batch-edit fields are:
+
+- Emergency Contact Name
+- Emergency Contact Phone
+- T-Shirt Size
+- Dietary Requirements
+- Notes
+
+For attendance imports, supported batch-edit fields are:
+
+- Event Name
+- Date
+- Hours
+- Role
+
+Name, Phone, and Email are not batch-edited at this stage because they are used for deduplication and matching. Change those in the source file or pasted cells before preparing the Merge Review.
+
+### 4. Use the Central Database
 
 Go to **Central Database**.
 
@@ -77,7 +124,7 @@ You can search, filter by T-shirt size, filter by attendance activity, click a r
 
 The table shows Name, Phone, Email, Tags, T-Shirt, Dietary, Total Hours, and Last Active.
 
-### 4. Assign and recall tags
+### 5. Assign and recall tags after import
 
 Tags are managed in each volunteer's expanded profile.
 
@@ -114,7 +161,7 @@ Tags are included in:
 - `database.xlsx` export
 - JSON save files
 
-### 5. Export and back up
+### 6. Export and back up
 
 Go to **Export**.
 
@@ -126,7 +173,7 @@ Available exports:
 
 You can also import a JSON save file to restore or move the database to another browser.
 
-### 6. Resolve suspected duplicates later
+### 7. Resolve suspected duplicates later
 
 Go to **Suspected Duplicates**. This page shows unresolved fuzzy or medium-confidence matches that were skipped during import.
 
