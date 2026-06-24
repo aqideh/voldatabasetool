@@ -6,44 +6,44 @@
   <title>Volunteer Database Management Tool</title>
   <!--
     Volunteer Database Management Tool
-    Structure:
-    1. CSS and layout define the five app views.
-    2. The clearly labelled schema section defines editable volunteer fields and attendance fields.
-    3. State is loaded from localStorage and only written after confirmed actions.
-    4. Upload parsing validates the two fixed Excel templates, then builds a pending import.
-    5. Merge Review lets the user approve clean additions, resolve conflicts, and action suspected duplicates before committing.
-    6. Central Database supports search, filters, row expansion, attendance history, and inline editing.
-    7. Export creates XLSX and JSON backups, and Suspected Duplicates keeps unresolved fuzzy matches available later.
+    Overall structure:
+    1. The schema section below defines volunteer and attendance fields in one place.
+    2. Data is stored in browser localStorage and is only changed after explicit user actions.
+    3. Upload and paste import paths both produce the same two-dimensional row structure.
+    4. The same strict header validator handles Excel and pasted spreadsheet cells.
+    5. Merge Review stages clean additions, conflicts, and suspected duplicates before saving.
+    6. Central Database provides search, filters, expandable profiles, and inline editing.
+    7. Export provides XLSX database export, XLSX merge-log export, and JSON save files.
   -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
   <style>
     :root { --bg:#f5f7fb; --panel:#fff; --text:#1f2937; --muted:#6b7280; --line:#d8dee9; --brand:#1d4ed8; --soft:#eaf1ff; --warn:#92400e; --warnbg:#fff7ed; --bad:#991b1b; --badbg:#fef2f2; --ok:#166534; --okbg:#f0fdf4; }
-    * { box-sizing: border-box; }
-    body { margin:0; background:var(--bg); color:var(--text); font-family: Arial, Helvetica, sans-serif; }
-    header { padding:22px 28px; background:#111827; color:white; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:Arial, Helvetica, sans-serif; }
+    header { padding:22px 28px; background:#111827; color:#fff; }
     header h1 { margin:0 0 6px; font-size:24px; }
     header p { margin:0; color:#d1d5db; }
-    nav { display:flex; flex-wrap:wrap; gap:8px; padding:14px 28px; background:white; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:3; }
-    button, .button { border:1px solid var(--line); border-radius:8px; background:white; color:var(--text); padding:9px 12px; cursor:pointer; font-size:14px; text-decoration:none; display:inline-block; }
-    button:hover, .button:hover { border-color:var(--brand); }
-    button.primary { background:var(--brand); color:white; border-color:var(--brand); }
-    button.danger { background:var(--bad); color:white; border-color:var(--bad); }
+    nav { display:flex; flex-wrap:wrap; gap:8px; padding:14px 28px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:3; }
+    button { border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--text); padding:9px 12px; cursor:pointer; font-size:14px; }
+    button:hover { border-color:var(--brand); }
+    button.primary { background:var(--brand); color:#fff; border-color:var(--brand); }
+    button.danger { background:var(--bad); color:#fff; border-color:var(--bad); }
     button.small { padding:5px 8px; font-size:12px; }
     button.active { background:var(--soft); border-color:var(--brand); color:var(--brand); }
     main { padding:24px 28px 40px; }
     section.view { display:none; }
     section.view.active { display:block; }
-    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:16px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; }
     .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.03); margin-bottom:16px; }
     .card h2, .card h3 { margin-top:0; }
     .muted { color:var(--muted); }
-    .dropzone { border:2px dashed #9ca3af; border-radius:14px; padding:32px; text-align:center; background:#fafafa; cursor:pointer; }
+    .dropzone { border:2px dashed #9ca3af; border-radius:14px; padding:28px; text-align:center; background:#fafafa; cursor:pointer; }
     .dropzone.drag { background:var(--soft); border-color:var(--brand); }
-    input, select, textarea { width:100%; border:1px solid var(--line); border-radius:7px; padding:8px; font:inherit; background:white; }
-    textarea { min-height:74px; }
+    input, select, textarea { width:100%; border:1px solid var(--line); border-radius:7px; padding:8px; font:inherit; background:#fff; }
+    textarea { min-height:120px; }
     label { display:block; margin:9px 0 5px; font-weight:bold; font-size:13px; }
-    table { width:100%; border-collapse:collapse; background:white; }
+    table { width:100%; border-collapse:collapse; background:#fff; }
     th, td { padding:9px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
     th { background:#f9fafb; font-size:13px; }
     tr.clickable { cursor:pointer; }
@@ -56,34 +56,35 @@
     .pill.neutral { background:#eef2f7; color:#374151; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .choice-box { border:1px solid var(--line); border-radius:8px; padding:10px; background:#fafafa; }
+    .choice-box { border:1px solid var(--line); border-radius:8px; padding:10px; background:#fafafa; margin-bottom:10px; }
     .profile { background:#fbfdff; }
     .notice { padding:10px 12px; border-radius:8px; margin:10px 0; }
     .notice.ok { background:var(--okbg); color:var(--ok); }
     .notice.warn { background:var(--warnbg); color:var(--warn); }
     .notice.bad { background:var(--badbg); color:var(--bad); }
     .hidden { display:none; }
-    .spacer { height:8px; }
     @media (max-width:700px){ main, nav, header { padding-left:14px; padding-right:14px; } .two-col { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
   <header>
     <h1>Volunteer Database Management Tool</h1>
-    <p>Single-file volunteer roster, attendance, deduplication, review, and export tool. Data stays in this browser unless exported.</p>
+    <p>Browser-local volunteer roster, attendance, deduplication, review, and export tool.</p>
   </header>
+
   <nav>
-    <button id="navUpload" class="active" data-view="uploadView">Upload</button>
-    <button id="navMerge" data-view="mergeView">Merge Review</button>
-    <button id="navDatabase" data-view="databaseView">Central Database</button>
-    <button id="navExport" data-view="exportView">Export</button>
-    <button id="navDuplicates" data-view="duplicatesView">Suspected Duplicates <span id="dupCount" class="pill neutral">0</span></button>
+    <button class="active" data-view="uploadView">Upload</button>
+    <button data-view="mergeView">Merge Review</button>
+    <button data-view="databaseView">Central Database</button>
+    <button data-view="exportView">Export</button>
+    <button data-view="duplicatesView">Suspected Duplicates <span id="dupCount" class="pill neutral">0</span></button>
   </nav>
+
   <main>
     <section id="uploadView" class="view active">
       <div class="card">
-        <h2>Upload Excel File</h2>
-        <p class="muted">Only the fixed templates are accepted. Select the file type, then drop or choose an .xlsx file.</p>
+        <h2>Import Data</h2>
+        <p class="muted">Choose the template type, then upload an Excel workbook or paste copied spreadsheet cells. Both methods require the exact standard headers in the exact order.</p>
         <div class="row">
           <div>
             <label for="fileType">Template type</label>
@@ -95,18 +96,35 @@
             <button id="downloadSampleAttendance">Download sample attendance</button>
           </div>
         </div>
-        <div id="dropzone" class="dropzone" tabindex="0">
-          <p><strong>Drop .xlsx here</strong> or click to select a file.</p>
-          <p class="muted">The import will be previewed and reviewed before anything is saved.</p>
-          <input id="fileInput" class="hidden" type="file" accept=".xlsx,.xls">
-        </div>
-        <div id="uploadStatus"></div>
       </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>Upload .xlsx</h3>
+          <div id="dropzone" class="dropzone" tabindex="0">
+            <p><strong>Drop .xlsx here</strong> or click to select a file.</p>
+            <p class="muted">The first row must be the exact template header row.</p>
+            <input id="fileInput" class="hidden" type="file" accept=".xlsx,.xls">
+          </div>
+        </div>
+        <div class="card">
+          <h3>Paste spreadsheet cells</h3>
+          <p class="muted">Copy the header row and data rows from Excel or Google Sheets, then paste below.</p>
+          <label for="pasteBox">Pasted cells</label>
+          <textarea id="pasteBox" placeholder="Paste the full table here, including the header row."></textarea>
+          <div class="row">
+            <button id="parsePaste" class="primary">Preview pasted cells</button>
+            <button id="clearPaste">Clear paste box</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="uploadStatus"></div>
       <div id="previewCard" class="card hidden">
         <h3>Detected rows preview</h3>
         <div id="previewMeta"></div>
         <div id="previewTable" class="table-wrap"></div>
-        <div class="spacer"></div>
+        <p class="muted">Invalid rows are shown but will not be imported.</p>
         <button id="prepareImport" class="primary">Prepare Merge Review</button>
       </div>
     </section>
@@ -132,9 +150,7 @@
           <div><label for="activityFilter">Activity filter</label><select id="activityFilter"><option value="">All volunteers</option><option value="active">Has attendance</option><option value="inactive">No attendance</option></select></div>
         </div>
       </div>
-      <div class="card">
-        <div id="databaseTable" class="table-wrap"></div>
-      </div>
+      <div class="card"><div id="databaseTable" class="table-wrap"></div></div>
     </section>
 
     <section id="exportView" class="view">
@@ -155,8 +171,8 @@
 <script>
 /* ========================= VOLUNTEER DATA SCHEMA =========================
    Add new volunteer fields here first. Each field has a key, label, and type.
-   Then update the roster template headers and export logic if the field should
-   be imported or exported from Excel.
+   Then update the roster template headers, mapRosterRow, and exportDatabaseXlsx
+   when the new field should be imported or exported.
 */
 const VOLUNTEER_SCHEMA = [
   { key:'name', label:'Name', type:'text' },
@@ -183,10 +199,10 @@ let uploadedType = 'roster';
 let pendingImport = null;
 let expandedVolunteerId = null;
 
-// Starts the application after the page is ready.
+// Starts the application after the document has loaded.
 document.addEventListener('DOMContentLoaded', startApp);
 
-// Loads saved data, wires events, and renders the initial screen.
+// Loads saved data, connects controls, and renders the app.
 function startApp() {
   loadData();
   wireNavigation();
@@ -197,7 +213,7 @@ function startApp() {
   renderAll();
 }
 
-// Reads the saved database from localStorage and falls back to an empty database.
+// Reads saved application data from browser localStorage.
 function loadData() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return;
@@ -207,97 +223,86 @@ function loadData() {
     appData.suspectedDuplicates = Array.isArray(parsed.suspectedDuplicates) ? parsed.suspectedDuplicates : [];
     appData.mergeLog = Array.isArray(parsed.mergeLog) ? parsed.mergeLog : [];
   } catch (error) {
-    showNotice('uploadStatus', 'bad', 'Saved browser data could not be read. A blank database is being used.');
+    appData = { volunteers: [], suspectedDuplicates: [], mergeLog: [] };
   }
 }
 
-// Saves the full application database into localStorage.
+// Saves the complete application database to browser localStorage.
 function saveData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
 }
 
-// Creates a stable local identifier for volunteers, attendance rows, and log rows.
+// Creates a unique local identifier for records.
 function makeId(prefix) {
   return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
 }
 
-// Connects the navigation buttons to the five views.
+// Connects navigation buttons to their matching views.
 function wireNavigation() {
-  const buttons = document.querySelectorAll('nav button[data-view]');
-  buttons.forEach(function attachNavButton(button) {
-    button.addEventListener('click', function handleNavClick() { showView(button.dataset.view); });
+  document.querySelectorAll('nav button[data-view]').forEach(function attachNav(button) {
+    button.addEventListener('click', function handleClick() { showView(button.dataset.view); });
   });
 }
 
-// Shows one application view and hides the others.
+// Shows one view and hides all other views.
 function showView(viewId) {
-  document.querySelectorAll('section.view').forEach(function hideView(section) { section.classList.remove('active'); });
-  document.querySelectorAll('nav button[data-view]').forEach(function unmarkNav(button) { button.classList.remove('active'); });
+  document.querySelectorAll('section.view').forEach(function hide(section) { section.classList.remove('active'); });
+  document.querySelectorAll('nav button[data-view]').forEach(function clear(button) { button.classList.remove('active'); });
   document.getElementById(viewId).classList.add('active');
-  const activeButton = document.querySelector('nav button[data-view="' + viewId + '"]');
-  if (activeButton) activeButton.classList.add('active');
+  document.querySelector('nav button[data-view="' + viewId + '"]').classList.add('active');
   renderAll();
 }
 
-// Connects upload, drag-drop, sample template, and import preparation controls.
+// Connects Excel upload, pasted-cell import, and sample-template controls.
 function wireUploadControls() {
   const dropzone = document.getElementById('dropzone');
-  const fileInput = document.getElementById('fileInput');
-  document.getElementById('fileType').addEventListener('change', handleFileTypeChange);
-  dropzone.addEventListener('click', openFilePicker);
+  document.getElementById('fileType').addEventListener('change', function setType(event) { uploadedType = event.target.value; });
+  dropzone.addEventListener('click', function openPicker() { document.getElementById('fileInput').click(); });
   dropzone.addEventListener('keydown', handleDropzoneKeydown);
   dropzone.addEventListener('dragover', handleDragOver);
   dropzone.addEventListener('dragleave', handleDragLeave);
   dropzone.addEventListener('drop', handleDrop);
-  fileInput.addEventListener('change', handleFileInputChange);
+  document.getElementById('fileInput').addEventListener('change', handleFileInputChange);
+  document.getElementById('parsePaste').addEventListener('click', handlePastePreview);
+  document.getElementById('clearPaste').addEventListener('click', clearPasteBox);
   document.getElementById('prepareImport').addEventListener('click', prepareMergeReview);
   document.getElementById('downloadSampleRoster').addEventListener('click', downloadSampleRoster);
   document.getElementById('downloadSampleAttendance').addEventListener('click', downloadSampleAttendance);
 }
 
-// Stores the selected upload template type.
-function handleFileTypeChange(event) {
-  uploadedType = event.target.value;
-}
-
-// Opens the hidden file input when the dropzone is clicked.
-function openFilePicker() {
-  document.getElementById('fileInput').click();
-}
-
-// Opens the file picker when Enter or Space is pressed on the dropzone.
+// Opens the file picker when the upload area receives Enter or Space.
 function handleDropzoneKeydown(event) {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
-    openFilePicker();
+    document.getElementById('fileInput').click();
   }
 }
 
-// Visually marks the dropzone while a file is dragged over it.
+// Shows the drag-over state for the upload dropzone.
 function handleDragOver(event) {
   event.preventDefault();
   document.getElementById('dropzone').classList.add('drag');
 }
 
-// Removes the drag visual state from the dropzone.
+// Removes the drag-over state from the upload dropzone.
 function handleDragLeave() {
   document.getElementById('dropzone').classList.remove('drag');
 }
 
-// Reads the dropped Excel file.
+// Reads a dropped Excel file.
 function handleDrop(event) {
   event.preventDefault();
   document.getElementById('dropzone').classList.remove('drag');
   if (event.dataTransfer.files.length) readExcelFile(event.dataTransfer.files[0]);
 }
 
-// Reads the selected Excel file from the hidden file input.
+// Reads an Excel file selected through the file picker.
 function handleFileInputChange(event) {
   if (event.target.files.length) readExcelFile(event.target.files[0]);
   event.target.value = '';
 }
 
-// Reads an uploaded workbook through SheetJS and validates the fixed template structure.
+// Reads an Excel workbook and sends its first worksheet rows to strict validation.
 function readExcelFile(file) {
   uploadedType = document.getElementById('fileType').value;
   if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
@@ -312,18 +317,42 @@ function readExcelFile(file) {
       const rows = XLSX.utils.sheet_to_json(firstSheet, { header:1, defval:'' });
       validateAndPreviewRows(rows);
     } catch (error) {
-      showNotice('uploadStatus', 'bad', 'The workbook could not be read. Check that the file is a valid Excel file.');
+      showNotice('uploadStatus', 'bad', 'The workbook could not be read as an Excel file.');
     }
   };
   reader.readAsArrayBuffer(file);
 }
 
-// Checks template headers and prepares row objects for preview.
+// Parses pasted spreadsheet cells as tab-separated rows and sends them to strict validation.
+function handlePastePreview() {
+  uploadedType = document.getElementById('fileType').value;
+  const pastedText = document.getElementById('pasteBox').value;
+  if (!pastedText.trim()) {
+    showNotice('uploadStatus', 'bad', 'Paste cells including the header row before previewing.');
+    return;
+  }
+  const rows = parsePastedCells(pastedText);
+  validateAndPreviewRows(rows);
+}
+
+// Converts copied spreadsheet text into a two-dimensional array using tabs as the only column separator.
+function parsePastedCells(text) {
+  const clean = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return clean.split('\n').filter(function keepLine(line) { return line.trim() !== ''; }).map(function splitLine(line) { return line.split('\t'); });
+}
+
+// Clears the pasted-cell textarea and status area.
+function clearPasteBox() {
+  document.getElementById('pasteBox').value = '';
+  document.getElementById('uploadStatus').innerHTML = '';
+}
+
+// Validates exact headers and prepares valid and invalid rows for preview.
 function validateAndPreviewRows(rows) {
   const expected = uploadedType === 'roster' ? ROSTER_HEADERS : ATTENDANCE_HEADERS;
   if (!rows.length || !headersMatch(rows[0], expected)) {
-    showNotice('uploadStatus', 'bad', 'Template rejected. Expected columns in this exact order: ' + expected.join(', '));
     document.getElementById('previewCard').classList.add('hidden');
+    showNotice('uploadStatus', 'bad', 'Template rejected. Expected columns in this exact order: ' + expected.join(', '));
     return;
   }
   uploadedRows = [];
@@ -337,37 +366,36 @@ function validateAndPreviewRows(rows) {
   renderPreview();
 }
 
-// Compares an uploaded header row against the required template headers.
+// Checks that the uploaded or pasted header row exactly matches the selected template.
 function headersMatch(actual, expected) {
-  if (!actual || actual.length < expected.length) return false;
+  if (!actual || actual.length !== expected.length) return false;
   for (let i = 0; i < expected.length; i++) {
     if (String(actual[i] || '').trim() !== expected[i]) return false;
   }
   return true;
 }
 
-// Checks whether an uploaded spreadsheet row is empty.
+// Checks whether every cell in a row is blank.
 function isBlankRow(row) {
-  if (!row) return true;
-  return row.every(function isBlankCell(cell) { return String(cell || '').trim() === ''; });
+  return !row || row.every(function isBlankCell(cell) { return String(cell || '').trim() === ''; });
 }
 
-// Converts one roster spreadsheet row into the internal volunteer format.
+// Converts one roster row to the internal import shape.
 function mapRosterRow(row, rowNumber) {
   return { rowNumber:rowNumber, name:cleanText(row[0]), phone:cleanText(row[1]), email:cleanText(row[2]), emergencyName:cleanText(row[3]), emergencyPhone:cleanText(row[4]), shirtSize:cleanText(row[5]), dietary:cleanText(row[6]), notes:cleanText(row[7]), attendance:[] };
 }
 
-// Converts one attendance spreadsheet row into the internal attendance import format.
+// Converts one attendance row to the internal import shape.
 function mapAttendanceRow(row, rowNumber) {
   return { rowNumber:rowNumber, name:cleanText(row[0]), phone:cleanText(row[1]), email:cleanText(row[2]), eventName:cleanText(row[3]), date:formatExcelDate(row[4]), hours:Number(row[5]) || 0, role:cleanText(row[6]) };
 }
 
-// Trims ordinary text while preserving blank values as empty strings.
+// Trims a value and returns a string.
 function cleanText(value) {
   return String(value == null ? '' : value).trim();
 }
 
-// Converts Excel dates or text dates into a yyyy-mm-dd style value when possible.
+// Formats Excel date objects, Excel serial dates, or text dates for display and storage.
 function formatExcelDate(value) {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   if (typeof value === 'number') {
@@ -377,26 +405,26 @@ function formatExcelDate(value) {
   return cleanText(value);
 }
 
-// Checks whether an import row has name and at least one contact field.
+// Checks whether an import row has name and at least one contact method.
 function hasCriticalFields(row) {
   return cleanText(row.name) !== '' && (cleanText(row.phone) !== '' || cleanText(row.email) !== '');
 }
 
-// Renders the upload preview table and row validation status.
+// Shows the preview table and row validation summary.
 function renderPreview() {
   const invalidCount = uploadedRows.filter(function countInvalid(row) { return !row.valid; }).length;
-  document.getElementById('previewCard').classList.remove('hidden');
-  document.getElementById('previewMeta').innerHTML = '<p><span class="pill neutral">' + uploadedRows.length + ' rows</span> <span class="pill ' + (invalidCount ? 'bad' : 'ok') + '">' + invalidCount + ' invalid rows</span></p>';
   const headers = uploadedType === 'roster' ? ['Row','Status'].concat(ROSTER_HEADERS) : ['Row','Status'].concat(ATTENDANCE_HEADERS);
   const rows = uploadedRows.map(function previewRow(row) {
     if (uploadedType === 'roster') return [row.rowNumber, row.valid ? 'Ready' : row.issue, row.name, row.phone, row.email, row.emergencyName, row.emergencyPhone, row.shirtSize, row.dietary, row.notes];
     return [row.rowNumber, row.valid ? 'Ready' : row.issue, row.name, row.phone, row.email, row.eventName, row.date, row.hours, row.role];
   });
+  document.getElementById('previewCard').classList.remove('hidden');
+  document.getElementById('previewMeta').innerHTML = '<p><span class="pill neutral">' + uploadedRows.length + ' rows</span> <span class="pill ' + (invalidCount ? 'bad' : 'ok') + '">' + invalidCount + ' invalid rows</span></p>';
   document.getElementById('previewTable').innerHTML = makeTable(headers, rows);
   showNotice('uploadStatus', invalidCount ? 'warn' : 'ok', invalidCount ? 'Preview created. Invalid rows are flagged and will not be imported.' : 'Preview created. All rows have required critical fields.');
 }
 
-// Builds the pending import buckets without writing to the main database.
+// Builds the staged merge review from valid preview rows.
 function prepareMergeReview() {
   const validRows = uploadedRows.filter(function keepValid(row) { return row.valid; });
   if (!validRows.length) {
@@ -404,11 +432,11 @@ function prepareMergeReview() {
     return;
   }
   pendingImport = { type:uploadedType, clean:[], conflicts:[], suspects:[], autoMergeLog:[] };
-  for (let i = 0; i < validRows.length; i++) processImportRow(validRows[i]);
+  validRows.forEach(function processRow(row) { processImportRow(row); });
   showView('mergeView');
 }
 
-// Routes an import row into clean additions, conflicts, auto-merges, or suspected duplicates.
+// Places one import row into clean, conflict, or suspected-duplicate buckets.
 function processImportRow(row) {
   const highMatch = findHighConfidenceMatch(row);
   if (highMatch) {
@@ -431,7 +459,7 @@ function processImportRow(row) {
   pendingImport.clean.push({ action:'add', incoming:row, reason:'New record with no match.' });
 }
 
-// Finds a high-confidence volunteer match using name+phone or name+email.
+// Finds a high-confidence match by name+phone or name+email.
 function findHighConfidenceMatch(row) {
   const incomingName = normalizeName(row.name);
   const incomingPhone = normalizePhone(row.phone);
@@ -445,7 +473,7 @@ function findHighConfidenceMatch(row) {
   return null;
 }
 
-// Finds a medium-confidence volunteer match using phone+email where the name differs.
+// Finds a medium-confidence match by phone+email with a different normalised name.
 function findMediumConfidenceMatch(row) {
   const incomingName = normalizeName(row.name);
   const incomingPhone = normalizePhone(row.phone);
@@ -453,45 +481,44 @@ function findMediumConfidenceMatch(row) {
   if (!incomingPhone || !incomingEmail) return null;
   for (let i = 0; i < appData.volunteers.length; i++) {
     const volunteer = appData.volunteers[i];
-    const sameContact = normalizePhone(volunteer.phone) === incomingPhone && normalizeEmail(volunteer.email) === incomingEmail;
-    const differentName = normalizeName(volunteer.name) !== incomingName;
-    if (sameContact && differentName) return volunteer;
+    if (normalizePhone(volunteer.phone) === incomingPhone && normalizeEmail(volunteer.email) === incomingEmail && normalizeName(volunteer.name) !== incomingName) return volunteer;
   }
   return null;
 }
 
-// Finds low-confidence fuzzy name-only matches through Fuse.js.
+// Finds low-confidence fuzzy name-only matches with Fuse.js.
 function findFuzzyNameMatches(row) {
   if (!row.name || !appData.volunteers.length) return [];
   const incomingPhone = normalizePhone(row.phone);
   const incomingEmail = normalizeEmail(row.email);
-  const candidates = appData.volunteers.filter(function onlyNameCandidates(volunteer) {
+  const candidates = appData.volunteers.filter(function keepCandidate(volunteer) {
     const phoneMatches = incomingPhone && normalizePhone(volunteer.phone) === incomingPhone;
     const emailMatches = incomingEmail && normalizeEmail(volunteer.email) === incomingEmail;
     return !phoneMatches && !emailMatches;
+  }).map(function addSearchName(volunteer) {
+    volunteer.normalizedName = normalizeName(volunteer.name);
+    return volunteer;
   });
   const fuse = new Fuse(candidates, { keys:['normalizedName'], threshold:0.28, includeScore:true });
-  candidates.forEach(function attachNormalizedName(volunteer) { volunteer.normalizedName = normalizeName(volunteer.name); });
   return fuse.search(normalizeName(row.name)).slice(0, 3);
 }
 
-// Finds differing field values between an existing record and incoming import row.
+// Detects differing non-blank fields for high-confidence matches.
 function findFieldConflicts(existing, incoming, type) {
   const fields = type === 'roster' ? ['name','phone','email','emergencyName','emergencyPhone','shirtSize','dietary','notes'] : ['name','phone','email'];
   const result = { fields:[], resolvedValues:{} };
-  for (let i = 0; i < fields.length; i++) {
-    const key = fields[i];
+  fields.forEach(function checkField(key) {
     const existingValue = cleanText(existing[key]);
     const incomingValue = cleanText(incoming[key]);
     if (existingValue && incomingValue && existingValue !== incomingValue) {
       result.fields.push({ key:key, label:getVolunteerLabel(key), existing:existingValue, incoming:incomingValue });
       result.resolvedValues[key] = existingValue;
     }
-  }
+  });
   return result;
 }
 
-// Normalises a name by stripping titles, lowercasing, and handling comma-flipped names.
+// Normalises names by removing common titles, lowercasing, and handling comma-flipped names.
 function normalizeName(name) {
   let text = cleanText(name).toLowerCase();
   text = text.replace(/\b(mr|mrs|ms|dr)\.?\s+/g, '');
@@ -502,7 +529,7 @@ function normalizeName(name) {
   return text.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-// Normalises Singapore-style phone numbers by removing spaces, dashes, and +65 or 65 prefixes.
+// Normalises phone numbers by stripping spaces, dashes, brackets, and Singapore country prefixes.
 function normalizePhone(phone) {
   let text = cleanText(phone).replace(/[\s\-()]/g, '');
   if (text.indexOf('+65') === 0) text = text.slice(3);
@@ -510,27 +537,27 @@ function normalizePhone(phone) {
   return text;
 }
 
-// Normalises email addresses by lowercasing and trimming them.
+// Normalises email addresses by trimming and lowercasing.
 function normalizeEmail(email) {
   return cleanText(email).toLowerCase();
 }
 
-// Connects buttons on the merge review screen.
+// Connects merge-review action buttons.
 function wireMergeControls() {
   document.getElementById('confirmImport').addEventListener('click', confirmImport);
   document.getElementById('discardImport').addEventListener('click', discardImport);
 }
 
-// Clears the pending import without changing the saved database.
+// Discards the staged import without changing saved data.
 function discardImport() {
   pendingImport = null;
   renderMergeReview();
 }
 
-// Renders all pending import buckets for user review.
+// Renders all merge-review buckets.
 function renderMergeReview() {
   if (!pendingImport) {
-    document.getElementById('mergeSummary').innerHTML = '<div class="notice warn">No pending import. Upload a file first.</div>';
+    document.getElementById('mergeSummary').innerHTML = '<div class="notice warn">No pending import. Upload or paste data first.</div>';
     document.getElementById('cleanBucket').innerHTML = '<h3>Clean additions</h3><p class="muted">No pending rows.</p>';
     document.getElementById('conflictBucket').innerHTML = '<h3>Conflicts</h3><p class="muted">No pending conflicts.</p>';
     document.getElementById('suspectBucket').innerHTML = '<h3>Suspected duplicates</h3><p class="muted">No pending suspected duplicates.</p>';
@@ -542,93 +569,90 @@ function renderMergeReview() {
   renderSuspectBucket();
 }
 
-// Renders clean additions and clean auto-merge rows.
+// Renders rows that can be added or merged without conflict choices.
 function renderCleanBucket() {
-  const rows = pendingImport.clean.map(function cleanRow(item) { return [item.action, item.incoming.name, item.incoming.phone, item.incoming.email, item.reason]; });
-  document.getElementById('cleanBucket').innerHTML = '<h3>✅ Clean additions</h3>' + (rows.length ? makeTable(['Action','Name','Phone','Email','Reason'], rows) : '<p class="muted">None.</p>');
+  const rows = pendingImport.clean.map(function row(item) { return [item.action, item.incoming.name, item.incoming.phone, item.incoming.email, item.reason]; });
+  document.getElementById('cleanBucket').innerHTML = '<h3>Clean additions</h3>' + (rows.length ? makeTable(['Action','Name','Phone','Email','Reason'], rows) : '<p class="muted">None.</p>');
 }
 
-// Renders field conflicts with side-by-side choices and correction boxes.
+// Renders side-by-side conflict controls for user choice or typed correction.
 function renderConflictBucket() {
-  let html = '<h3>⚠️ Conflicts</h3>';
+  let html = '<h3>Conflicts</h3>';
   if (!pendingImport.conflicts.length) {
     document.getElementById('conflictBucket').innerHTML = html + '<p class="muted">None.</p>';
     return;
   }
-  for (let i = 0; i < pendingImport.conflicts.length; i++) {
-    const conflict = pendingImport.conflicts[i];
+  pendingImport.conflicts.forEach(function renderConflict(conflict) {
     const existing = getVolunteer(conflict.existingId);
     html += '<div class="choice-box"><h4>' + escapeHtml(existing.name) + ' vs ' + escapeHtml(conflict.incoming.name) + '</h4>';
-    for (let j = 0; j < conflict.fields.length; j++) {
-      const field = conflict.fields[j];
+    conflict.fields.forEach(function renderField(field) {
       html += '<label>' + escapeHtml(field.label) + '</label><div class="two-col"><button class="small" onclick="chooseConflictValue(\'' + conflict.id + '\',\'' + field.key + '\',\'existing\')">Use existing: ' + escapeHtml(field.existing) + '</button><button class="small" onclick="chooseConflictValue(\'' + conflict.id + '\',\'' + field.key + '\',\'incoming\')">Use incoming: ' + escapeHtml(field.incoming) + '</button></div><input value="' + escapeHtml(conflict.resolvedValues[field.key] || '') + '" oninput="typeConflictValue(\'' + conflict.id + '\',\'' + field.key + '\', this.value)">';
-    }
+    });
     html += '</div>';
-  }
+  });
   document.getElementById('conflictBucket').innerHTML = html;
 }
 
-// Selects an existing or incoming value for a conflict field.
+// Stores an existing or incoming value as the resolved conflict value.
 function chooseConflictValue(conflictId, fieldKey, source) {
-  const conflict = pendingImport.conflicts.find(function matchConflict(item) { return item.id === conflictId; });
+  const conflict = pendingImport.conflicts.find(function match(item) { return item.id === conflictId; });
   if (!conflict) return;
   const field = conflict.fields.find(function matchField(item) { return item.key === fieldKey; });
   conflict.resolvedValues[fieldKey] = source === 'existing' ? field.existing : field.incoming;
   renderConflictBucket();
 }
 
-// Stores a typed correction for a conflict field.
+// Stores a typed value as the resolved conflict value.
 function typeConflictValue(conflictId, fieldKey, value) {
-  const conflict = pendingImport.conflicts.find(function matchConflict(item) { return item.id === conflictId; });
+  const conflict = pendingImport.conflicts.find(function match(item) { return item.id === conflictId; });
   if (conflict) conflict.resolvedValues[fieldKey] = value;
 }
 
-// Renders suspected duplicates that must be explicitly actioned by the user.
+// Renders suspected duplicates from the staged import.
 function renderSuspectBucket() {
-  let html = '<h3>🔍 Suspected duplicates</h3>';
+  let html = '<h3>Suspected duplicates</h3>';
   if (!pendingImport.suspects.length) {
     document.getElementById('suspectBucket').innerHTML = html + '<p class="muted">None.</p>';
     return;
   }
-  for (let i = 0; i < pendingImport.suspects.length; i++) html += renderSuspectCard(pendingImport.suspects[i], 'pending');
+  pendingImport.suspects.forEach(function render(suspect) { html += renderSuspectCard(suspect, 'pending'); });
   document.getElementById('suspectBucket').innerHTML = html;
 }
 
-// Creates one suspected duplicate card for either pending import or persistent queue display.
+// Renders one suspected duplicate action card.
 function renderSuspectCard(suspect, context) {
   const existing = getVolunteer(suspect.existingId);
-  const prefix = context === 'queue' ? 'queue' : 'pending';
   let html = '<div class="choice-box"><p><span class="pill ' + (suspect.level === 'medium' ? 'warn' : 'neutral') + '">' + escapeHtml(suspect.level) + '</span> ' + escapeHtml(suspect.reason) + '</p>';
   html += '<div class="two-col"><div><h4>Existing</h4>' + renderMiniProfile(existing) + '</div><div><h4>Incoming</h4>' + renderMiniProfile(suspect.incoming) + '</div></div>';
   html += '<p><strong>Decision:</strong> ' + escapeHtml(suspect.decision || 'pending') + '</p>';
-  html += '<button class="small" onclick="setSuspectDecision(\'' + suspect.id + '\',\'' + prefix + '\',\'merge\')">Confirm merge</button> ';
-  html += '<button class="small" onclick="setSuspectDecision(\'' + suspect.id + '\',\'' + prefix + '\',\'separate\')">Keep separate</button> ';
-  html += '<button class="small" onclick="setSuspectDecision(\'' + suspect.id + '\',\'' + prefix + '\',\'skip\')">Skip for now</button></div>';
+  html += '<button class="small" onclick="setSuspectDecision(\'' + suspect.id + '\',\'' + context + '\',\'merge\')">Confirm merge</button> ';
+  html += '<button class="small" onclick="setSuspectDecision(\'' + suspect.id + '\',\'' + context + '\',\'separate\')">Keep separate</button> ';
+  html += '<button class="small" onclick="setSuspectDecision(\'' + suspect.id + '\',\'' + context + '\',\'skip\')">Skip for now</button></div>';
   return html;
 }
 
-// Renders a compact volunteer-like profile summary.
+// Renders a compact profile block for duplicate comparison.
 function renderMiniProfile(person) {
   if (!person) return '<p class="muted">Missing record</p>';
   return '<p>Name: ' + escapeHtml(person.name) + '<br>Phone: ' + escapeHtml(person.phone) + '<br>Email: ' + escapeHtml(person.email) + '</p>';
 }
 
-// Sets the user's decision for a suspected duplicate.
+// Sets the decision for a staged or queued suspected duplicate.
 function setSuspectDecision(id, context, decision) {
   const list = context === 'queue' ? appData.suspectedDuplicates : pendingImport.suspects;
-  const suspect = list.find(function matchSuspect(item) { return item.id === id; });
+  const suspect = list.find(function match(item) { return item.id === id; });
   if (!suspect) return;
   suspect.decision = decision;
   if (context === 'queue' && decision !== 'skip') resolveQueuedSuspect(suspect);
   renderAll();
 }
 
-// Commits all approved pending import rows to the saved database.
+// Commits the staged import into the saved database.
 function confirmImport() {
   if (!pendingImport) return;
-  for (let i = 0; i < pendingImport.clean.length; i++) commitCleanItem(pendingImport.clean[i]);
-  for (let j = 0; j < pendingImport.conflicts.length; j++) commitConflictItem(pendingImport.conflicts[j]);
-  for (let k = 0; k < pendingImport.suspects.length; k++) commitSuspectItem(pendingImport.suspects[k]);
+  pendingImport.clean.forEach(function commit(item) { commitCleanItem(item); });
+  pendingImport.conflicts.forEach(function commit(conflict) { commitConflictItem(conflict); });
+  pendingImport.suspects.forEach(function commit(suspect) { commitSuspectItem(suspect); });
   appData.mergeLog = appData.mergeLog.concat(pendingImport.autoMergeLog);
   appData.mergeLog.push({ date:new Date().toISOString(), level:'info', action:'import confirmed', existingName:'', incomingName:'', reason:'Confirmed ' + pendingImport.type + ' import.' });
   pendingImport = null;
@@ -636,128 +660,117 @@ function confirmImport() {
   showView('databaseView');
 }
 
-// Commits one clean add or high-confidence merge item.
+// Commits one clean add or clean merge row.
 function commitCleanItem(item) {
-  if (item.action === 'add') addNewVolunteerFromRow(item.incoming);
+  if (item.action === 'add') addNewVolunteerFromRow(item.incoming, pendingImport.type);
   else mergeRowIntoVolunteer(getVolunteer(item.existingId), item.incoming, pendingImport.type);
 }
 
-// Commits one resolved field conflict item.
+// Commits one resolved conflict row.
 function commitConflictItem(conflict) {
   const volunteer = getVolunteer(conflict.existingId);
   if (!volunteer) return;
   mergeRowIntoVolunteer(volunteer, conflict.incoming, pendingImport.type);
-  Object.keys(conflict.resolvedValues).forEach(function applyResolvedValue(key) { volunteer[key] = conflict.resolvedValues[key]; });
+  Object.keys(conflict.resolvedValues).forEach(function applyValue(key) { volunteer[key] = conflict.resolvedValues[key]; });
   appData.mergeLog.push({ date:new Date().toISOString(), level:'conflict', action:'resolved conflict', existingName:volunteer.name, incomingName:conflict.incoming.name, reason:'User resolved differing field values.' });
 }
 
-// Commits one suspected duplicate according to the selected decision.
+// Commits or queues one suspected duplicate according to the user decision.
 function commitSuspectItem(suspect) {
+  const existing = getVolunteer(suspect.existingId);
   if (suspect.decision === 'merge') {
-    mergeRowIntoVolunteer(getVolunteer(suspect.existingId), suspect.incoming, pendingImport.type);
-    appData.mergeLog.push({ date:new Date().toISOString(), level:suspect.level, action:'suspect merged', existingName:getVolunteer(suspect.existingId).name, incomingName:suspect.incoming.name, reason:suspect.reason });
+    mergeRowIntoVolunteer(existing, suspect.incoming, pendingImport.type);
+    appData.mergeLog.push({ date:new Date().toISOString(), level:suspect.level, action:'suspect merged', existingName:existing ? existing.name : '', incomingName:suspect.incoming.name, reason:suspect.reason });
   } else if (suspect.decision === 'separate') {
-    addNewVolunteerFromRow(suspect.incoming);
-    appData.mergeLog.push({ date:new Date().toISOString(), level:suspect.level, action:'kept separate', existingName:getVolunteer(suspect.existingId).name, incomingName:suspect.incoming.name, reason:suspect.reason });
+    addNewVolunteerFromRow(suspect.incoming, pendingImport.type);
+    appData.mergeLog.push({ date:new Date().toISOString(), level:suspect.level, action:'kept separate', existingName:existing ? existing.name : '', incomingName:suspect.incoming.name, reason:suspect.reason });
   } else {
     appData.suspectedDuplicates.push(suspect);
   }
 }
 
-// Adds a new volunteer and any attendance row from an import row.
-function addNewVolunteerFromRow(row) {
+// Adds a new volunteer from an imported row.
+function addNewVolunteerFromRow(row, type) {
   const volunteer = { id:makeId('vol'), name:row.name, phone:row.phone, email:row.email, emergencyName:row.emergencyName || '', emergencyPhone:row.emergencyPhone || '', shirtSize:row.shirtSize || '', dietary:row.dietary || '', notes:row.notes || '', attendance:[] };
-  if (pendingImport && pendingImport.type === 'attendance') volunteer.attendance.push(makeAttendanceFromRow(row));
+  if (type === 'attendance') volunteer.attendance.push(makeAttendanceFromRow(row));
   appData.volunteers.push(volunteer);
 }
 
-// Merges an import row into an existing volunteer and adds attendance when needed.
+// Merges imported row data into an existing volunteer.
 function mergeRowIntoVolunteer(volunteer, row, type) {
   if (!volunteer) return;
-  if (type === 'roster') {
-    VOLUNTEER_SCHEMA.forEach(function fillBlankField(field) { if (!volunteer[field.key] && row[field.key]) volunteer[field.key] = row[field.key]; });
-  }
+  if (type === 'roster') VOLUNTEER_SCHEMA.forEach(function fill(field) { if (!volunteer[field.key] && row[field.key]) volunteer[field.key] = row[field.key]; });
   if (type === 'attendance') volunteer.attendance.push(makeAttendanceFromRow(row));
 }
 
-// Converts an attendance import row to a saved attendance record.
+// Creates one saved attendance record from an imported attendance row.
 function makeAttendanceFromRow(row) {
   return { id:makeId('att'), eventName:row.eventName || '', date:row.date || '', hours:Number(row.hours) || 0, role:row.role || '' };
 }
 
 // Resolves a suspected duplicate from the persistent queue.
 function resolveQueuedSuspect(suspect) {
-  if (suspect.decision === 'merge') mergeRowIntoVolunteer(getVolunteer(suspect.existingId), suspect.incoming, suspect.incoming.eventName ? 'attendance' : 'roster');
-  if (suspect.decision === 'separate') addNewVolunteerFromQueuedRow(suspect.incoming);
-  appData.suspectedDuplicates = appData.suspectedDuplicates.filter(function keepOther(item) { return item.id !== suspect.id; });
-  appData.mergeLog.push({ date:new Date().toISOString(), level:suspect.level, action:'queue resolved: ' + suspect.decision, existingName:getVolunteer(suspect.existingId) ? getVolunteer(suspect.existingId).name : '', incomingName:suspect.incoming.name, reason:suspect.reason });
+  const type = suspect.incoming.eventName ? 'attendance' : 'roster';
+  const existing = getVolunteer(suspect.existingId);
+  if (suspect.decision === 'merge') mergeRowIntoVolunteer(existing, suspect.incoming, type);
+  if (suspect.decision === 'separate') addNewVolunteerFromRow(suspect.incoming, type);
+  appData.suspectedDuplicates = appData.suspectedDuplicates.filter(function keep(item) { return item.id !== suspect.id; });
+  appData.mergeLog.push({ date:new Date().toISOString(), level:suspect.level, action:'queue resolved: ' + suspect.decision, existingName:existing ? existing.name : '', incomingName:suspect.incoming.name, reason:suspect.reason });
   saveData();
 }
 
-// Adds a separate volunteer from a queued suspected duplicate row.
-function addNewVolunteerFromQueuedRow(row) {
-  const previousPending = pendingImport;
-  pendingImport = { type: row.eventName ? 'attendance' : 'roster' };
-  addNewVolunteerFromRow(row);
-  pendingImport = previousPending;
-}
-
-// Connects search and filter controls for the central database.
+// Connects central database search and filter controls.
 function wireDatabaseControls() {
   document.getElementById('searchBox').addEventListener('input', renderDatabase);
   document.getElementById('shirtFilter').addEventListener('change', renderDatabase);
   document.getElementById('activityFilter').addEventListener('change', renderDatabase);
 }
 
-// Renders the central volunteer database table and expanded profile rows.
+// Renders the searchable and expandable volunteer table.
 function renderDatabase() {
   populateShirtFilter();
   const rows = getFilteredVolunteers();
   let html = '<table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>T-Shirt</th><th>Dietary</th><th>Total Hours</th><th>Last Active</th></tr></thead><tbody>';
-  for (let i = 0; i < rows.length; i++) {
-    const volunteer = rows[i];
+  rows.forEach(function renderVolunteer(volunteer) {
     html += '<tr class="clickable" onclick="toggleProfile(\'' + volunteer.id + '\')"><td>' + escapeHtml(volunteer.name) + '</td><td>' + escapeHtml(volunteer.phone) + '</td><td>' + escapeHtml(volunteer.email) + '</td><td>' + escapeHtml(volunteer.shirtSize) + '</td><td>' + escapeHtml(volunteer.dietary) + '</td><td>' + getTotalHours(volunteer) + '</td><td>' + escapeHtml(getLastActive(volunteer)) + '</td></tr>';
     if (expandedVolunteerId === volunteer.id) html += '<tr><td colspan="7" class="profile">' + renderFullProfile(volunteer) + '</td></tr>';
-  }
+  });
   html += '</tbody></table>';
   document.getElementById('databaseTable').innerHTML = rows.length ? html : '<p class="muted">No volunteers match the current filters.</p>';
 }
 
-// Returns volunteers that match the current search and filter controls.
+// Returns volunteers matching the current search and filter values.
 function getFilteredVolunteers() {
   const query = document.getElementById('searchBox').value.toLowerCase().trim();
   const shirt = document.getElementById('shirtFilter').value;
   const activity = document.getElementById('activityFilter').value;
-  return appData.volunteers.filter(function filterVolunteer(volunteer) {
-    const text = [volunteer.name, volunteer.phone, volunteer.email, volunteer.notes, volunteer.dietary].join(' ').toLowerCase();
-    const matchesQuery = !query || text.indexOf(query) > -1;
-    const matchesShirt = !shirt || volunteer.shirtSize === shirt;
+  return appData.volunteers.filter(function keep(volunteer) {
+    const searchText = [volunteer.name, volunteer.phone, volunteer.email, volunteer.notes, volunteer.dietary].join(' ').toLowerCase();
     const hasAttendance = volunteer.attendance && volunteer.attendance.length > 0;
-    const matchesActivity = !activity || (activity === 'active' && hasAttendance) || (activity === 'inactive' && !hasAttendance);
-    return matchesQuery && matchesShirt && matchesActivity;
+    return (!query || searchText.indexOf(query) > -1) && (!shirt || volunteer.shirtSize === shirt) && (!activity || (activity === 'active' && hasAttendance) || (activity === 'inactive' && !hasAttendance));
   });
 }
 
-// Populates the t-shirt filter with sizes found in the database.
+// Populates the T-shirt size filter from database values.
 function populateShirtFilter() {
   const select = document.getElementById('shirtFilter');
   const current = select.value;
   const sizes = [];
-  appData.volunteers.forEach(function collectSize(volunteer) { if (volunteer.shirtSize && sizes.indexOf(volunteer.shirtSize) === -1) sizes.push(volunteer.shirtSize); });
-  select.innerHTML = '<option value="">All sizes</option>' + sizes.sort().map(function sizeOption(size) { return '<option value="' + escapeHtml(size) + '">' + escapeHtml(size) + '</option>'; }).join('');
+  appData.volunteers.forEach(function collect(volunteer) { if (volunteer.shirtSize && sizes.indexOf(volunteer.shirtSize) === -1) sizes.push(volunteer.shirtSize); });
+  select.innerHTML = '<option value="">All sizes</option>' + sizes.sort().map(function option(size) { return '<option value="' + escapeHtml(size) + '">' + escapeHtml(size) + '</option>'; }).join('');
   select.value = current;
 }
 
-// Expands or collapses a volunteer profile row.
+// Expands or collapses one volunteer profile.
 function toggleProfile(id) {
   expandedVolunteerId = expandedVolunteerId === id ? null : id;
   renderDatabase();
 }
 
-// Renders the editable full volunteer profile and attendance log.
+// Renders editable volunteer fields and editable attendance rows.
 function renderFullProfile(volunteer) {
   let html = '<h3>Full profile</h3><div class="grid">';
-  VOLUNTEER_SCHEMA.forEach(function renderEditableField(field) {
+  VOLUNTEER_SCHEMA.forEach(function fieldHtml(field) {
     const value = escapeHtml(volunteer[field.key] || '');
     if (field.type === 'textarea') html += '<div><label>' + field.label + '</label><textarea oninput="editVolunteerField(\'' + volunteer.id + '\',\'' + field.key + '\', this.value)">' + value + '</textarea></div>';
     else html += '<div><label>' + field.label + '</label><input type="' + field.type + '" value="' + value + '" oninput="editVolunteerField(\'' + volunteer.id + '\',\'' + field.key + '\', this.value)"></div>';
@@ -766,17 +779,16 @@ function renderFullProfile(volunteer) {
   return html;
 }
 
-// Renders editable attendance rows for one volunteer.
+// Renders attendance rows with inline editing controls.
 function renderAttendanceEditor(volunteer) {
   let html = '<table><thead><tr><th>Event</th><th>Date</th><th>Hours</th><th>Role</th><th></th></tr></thead><tbody>';
-  (volunteer.attendance || []).forEach(function renderAttendanceRow(att) {
+  (volunteer.attendance || []).forEach(function row(att) {
     html += '<tr><td><input value="' + escapeHtml(att.eventName) + '" oninput="editAttendanceField(\'' + volunteer.id + '\',\'' + att.id + '\',\'eventName\', this.value)"></td><td><input value="' + escapeHtml(att.date) + '" oninput="editAttendanceField(\'' + volunteer.id + '\',\'' + att.id + '\',\'date\', this.value)"></td><td><input type="number" value="' + escapeHtml(att.hours) + '" oninput="editAttendanceField(\'' + volunteer.id + '\',\'' + att.id + '\',\'hours\', this.value)"></td><td><input value="' + escapeHtml(att.role) + '" oninput="editAttendanceField(\'' + volunteer.id + '\',\'' + att.id + '\',\'role\', this.value)"></td><td><button class="small danger" onclick="deleteAttendance(\'' + volunteer.id + '\',\'' + att.id + '\')">Delete</button></td></tr>';
   });
-  html += '</tbody></table><button class="small" onclick="addAttendance(\'' + volunteer.id + '\')">Add attendance row</button>';
-  return html;
+  return html + '</tbody></table><button class="small" onclick="addAttendance(\'' + volunteer.id + '\')">Add attendance row</button>';
 }
 
-// Updates one editable volunteer field and saves the database.
+// Updates one volunteer field and saves the database.
 function editVolunteerField(volunteerId, key, value) {
   const volunteer = getVolunteer(volunteerId);
   if (!volunteer) return;
@@ -784,11 +796,11 @@ function editVolunteerField(volunteerId, key, value) {
   saveData();
 }
 
-// Updates one editable attendance field and saves the database.
+// Updates one attendance field and saves the database.
 function editAttendanceField(volunteerId, attendanceId, key, value) {
   const volunteer = getVolunteer(volunteerId);
   if (!volunteer) return;
-  const attendance = volunteer.attendance.find(function matchAttendance(item) { return item.id === attendanceId; });
+  const attendance = volunteer.attendance.find(function match(att) { return att.id === attendanceId; });
   if (!attendance) return;
   attendance[key] = key === 'hours' ? Number(value) || 0 : value;
   saveData();
@@ -807,28 +819,28 @@ function addAttendance(volunteerId) {
 function deleteAttendance(volunteerId, attendanceId) {
   const volunteer = getVolunteer(volunteerId);
   if (!volunteer) return;
-  volunteer.attendance = volunteer.attendance.filter(function keepAttendance(item) { return item.id !== attendanceId; });
+  volunteer.attendance = volunteer.attendance.filter(function keep(att) { return att.id !== attendanceId; });
   saveData();
   renderDatabase();
 }
 
-// Retrieves a volunteer by local identifier.
+// Retrieves a volunteer by local ID.
 function getVolunteer(id) {
-  return appData.volunteers.find(function matchVolunteer(volunteer) { return volunteer.id === id; });
+  return appData.volunteers.find(function match(volunteer) { return volunteer.id === id; });
 }
 
 // Calculates total attendance hours for one volunteer.
 function getTotalHours(volunteer) {
-  return (volunteer.attendance || []).reduce(function sumHours(total, att) { return total + (Number(att.hours) || 0); }, 0);
+  return (volunteer.attendance || []).reduce(function sum(total, att) { return total + (Number(att.hours) || 0); }, 0);
 }
 
 // Returns the latest attendance date for one volunteer.
 function getLastActive(volunteer) {
-  const dates = (volunteer.attendance || []).map(function getDate(att) { return att.date; }).filter(Boolean).sort();
+  const dates = (volunteer.attendance || []).map(function date(att) { return att.date; }).filter(Boolean).sort();
   return dates.length ? dates[dates.length - 1] : '';
 }
 
-// Connects export, JSON import, and clearing controls.
+// Connects export, import, and clearing controls.
 function wireExportControls() {
   document.getElementById('exportXlsx').addEventListener('click', exportDatabaseXlsx);
   document.getElementById('exportMergeLog').addEventListener('click', exportMergeLogXlsx);
@@ -837,43 +849,38 @@ function wireExportControls() {
   document.getElementById('clearData').addEventListener('click', clearLocalData);
 }
 
-// Exports the full database to an Excel workbook with two sheets.
+// Exports the volunteer database as an Excel workbook with two sheets.
 function exportDatabaseXlsx() {
-  const particulars = appData.volunteers.map(function volunteerExport(volunteer) {
-    return { Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, 'Emergency Contact Name':volunteer.emergencyName, 'Emergency Contact Phone':volunteer.emergencyPhone, 'T-Shirt Size':volunteer.shirtSize, 'Dietary Requirements':volunteer.dietary, Notes:volunteer.notes, 'Total Hours':getTotalHours(volunteer), 'Last Active':getLastActive(volunteer) };
-  });
+  const particulars = appData.volunteers.map(function exportVolunteer(volunteer) { return { Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, 'Emergency Contact Name':volunteer.emergencyName, 'Emergency Contact Phone':volunteer.emergencyPhone, 'T-Shirt Size':volunteer.shirtSize, 'Dietary Requirements':volunteer.dietary, Notes:volunteer.notes, 'Total Hours':getTotalHours(volunteer), 'Last Active':getLastActive(volunteer) }; });
   const attendance = [];
-  appData.volunteers.forEach(function attendanceExport(volunteer) {
-    (volunteer.attendance || []).forEach(function exportAttendance(att) { attendance.push({ Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, 'Event Name':att.eventName, Date:att.date, Hours:att.hours, Role:att.role }); });
-  });
+  appData.volunteers.forEach(function exportAttendance(volunteer) { (volunteer.attendance || []).forEach(function add(att) { attendance.push({ Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, 'Event Name':att.eventName, Date:att.date, Hours:att.hours, Role:att.role }); }); });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(particulars), 'Volunteer Particulars');
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(attendance), 'Attendance Log');
   XLSX.writeFile(workbook, 'volunteer_database.xlsx');
 }
 
-// Exports the merge and conflict log to an Excel workbook.
+// Exports the merge and conflict log as an Excel workbook.
 function exportMergeLogXlsx() {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(appData.mergeLog), 'Merge Conflict Log');
   XLSX.writeFile(workbook, 'merge_conflict_log.xlsx');
 }
 
-// Exports the full browser database as a JSON save file.
+// Exports the full local database as a JSON save file.
 function exportJsonSave() {
-  const blob = new Blob([JSON.stringify(appData, null, 2)], { type:'application/json' });
-  downloadBlob(blob, 'volunteer_database_save.json');
+  downloadBlob(new Blob([JSON.stringify(appData, null, 2)], { type:'application/json' }), 'volunteer_database_save.json');
 }
 
-// Imports a full JSON save file and replaces the current local database after confirmation.
+// Imports a JSON save file after explicit user confirmation.
 function importJsonSave(event) {
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = function handleJsonLoad(loadEvent) {
+  reader.onload = function readJson(loadEvent) {
     try {
       const parsed = JSON.parse(loadEvent.target.result);
-      if (!Array.isArray(parsed.volunteers)) throw new Error('Missing volunteers array');
+      if (!Array.isArray(parsed.volunteers)) throw new Error('Invalid save file');
       if (!confirm('Replace the current local database with this JSON save file?')) return;
       appData = { volunteers:parsed.volunteers || [], suspectedDuplicates:parsed.suspectedDuplicates || [], mergeLog:parsed.mergeLog || [] };
       saveData();
@@ -886,7 +893,7 @@ function importJsonSave(event) {
   event.target.value = '';
 }
 
-// Clears all saved local data after confirmation.
+// Clears the local browser database after explicit user confirmation.
 function clearLocalData() {
   if (!confirm('Clear the local volunteer database in this browser?')) return;
   appData = { volunteers: [], suspectedDuplicates: [], mergeLog: [] };
@@ -896,7 +903,7 @@ function clearLocalData() {
   renderAll();
 }
 
-// Downloads a generated Blob as a local file.
+// Downloads a generated file blob.
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -908,7 +915,7 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-// Creates and downloads a sample volunteer roster workbook.
+// Downloads a sample roster workbook with the exact required headers.
 function downloadSampleRoster() {
   const sheet = XLSX.utils.aoa_to_sheet([ROSTER_HEADERS, ['Jane Tan', '+65 9123 4567', 'jane@example.com', 'John Tan', '8123 4567', 'M', 'Halal', 'Sample only']]);
   const workbook = XLSX.utils.book_new();
@@ -916,7 +923,7 @@ function downloadSampleRoster() {
   XLSX.writeFile(workbook, 'volunteer_roster.xlsx');
 }
 
-// Creates and downloads a sample attendance log workbook.
+// Downloads a sample attendance workbook with the exact required headers.
 function downloadSampleAttendance() {
   const sheet = XLSX.utils.aoa_to_sheet([ATTENDANCE_HEADERS, ['Jane Tan', '+65 9123 4567', 'jane@example.com', 'Community Event', '2026-01-15', 4, 'Usher']]);
   const workbook = XLSX.utils.book_new();
@@ -924,7 +931,7 @@ function downloadSampleAttendance() {
   XLSX.writeFile(workbook, 'attendance_log.xlsx');
 }
 
-// Renders the persistent suspected duplicate queue.
+// Renders unresolved suspected duplicates from the persistent queue.
 function renderDuplicateQueue() {
   document.getElementById('dupCount').textContent = appData.suspectedDuplicates.length;
   if (!appData.suspectedDuplicates.length) {
@@ -932,17 +939,17 @@ function renderDuplicateQueue() {
     return;
   }
   let html = '';
-  for (let i = 0; i < appData.suspectedDuplicates.length; i++) html += '<div class="card">' + renderSuspectCard(appData.suspectedDuplicates[i], 'queue') + '</div>';
+  appData.suspectedDuplicates.forEach(function render(suspect) { html += '<div class="card">' + renderSuspectCard(suspect, 'queue') + '</div>'; });
   document.getElementById('duplicateQueue').innerHTML = html;
 }
 
-// Renders the merge log table on the export screen.
+// Renders the merge and conflict log table.
 function renderMergeLog() {
-  const rows = appData.mergeLog.map(function logRow(log) { return [log.date, log.level, log.action, log.existingName, log.incomingName, log.reason]; });
+  const rows = appData.mergeLog.map(function row(log) { return [log.date, log.level, log.action, log.existingName, log.incomingName, log.reason]; });
   document.getElementById('mergeLogTable').innerHTML = rows.length ? makeTable(['Date','Level','Action','Existing','Incoming','Reason'], rows) : '<p class="muted">No merge or conflict log entries yet.</p>';
 }
 
-// Re-renders all dynamic parts of the application.
+// Renders all dynamic app areas.
 function renderAll() {
   renderMergeReview();
   renderDatabase();
@@ -950,32 +957,32 @@ function renderAll() {
   renderMergeLog();
 }
 
-// Builds a simple HTML table from headers and row arrays.
+// Builds a simple HTML table from header and row arrays.
 function makeTable(headers, rows) {
   let html = '<table><thead><tr>';
-  headers.forEach(function addHeader(header) { html += '<th>' + escapeHtml(header) + '</th>'; });
+  headers.forEach(function header(cell) { html += '<th>' + escapeHtml(cell) + '</th>'; });
   html += '</tr></thead><tbody>';
-  rows.forEach(function addRow(row) {
+  rows.forEach(function row(cells) {
     html += '<tr>';
-    row.forEach(function addCell(cell) { html += '<td>' + escapeHtml(cell) + '</td>'; });
+    cells.forEach(function cell(value) { html += '<td>' + escapeHtml(value) + '</td>'; });
     html += '</tr>';
   });
   return html + '</tbody></table>';
 }
 
-// Shows a status notice inside a target element.
+// Shows a status notice in the requested element.
 function showNotice(elementId, type, message) {
   document.getElementById(elementId).innerHTML = '<div class="notice ' + type + '">' + escapeHtml(message) + '</div>';
 }
 
-// Escapes user and spreadsheet content before inserting it into HTML.
+// Escapes text before inserting it into HTML.
 function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"]/g, function replaceUnsafe(character) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[character]; });
+  return String(value == null ? '' : value).replace(/[&<>"]/g, function replace(character) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[character]; });
 }
 
-// Looks up the display label for a volunteer field key.
+// Finds the display label for a volunteer schema key.
 function getVolunteerLabel(key) {
-  const field = VOLUNTEER_SCHEMA.find(function matchField(item) { return item.key === key; });
+  const field = VOLUNTEER_SCHEMA.find(function match(item) { return item.key === key; });
   return field ? field.label : key;
 }
 </script>
