@@ -4,33 +4,41 @@ document.addEventListener('DOMContentLoaded',function(){
 
   const tableCard=document.getElementById('databaseTable').closest('.card');
   const card=document.createElement('div');
-  card.className='card batch-edit-card';
+  card.className='card batch-edit-card collapsed';
   card.innerHTML=[
-    '<h2>Batch Edit Visible Volunteers</h2>',
-    '<p class="muted">Applies only to volunteers currently visible after search, filters, and sort. Preview before applying.</p>',
-    '<div class="notice warn"><strong>Before batch editing:</strong> export a JSON backup if the current database contains real volunteer data.</div>',
-    '<div class="grid">',
-      '<div><label for="batchDbField">Field to edit</label><select id="batchDbField">',
-        '<option value="tags">Tags</option>',
-        '<option value="gender">Gender</option>',
-        '<option value="chatSession">Chat Session</option>',
-        '<option value="chatSessionDate">Chat Session Date Conducted</option>',
-        '<option value="interests">Interests</option>',
-        '<option value="languagesSpoken">Languages Spoken</option>',
-        '<option value="shirtSize">T-Shirt Size</option>',
-        '<option value="dietary">Dietary Requirements</option>',
-        '<option value="notes">Notes</option>',
-      '</select></div>',
-      '<div><label for="batchDbAction">Action</label><select id="batchDbAction"></select></div>',
-    '</div>',
-    '<label for="batchDbValue">Value</label>',
-    '<textarea id="batchDbValue" maxlength="2000" placeholder="Enter the value to apply"></textarea>',
-    '<div class="row"><button id="previewDbBatchEdit" class="primary">Preview changes</button><button id="applyDbBatchEdit">Apply batch edit</button><button id="clearDbBatchEdit">Clear</button></div>',
-    '<div id="batchDbStatus"></div>',
-    '<div id="batchDbPreview" class="table-wrap hidden"></div>'
+    '<button id="toggleDbBatchEdit" class="batch-edit-toggle" type="button" aria-expanded="false" aria-controls="batchDbBody">',
+      '<span>Batch Edit Visible Volunteers</span>',
+      '<span class="batch-edit-toggle-text">Open</span>',
+    '</button>',
+    '<div id="batchDbBody" class="batch-edit-body hidden">',
+      '<p class="muted">Applies only to volunteers currently visible after search, filters, and sort. Preview before applying.</p>',
+      '<div class="notice warn"><strong>Before batch editing:</strong> export a JSON backup if the current database contains real volunteer data.</div>',
+      '<div class="grid">',
+        '<div><label for="batchDbField">Field to edit</label><select id="batchDbField">',
+          '<option value="tags">Tags</option>',
+          '<option value="gender">Gender</option>',
+          '<option value="chatSession">Chat Session</option>',
+          '<option value="chatSessionDate">Chat Session Date Conducted</option>',
+          '<option value="interests">Interests</option>',
+          '<option value="languagesSpoken">Languages Spoken</option>',
+          '<option value="shirtSize">T-Shirt Size</option>',
+          '<option value="dietary">Dietary Requirements</option>',
+          '<option value="notes">Notes</option>',
+        '</select></div>',
+        '<div><label for="batchDbAction">Action</label><select id="batchDbAction"></select></div>',
+      '</div>',
+      '<label for="batchDbValue">Value</label>',
+      '<textarea id="batchDbValue" maxlength="2000" placeholder="Enter the value to apply"></textarea>',
+      '<div class="row"><button id="previewDbBatchEdit" class="primary">Preview changes</button><button id="applyDbBatchEdit">Apply batch edit</button><button id="clearDbBatchEdit">Clear</button></div>',
+      '<div id="batchDbStatus"></div>',
+      '<div id="batchDbPreview" class="table-wrap hidden"></div>',
+    '</div>'
   ].join('');
   databaseView.insertBefore(card,tableCard);
 
+  const toggleEl=document.getElementById('toggleDbBatchEdit');
+  const bodyEl=document.getElementById('batchDbBody');
+  const toggleTextEl=toggleEl.querySelector('.batch-edit-toggle-text');
   const fieldEl=document.getElementById('batchDbField');
   const actionEl=document.getElementById('batchDbAction');
   const valueEl=document.getElementById('batchDbValue');
@@ -39,6 +47,13 @@ document.addEventListener('DOMContentLoaded',function(){
 
   const fieldLabels={tags:'Tags',gender:'Gender',chatSession:'Chat Session',chatSessionDate:'Chat Session Date Conducted',interests:'Interests',languagesSpoken:'Languages Spoken',shirtSize:'T-Shirt Size',dietary:'Dietary Requirements',notes:'Notes'};
   const longFields=['interests','languagesSpoken','dietary','notes'];
+
+  function setBatchEditOpen(open){
+    card.classList.toggle('collapsed',!open);
+    bodyEl.classList.toggle('hidden',!open);
+    toggleEl.setAttribute('aria-expanded',open?'true':'false');
+    toggleTextEl.textContent=open?'Minimise':'Open';
+  }
 
   function actionsForField(field){
     if(field==='tags')return[['add','Add tags'],['replace','Replace tags'],['clear','Clear tags']];
@@ -147,10 +162,12 @@ document.addEventListener('DOMContentLoaded',function(){
     statusEl.innerHTML='';
   }
 
+  toggleEl.addEventListener('click',function(){setBatchEditOpen(bodyEl.classList.contains('hidden'));});
   fieldEl.addEventListener('change',refreshActions);
   actionEl.addEventListener('change',refreshActions);
   document.getElementById('previewDbBatchEdit').addEventListener('click',previewBatchEdit);
   document.getElementById('applyDbBatchEdit').addEventListener('click',applyBatchEdit);
   document.getElementById('clearDbBatchEdit').addEventListener('click',clearBatchEdit);
   refreshActions();
+  setBatchEditOpen(false);
 });
