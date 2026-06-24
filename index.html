@@ -7,12 +7,12 @@
   <!--
     Volunteer Database Management Tool
     Overall structure:
-    1. The schema section below defines volunteer and attendance fields in one place.
+    1. The schema section below defines volunteer, tag, and attendance fields in one place.
     2. Data is stored in browser localStorage and is only changed after explicit user actions.
     3. Upload and paste import paths both produce the same two-dimensional row structure.
     4. The same strict header validator handles Excel and pasted spreadsheet cells.
     5. Merge Review stages clean additions, conflicts, and suspected duplicates before saving.
-    6. Central Database provides search, filters, expandable profiles, and inline editing.
+    6. Central Database provides search, tags, filters, sorting, expandable profiles, and inline editing.
     7. Export provides XLSX database export, XLSX merge-log export, and JSON save files.
   -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -34,7 +34,7 @@
     main { padding:24px 28px 40px; }
     section.view { display:none; }
     section.view.active { display:block; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:16px; }
     .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.03); margin-bottom:16px; }
     .card h2, .card h3 { margin-top:0; }
     .muted { color:var(--muted); }
@@ -49,11 +49,12 @@
     tr.clickable { cursor:pointer; }
     tr.clickable:hover { background:#f9fafb; }
     .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:10px; }
-    .pill { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin:2px; }
+    .pill { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin:2px; white-space:nowrap; }
     .pill.ok { background:var(--okbg); color:var(--ok); }
     .pill.warn { background:var(--warnbg); color:var(--warn); }
     .pill.bad { background:var(--badbg); color:var(--bad); }
     .pill.neutral { background:#eef2f7; color:#374151; }
+    .pill.tag { background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
     .choice-box { border:1px solid var(--line); border-radius:8px; padding:10px; background:#fafafa; margin-bottom:10px; }
@@ -69,7 +70,7 @@
 <body>
   <header>
     <h1>Volunteer Database Management Tool</h1>
-    <p>Browser-local volunteer roster, attendance, deduplication, review, and export tool.</p>
+    <p>Browser-local volunteer roster, attendance, tags, deduplication, review, and export tool.</p>
   </header>
 
   <nav>
@@ -145,9 +146,11 @@
       <div class="card">
         <h2>Central Database</h2>
         <div class="grid">
-          <div><label for="searchBox">Search</label><input id="searchBox" placeholder="Search name, phone, email, notes"></div>
+          <div><label for="searchBox">Search</label><input id="searchBox" placeholder="Search name, phone, email, notes, tags"></div>
+          <div><label for="tagFilter">Recall by tag</label><select id="tagFilter"><option value="">All tags</option></select></div>
           <div><label for="shirtFilter">T-Shirt filter</label><select id="shirtFilter"><option value="">All sizes</option></select></div>
           <div><label for="activityFilter">Activity filter</label><select id="activityFilter"><option value="">All volunteers</option><option value="active">Has attendance</option><option value="inactive">No attendance</option></select></div>
+          <div><label for="sortSelect">Sort</label><select id="sortSelect"><option value="name">Name A-Z</option><option value="tag">Tag then name</option><option value="hours">Total hours high-low</option><option value="lastActive">Last active newest</option></select></div>
         </div>
       </div>
       <div class="card"><div id="databaseTable" class="table-wrap"></div></div>
@@ -170,9 +173,9 @@
 
 <script>
 /* ========================= VOLUNTEER DATA SCHEMA =========================
-   Add new volunteer fields here first. Each field has a key, label, and type.
-   Then update the roster template headers, mapRosterRow, and exportDatabaseXlsx
-   when the new field should be imported or exported.
+   Add new volunteer fields here first. Tags are stored as an array and edited
+   as comma-separated text in the profile. Update roster headers, mapRosterRow,
+   and exportDatabaseXlsx when a new field should be imported or exported.
 */
 const VOLUNTEER_SCHEMA = [
   { key:'name', label:'Name', type:'text' },
@@ -182,6 +185,7 @@ const VOLUNTEER_SCHEMA = [
   { key:'emergencyPhone', label:'Emergency Contact Phone', type:'text' },
   { key:'shirtSize', label:'T-Shirt Size', type:'text' },
   { key:'dietary', label:'Dietary Requirements', type:'text' },
+  { key:'tags', label:'Tags', type:'tags' },
   { key:'notes', label:'Notes', type:'textarea' }
 ];
 const ATTENDANCE_SCHEMA = [
@@ -222,13 +226,23 @@ function loadData() {
     appData.volunteers = Array.isArray(parsed.volunteers) ? parsed.volunteers : [];
     appData.suspectedDuplicates = Array.isArray(parsed.suspectedDuplicates) ? parsed.suspectedDuplicates : [];
     appData.mergeLog = Array.isArray(parsed.mergeLog) ? parsed.mergeLog : [];
+    normaliseLoadedData();
   } catch (error) {
     appData = { volunteers: [], suspectedDuplicates: [], mergeLog: [] };
   }
 }
 
+// Ensures older saved data has newer fields such as tags and attendance arrays.
+function normaliseLoadedData() {
+  appData.volunteers.forEach(function normaliseVolunteer(volunteer) {
+    if (!Array.isArray(volunteer.tags)) volunteer.tags = parseTags(volunteer.tags || '');
+    if (!Array.isArray(volunteer.attendance)) volunteer.attendance = [];
+  });
+}
+
 // Saves the complete application database to browser localStorage.
 function saveData() {
+  normaliseLoadedData();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
 }
 
@@ -382,12 +396,12 @@ function isBlankRow(row) {
 
 // Converts one roster row to the internal import shape.
 function mapRosterRow(row, rowNumber) {
-  return { rowNumber:rowNumber, name:cleanText(row[0]), phone:cleanText(row[1]), email:cleanText(row[2]), emergencyName:cleanText(row[3]), emergencyPhone:cleanText(row[4]), shirtSize:cleanText(row[5]), dietary:cleanText(row[6]), notes:cleanText(row[7]), attendance:[] };
+  return { rowNumber:rowNumber, name:cleanText(row[0]), phone:cleanText(row[1]), email:cleanText(row[2]), emergencyName:cleanText(row[3]), emergencyPhone:cleanText(row[4]), shirtSize:cleanText(row[5]), dietary:cleanText(row[6]), notes:cleanText(row[7]), tags:[], attendance:[] };
 }
 
 // Converts one attendance row to the internal import shape.
 function mapAttendanceRow(row, rowNumber) {
-  return { rowNumber:rowNumber, name:cleanText(row[0]), phone:cleanText(row[1]), email:cleanText(row[2]), eventName:cleanText(row[3]), date:formatExcelDate(row[4]), hours:Number(row[5]) || 0, role:cleanText(row[6]) };
+  return { rowNumber:rowNumber, name:cleanText(row[0]), phone:cleanText(row[1]), email:cleanText(row[2]), eventName:cleanText(row[3]), date:formatExcelDate(row[4]), hours:Number(row[5]) || 0, role:cleanText(row[6]), tags:[] };
 }
 
 // Trims a value and returns a string.
@@ -634,7 +648,7 @@ function renderSuspectCard(suspect, context) {
 // Renders a compact profile block for duplicate comparison.
 function renderMiniProfile(person) {
   if (!person) return '<p class="muted">Missing record</p>';
-  return '<p>Name: ' + escapeHtml(person.name) + '<br>Phone: ' + escapeHtml(person.phone) + '<br>Email: ' + escapeHtml(person.email) + '</p>';
+  return '<p>Name: ' + escapeHtml(person.name) + '<br>Phone: ' + escapeHtml(person.phone) + '<br>Email: ' + escapeHtml(person.email) + '<br>Tags: ' + escapeHtml(tagsToText(person.tags)) + '</p>';
 }
 
 // Sets the decision for a staged or queued suspected duplicate.
@@ -691,7 +705,7 @@ function commitSuspectItem(suspect) {
 
 // Adds a new volunteer from an imported row.
 function addNewVolunteerFromRow(row, type) {
-  const volunteer = { id:makeId('vol'), name:row.name, phone:row.phone, email:row.email, emergencyName:row.emergencyName || '', emergencyPhone:row.emergencyPhone || '', shirtSize:row.shirtSize || '', dietary:row.dietary || '', notes:row.notes || '', attendance:[] };
+  const volunteer = { id:makeId('vol'), name:row.name, phone:row.phone, email:row.email, emergencyName:row.emergencyName || '', emergencyPhone:row.emergencyPhone || '', shirtSize:row.shirtSize || '', dietary:row.dietary || '', tags:Array.isArray(row.tags) ? row.tags : [], notes:row.notes || '', attendance:[] };
   if (type === 'attendance') volunteer.attendance.push(makeAttendanceFromRow(row));
   appData.volunteers.push(volunteer);
 }
@@ -699,7 +713,8 @@ function addNewVolunteerFromRow(row, type) {
 // Merges imported row data into an existing volunteer.
 function mergeRowIntoVolunteer(volunteer, row, type) {
   if (!volunteer) return;
-  if (type === 'roster') VOLUNTEER_SCHEMA.forEach(function fill(field) { if (!volunteer[field.key] && row[field.key]) volunteer[field.key] = row[field.key]; });
+  if (!Array.isArray(volunteer.tags)) volunteer.tags = [];
+  if (type === 'roster') VOLUNTEER_SCHEMA.forEach(function fill(field) { if (field.key !== 'tags' && !volunteer[field.key] && row[field.key]) volunteer[field.key] = row[field.key]; });
   if (type === 'attendance') volunteer.attendance.push(makeAttendanceFromRow(row));
 }
 
@@ -719,36 +734,63 @@ function resolveQueuedSuspect(suspect) {
   saveData();
 }
 
-// Connects central database search and filter controls.
+// Connects central database search, tag recall, filter, and sort controls.
 function wireDatabaseControls() {
   document.getElementById('searchBox').addEventListener('input', renderDatabase);
+  document.getElementById('tagFilter').addEventListener('change', renderDatabase);
   document.getElementById('shirtFilter').addEventListener('change', renderDatabase);
   document.getElementById('activityFilter').addEventListener('change', renderDatabase);
+  document.getElementById('sortSelect').addEventListener('change', renderDatabase);
 }
 
-// Renders the searchable and expandable volunteer table.
+// Renders the searchable, tag-filterable, sortable, and expandable volunteer table.
 function renderDatabase() {
+  populateTagFilter();
   populateShirtFilter();
   const rows = getFilteredVolunteers();
-  let html = '<table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>T-Shirt</th><th>Dietary</th><th>Total Hours</th><th>Last Active</th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Tags</th><th>T-Shirt</th><th>Dietary</th><th>Total Hours</th><th>Last Active</th></tr></thead><tbody>';
   rows.forEach(function renderVolunteer(volunteer) {
-    html += '<tr class="clickable" onclick="toggleProfile(\'' + volunteer.id + '\')"><td>' + escapeHtml(volunteer.name) + '</td><td>' + escapeHtml(volunteer.phone) + '</td><td>' + escapeHtml(volunteer.email) + '</td><td>' + escapeHtml(volunteer.shirtSize) + '</td><td>' + escapeHtml(volunteer.dietary) + '</td><td>' + getTotalHours(volunteer) + '</td><td>' + escapeHtml(getLastActive(volunteer)) + '</td></tr>';
-    if (expandedVolunteerId === volunteer.id) html += '<tr><td colspan="7" class="profile">' + renderFullProfile(volunteer) + '</td></tr>';
+    html += '<tr class="clickable" onclick="toggleProfile(\'' + volunteer.id + '\')"><td>' + escapeHtml(volunteer.name) + '</td><td>' + escapeHtml(volunteer.phone) + '</td><td>' + escapeHtml(volunteer.email) + '</td><td>' + renderTagPills(volunteer.tags) + '</td><td>' + escapeHtml(volunteer.shirtSize) + '</td><td>' + escapeHtml(volunteer.dietary) + '</td><td>' + getTotalHours(volunteer) + '</td><td>' + escapeHtml(getLastActive(volunteer)) + '</td></tr>';
+    if (expandedVolunteerId === volunteer.id) html += '<tr><td colspan="8" class="profile">' + renderFullProfile(volunteer) + '</td></tr>';
   });
   html += '</tbody></table>';
   document.getElementById('databaseTable').innerHTML = rows.length ? html : '<p class="muted">No volunteers match the current filters.</p>';
 }
 
-// Returns volunteers matching the current search and filter values.
+// Returns volunteers matching the current search, tag recall, filters, and sort order.
 function getFilteredVolunteers() {
   const query = document.getElementById('searchBox').value.toLowerCase().trim();
+  const tag = document.getElementById('tagFilter').value;
   const shirt = document.getElementById('shirtFilter').value;
   const activity = document.getElementById('activityFilter').value;
-  return appData.volunteers.filter(function keep(volunteer) {
-    const searchText = [volunteer.name, volunteer.phone, volunteer.email, volunteer.notes, volunteer.dietary].join(' ').toLowerCase();
+  const sort = document.getElementById('sortSelect').value;
+  const filtered = appData.volunteers.filter(function keep(volunteer) {
+    const tags = Array.isArray(volunteer.tags) ? volunteer.tags : [];
+    const searchText = [volunteer.name, volunteer.phone, volunteer.email, volunteer.notes, volunteer.dietary, tags.join(' ')].join(' ').toLowerCase();
     const hasAttendance = volunteer.attendance && volunteer.attendance.length > 0;
-    return (!query || searchText.indexOf(query) > -1) && (!shirt || volunteer.shirtSize === shirt) && (!activity || (activity === 'active' && hasAttendance) || (activity === 'inactive' && !hasAttendance));
+    return (!query || searchText.indexOf(query) > -1) && (!tag || tags.indexOf(tag) > -1) && (!shirt || volunteer.shirtSize === shirt) && (!activity || (activity === 'active' && hasAttendance) || (activity === 'inactive' && !hasAttendance));
   });
+  sortVolunteers(filtered, sort);
+  return filtered;
+}
+
+// Sorts a volunteer array in place according to the selected sort option.
+function sortVolunteers(volunteers, sort) {
+  volunteers.sort(function compare(a, b) {
+    if (sort === 'hours') return getTotalHours(b) - getTotalHours(a) || a.name.localeCompare(b.name);
+    if (sort === 'lastActive') return getLastActive(b).localeCompare(getLastActive(a)) || a.name.localeCompare(b.name);
+    if (sort === 'tag') return getFirstTag(a).localeCompare(getFirstTag(b)) || a.name.localeCompare(b.name);
+    return a.name.localeCompare(b.name);
+  });
+}
+
+// Populates the tag recall filter from all saved volunteer tags.
+function populateTagFilter() {
+  const select = document.getElementById('tagFilter');
+  const current = select.value;
+  const tags = getAllTags();
+  select.innerHTML = '<option value="">All tags</option>' + tags.map(function option(tag) { return '<option value="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</option>'; }).join('');
+  select.value = tags.indexOf(current) > -1 ? current : '';
 }
 
 // Populates the T-shirt size filter from database values.
@@ -761,6 +803,40 @@ function populateShirtFilter() {
   select.value = current;
 }
 
+// Returns all unique tags across all volunteers in alphabetical order.
+function getAllTags() {
+  const tags = [];
+  appData.volunteers.forEach(function collect(volunteer) {
+    (volunteer.tags || []).forEach(function collectTag(tag) { if (tags.indexOf(tag) === -1) tags.push(tag); });
+  });
+  return tags.sort();
+}
+
+// Returns the first tag for sorting purposes.
+function getFirstTag(volunteer) {
+  const tags = Array.isArray(volunteer.tags) ? volunteer.tags.slice().sort() : [];
+  return tags.length ? tags[0] : 'zzzzzz';
+}
+
+// Converts comma-separated tag text into a unique sorted array.
+function parseTags(text) {
+  const tags = cleanText(text).split(',').map(function normaliseTag(tag) { return tag.trim().toLowerCase(); }).filter(Boolean);
+  const unique = [];
+  tags.forEach(function addUnique(tag) { if (unique.indexOf(tag) === -1) unique.push(tag); });
+  return unique.sort();
+}
+
+// Converts a tag array into comma-separated text for editing and export.
+function tagsToText(tags) {
+  return Array.isArray(tags) ? tags.join(', ') : '';
+}
+
+// Renders tag pills for table display.
+function renderTagPills(tags) {
+  if (!Array.isArray(tags) || !tags.length) return '<span class="muted">No tags</span>';
+  return tags.map(function tagPill(tag) { return '<span class="pill tag">' + escapeHtml(tag) + '</span>'; }).join('');
+}
+
 // Expands or collapses one volunteer profile.
 function toggleProfile(id) {
   expandedVolunteerId = expandedVolunteerId === id ? null : id;
@@ -771,9 +847,10 @@ function toggleProfile(id) {
 function renderFullProfile(volunteer) {
   let html = '<h3>Full profile</h3><div class="grid">';
   VOLUNTEER_SCHEMA.forEach(function fieldHtml(field) {
-    const value = escapeHtml(volunteer[field.key] || '');
+    const rawValue = field.key === 'tags' ? tagsToText(volunteer.tags) : (volunteer[field.key] || '');
+    const value = escapeHtml(rawValue);
     if (field.type === 'textarea') html += '<div><label>' + field.label + '</label><textarea oninput="editVolunteerField(\'' + volunteer.id + '\',\'' + field.key + '\', this.value)">' + value + '</textarea></div>';
-    else html += '<div><label>' + field.label + '</label><input type="' + field.type + '" value="' + value + '" oninput="editVolunteerField(\'' + volunteer.id + '\',\'' + field.key + '\', this.value)"></div>';
+    else html += '<div><label>' + field.label + '</label><input type="text" value="' + value + '" oninput="editVolunteerField(\'' + volunteer.id + '\',\'' + field.key + '\', this.value)"><p class="muted">' + (field.key === 'tags' ? 'Use comma-separated tags, for example: youth, logistics, befriender' : '') + '</p></div>';
   });
   html += '</div><h3>Attendance log</h3>' + renderAttendanceEditor(volunteer);
   return html;
@@ -792,8 +869,9 @@ function renderAttendanceEditor(volunteer) {
 function editVolunteerField(volunteerId, key, value) {
   const volunteer = getVolunteer(volunteerId);
   if (!volunteer) return;
-  volunteer[key] = value;
+  volunteer[key] = key === 'tags' ? parseTags(value) : value;
   saveData();
+  if (key === 'tags') renderDatabase();
 }
 
 // Updates one attendance field and saves the database.
@@ -851,9 +929,9 @@ function wireExportControls() {
 
 // Exports the volunteer database as an Excel workbook with two sheets.
 function exportDatabaseXlsx() {
-  const particulars = appData.volunteers.map(function exportVolunteer(volunteer) { return { Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, 'Emergency Contact Name':volunteer.emergencyName, 'Emergency Contact Phone':volunteer.emergencyPhone, 'T-Shirt Size':volunteer.shirtSize, 'Dietary Requirements':volunteer.dietary, Notes:volunteer.notes, 'Total Hours':getTotalHours(volunteer), 'Last Active':getLastActive(volunteer) }; });
+  const particulars = appData.volunteers.map(function exportVolunteer(volunteer) { return { Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, Tags:tagsToText(volunteer.tags), 'Emergency Contact Name':volunteer.emergencyName, 'Emergency Contact Phone':volunteer.emergencyPhone, 'T-Shirt Size':volunteer.shirtSize, 'Dietary Requirements':volunteer.dietary, Notes:volunteer.notes, 'Total Hours':getTotalHours(volunteer), 'Last Active':getLastActive(volunteer) }; });
   const attendance = [];
-  appData.volunteers.forEach(function exportAttendance(volunteer) { (volunteer.attendance || []).forEach(function add(att) { attendance.push({ Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, 'Event Name':att.eventName, Date:att.date, Hours:att.hours, Role:att.role }); }); });
+  appData.volunteers.forEach(function exportAttendance(volunteer) { (volunteer.attendance || []).forEach(function add(att) { attendance.push({ Name:volunteer.name, Phone:volunteer.phone, Email:volunteer.email, Tags:tagsToText(volunteer.tags), 'Event Name':att.eventName, Date:att.date, Hours:att.hours, Role:att.role }); }); });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(particulars), 'Volunteer Particulars');
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(attendance), 'Attendance Log');
@@ -883,6 +961,7 @@ function importJsonSave(event) {
       if (!Array.isArray(parsed.volunteers)) throw new Error('Invalid save file');
       if (!confirm('Replace the current local database with this JSON save file?')) return;
       appData = { volunteers:parsed.volunteers || [], suspectedDuplicates:parsed.suspectedDuplicates || [], mergeLog:parsed.mergeLog || [] };
+      normaliseLoadedData();
       saveData();
       renderAll();
     } catch (error) {
