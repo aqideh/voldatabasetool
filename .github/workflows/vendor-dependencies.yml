@@ -1,0 +1,35 @@
+name: Vendor browser dependencies
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/vendor-dependencies.sh
+      - .github/workflows/vendor-dependencies.yml
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Vendor exact browser dependencies
+        run: bash scripts/vendor-dependencies.sh
+
+      - name: Commit vendored dependencies
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html vendor/DEPENDENCY_HASHES.txt vendor/xlsx-0.18.5.full.min.js vendor/fuse-6.6.2.min.js
+          if git diff --cached --quiet; then
+            echo "No vendoring changes to commit."
+          else
+            git commit -m "Vendor browser dependencies"
+            git push
+          fi
