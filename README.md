@@ -1,23 +1,47 @@
 # Volunteer Database Management Tool
 
-A static, single-page volunteer database management tool built with vanilla HTML, CSS, and JavaScript. It runs on GitHub Pages with no server, no build step, and no framework.
+A browser-local volunteer database management tool for importing volunteer rosters, importing attendance logs, reviewing merges, managing a central database, batch-editing visible volunteers, resolving suspected duplicates, and exporting backups or Excel workbooks.
 
-The app uses SheetJS from CDN for `.xlsx` import/export, Fuse.js from CDN for fuzzy name matching, browser `localStorage` for the working database, and JSON export/import for full backup and portability.
+The app is static and runs on GitHub Pages with no backend, no framework, and no build step. Volunteer data is stored in the browser's `localStorage` on the user's device/browser profile.
 
-## Files
+## Current app structure
 
-- `index.html` — the complete application
+- `index.html` — static page shell, navigation, main view markup, privacy notice, Info panel markup, and script/style references
+- `assets/app.css` — app styling, responsive layout, Info panel styling, and batch edit styling
+- `assets/app.js` — core app logic: imports, validation, merge review, database view, exports, JSON restore, deduplication, and profile editing
+- `assets/batch-edit.js` — Central Database batch edit feature
+- `assets/info.js` — Info tab open/close behaviour
+- `vendor/xlsx-0.18.5.full.min.js` — vendored SheetJS browser build for Excel import/export
+- `vendor/fuse-6.6.2.min.js` — vendored Fuse.js browser build for fuzzy matching
 - `README.md` — this guide
+
+## Core features
+
+- Strict volunteer roster and attendance import templates
+- Excel workbook upload and pasted spreadsheet-cell import
+- Import preview with row-level validation
+- Merge Review before anything is committed to the local database
+- High-confidence merge preparation using name plus phone/email matching
+- Medium/low-confidence duplicate review using phone/email and fuzzy name matching
+- Persistent suspected duplicate queue
+- Pre-merge tags and batch edits for staged import rows
+- Central Database search, filters, sorting, inline profile editing, and attendance editing
+- Central Database batch edit for currently visible volunteers
+- Full Excel export, redacted roster export, merge log export, and JSON backup/restore
+- Formula-safe spreadsheet exports
+- Browser-local privacy warning and export confirmations
+- Info tab explaining how the tool works
 
 ## Security and privacy posture
 
-This is a browser-local tool. Volunteer data is stored in the browser's `localStorage`, not on GitHub Pages. This means the data stays on the device/browser profile, but it is not encrypted by the app.
+This is a browser-local tool. Volunteer data is stored in the browser's `localStorage`, not on GitHub Pages or any backend server. The data stays on the device/browser profile, but it is not encrypted by the app.
 
-Do not use shared devices for real volunteer personal data. Exported files contain personal data and should be stored and transmitted securely.
+Do not use shared devices for real volunteer personal data. Exported files may contain personal data and should be stored and transmitted securely.
 
 Current hardening controls:
 
-- Content Security Policy meta tag added
+- Repository-owned vendored JavaScript libraries instead of runtime CDN dependencies
+- Content Security Policy meta tag
 - File import size limit: 5 MB
 - Pasted-cell size limit: 1 MB
 - JSON restore file size limit: 10 MB
@@ -25,11 +49,11 @@ Current hardening controls:
 - Volunteer record limit on JSON restore: 20,000 volunteers
 - Attendance limit on JSON restore: 2,000 attendance rows per volunteer
 - Standard text field length limit: 500 characters
-- Address and Notes length limit: 2,000 characters
+- Long text field length limit: 2,000 characters for Address, Interests, Languages Spoken, and Notes
 - Tag limit: 50 tags per volunteer
 - Tag length limit: 60 characters
-- Attendance hours are constrained between 0 and 100
-- JSON restore is schema-normalised before replacing local data
+- Attendance hours constrained between 0 and 100
+- JSON restore schema-normalised before replacing local data
 - XLSX exports neutralise formula-like values beginning with `=`, `+`, `-`, `@`, tab, or carriage return
 - Full XLSX and JSON exports require confirmation
 - Redacted roster export is available for lower-risk sharing
@@ -37,31 +61,44 @@ Current hardening controls:
 Known residual risks:
 
 - The browser-local database is still unencrypted in `localStorage`
-- SheetJS and Fuse.js are still loaded from CDN
-- The current single-file structure still uses inline scripts and inline event handlers, so the CSP must allow inline scripts
+- Inline event handlers and some inline-generated UI remain, so the CSP still allows inline scripts
 - There is no authentication or role-based access control
 - There is no audit log for manual edits by design
+- This is not a multi-user system; each browser profile has its own local database
 
-For production-grade handling of sensitive volunteer PII, use an authenticated backend with access control, server-side validation, encrypted storage, and audit logging.
+For production-grade handling of sensitive volunteer PII, use an authenticated backend with access control, server-side validation, encrypted storage, backups, and audit logging.
 
-## How to use the tool
+## Navigation
 
-Open the hosted page or open `index.html` directly in a browser.
+The app has these top-level tabs:
 
-### 1. Import a standard template
+- **Upload** — import roster or attendance files, or paste spreadsheet cells
+- **Merge Review** — review clean rows, conflicts, suspected duplicates, staged tags, and staged batch edits before committing
+- **Central Database** — search, filter, edit, batch-edit, and manage attendance
+- **Export** — export full/redacted Excel files, merge logs, and JSON backups
+- **Suspected Duplicates** — resolve duplicate candidates skipped during import
+- **Info** — right-aligned blue button in the nav bar explaining how the tool works
 
-Go to **Upload**. Choose either **Volunteer roster** or **Attendance log**.
+The Info panel includes a short explanation of the app flow and the footer text:
+
+```text
+Designed and maintained by @aqideh 2026
+```
+
+## Import workflow
+
+Go to **Upload** and choose either **Volunteer roster** or **Attendance log**.
 
 You can import data in either of these ways:
 
 - Upload an Excel `.xlsx` or `.xls` workbook
-- Paste copied spreadsheet cells from Excel or Google Sheets into the paste box
+- Paste copied spreadsheet cells from Excel or Google Sheets
 
-Both methods use the same strict validation. The first row must be the exact header row for the selected template. Column names and order must match exactly.
+Both methods use strict template validation. The first row must be the exact header row for the selected template. Column names and order must match exactly. The app does not infer, rename, reorder, or map columns.
 
-#### `volunteer_roster.xlsx`
+### Volunteer roster template
 
-Columns, in this exact order:
+The roster template must use this exact header order:
 
 1. Name
 2. Phone
@@ -78,9 +115,9 @@ Columns, in this exact order:
 13. Dietary Requirements
 14. Notes
 
-#### `attendance_log.xlsx`
+### Attendance log template
 
-Columns, in this exact order:
+The attendance template must use this exact header order:
 
 1. Name
 2. Phone
@@ -90,11 +127,24 @@ Columns, in this exact order:
 6. Hours
 7. Role
 
-Rows are flagged as invalid when they do not have Name and at least one of Phone or Email. Invalid rows are previewed but not imported.
+### Import validation
 
-Data validation checks Name, Phone or Email, email format, field length limits, tag limits, hours limits, and date-like values for Chat Session Date Conducted. Use YYYY-MM-DD for Chat Session Date Conducted.
+Rows are flagged as invalid when they do not have:
 
-### 2. Review before committing
+- Name
+- At least one of Phone or Email
+
+Additional validation and normalisation:
+
+- Email format is checked when email is provided
+- Chat Session Date Conducted should use `YYYY-MM-DD`
+- Excel date values are normalised when possible
+- Hours are constrained between 0 and 100
+- Standard text fields are trimmed and capped at 500 characters
+- Address, Interests, Languages Spoken, and Notes are capped at 2,000 characters
+- Invalid rows are previewed but not imported
+
+## Merge Review workflow
 
 After upload or pasted-cell preview, click **Prepare Merge Review**.
 
@@ -113,7 +163,7 @@ For suspected duplicates, choose one of:
 - **Keep separate** — create a separate volunteer record
 - **Skip for now** — keep the item in the persistent Suspected Duplicates queue
 
-### 3. Add tags and batch edit before merge
+## Pre-merge tags and batch edit
 
 In **Merge Review**, use **Pre-merge tags and batch edit** before clicking **Confirm Import**.
 
@@ -124,7 +174,7 @@ You can apply changes to:
 - Conflicts
 - Suspected duplicates
 
-#### Add tags before merge
+### Add tags before merge
 
 Enter comma-separated tags, for example:
 
@@ -134,15 +184,15 @@ youth, logistics, befriender
 
 Then click **Add tags to selected rows**.
 
-The tags are staged on the incoming import rows. They are not saved to the database until **Confirm Import** is clicked.
+The tags are staged on incoming import rows. They are not saved to the database until **Confirm Import** is clicked.
 
 If a staged row is merged into an existing volunteer, the staged tags are added to that existing volunteer. If a staged row is kept separate or imported as a new volunteer, the staged tags are saved on the new volunteer record.
 
-#### Batch edit before merge
+### Batch edit staged import rows
 
 Choose a field, enter the new value, and click **Apply batch edit**.
 
-For roster imports, supported batch-edit fields are:
+For roster imports, supported pre-merge batch-edit fields are:
 
 - Gender
 - Address
@@ -156,7 +206,7 @@ For roster imports, supported batch-edit fields are:
 - Dietary Requirements
 - Notes
 
-For attendance imports, supported batch-edit fields are:
+For attendance imports, supported pre-merge batch-edit fields are:
 
 - Event Name
 - Date
@@ -164,87 +214,6 @@ For attendance imports, supported batch-edit fields are:
 - Role
 
 Name, Phone, and Email are not batch-edited in Merge Review because they are used for deduplication and matching. Change those in the source file or pasted cells before preparing the Merge Review.
-
-### 4. Use the Central Database
-
-Go to **Central Database**.
-
-You can search, filter by tag, filter by gender, filter by T-shirt size, filter by attendance activity, click a row to expand a full profile, edit personal particulars inline, view the volunteer's full attendance log, edit attendance rows inline, and add or delete attendance rows.
-
-The table shows Name, Phone, Email, Gender, Address, Chat Session, Chat Session Date Conducted, Interests, Languages Spoken, Tags, T-Shirt, Dietary, Total Hours, and Last Active.
-
-### 5. Assign and recall tags after import
-
-Tags are managed in each volunteer's expanded profile.
-
-To assign tags:
-
-1. Go to **Central Database**
-2. Click a volunteer row to expand the profile
-3. Edit the **Tags** field
-4. Enter comma-separated tags, for example:
-
-```text
-youth, logistics, befriender
-```
-
-Tags are normalised to lowercase, deduplicated, and stored with the volunteer record.
-
-To recall volunteers by tag:
-
-1. Go to **Central Database**
-2. Use the **Recall by tag** dropdown
-3. Select a tag to show only volunteers with that tag
-
-You can also search by tag in the search box.
-
-To sort by tags, use the **Sort** dropdown and choose **Tag then name**. Other sort options include Name A-Z, Total hours high-low, and Last active newest.
-
-Tags, gender, address, chat session details, interests, and languages spoken are included in:
-
-- The Central Database table
-- Volunteer profile editing
-- Search text
-- Full `database.xlsx` export
-- JSON save files
-
-### 6. Export and back up
-
-Go to **Export**.
-
-Available exports:
-
-- **Export database.xlsx** — creates a full Excel workbook with Volunteer Particulars and Attendance Log sheets
-- **Export redacted roster.xlsx** — creates a lower-risk roster without phone, email, address, emergency contact, and notes fields
-- **Export merge log.xlsx** — exports merge and conflict review history
-- **Export JSON save file** — exports the full local database, suspected duplicate queue, merge log, tags, gender, and address
-
-Full XLSX and JSON exports show a confirmation warning before download.
-
-### 7. Restore from JSON
-
-Use **Import JSON save file** only with files exported by this tool.
-
-Before restore, the app validates and normalises:
-
-- Volunteer array shape
-- Volunteer field types and length limits
-- Tags
-- Attendance rows
-- Suspected duplicate queue
-- Merge log rows
-
-Invalid or oversized JSON restore files are rejected.
-
-### 8. Resolve suspected duplicates later
-
-Go to **Suspected Duplicates**. This page shows unresolved fuzzy or medium-confidence matches that were skipped during import.
-
-## Pasted-cell import rules
-
-When pasting cells, copy the full table from Excel or Google Sheets, including the header row. The app treats tabs as column separators and line breaks as row separators. It does not infer, rename, reorder, or map columns.
-
-The pasted first row must exactly match the selected template headers. If the pasted headers do not match, the preview is rejected.
 
 ## Deduplication logic
 
@@ -265,7 +234,190 @@ Match priority:
 
 High-confidence auto-merges are not committed immediately. They are only applied after the user clicks **Confirm Import**.
 
-## Browser storage note
+## Central Database
+
+Go to **Central Database** after confirming imports.
+
+You can:
+
+- Search volunteers by name, phone, email, gender, address, chat session, interests, languages, notes, dietary requirements, and tags
+- Filter by tag
+- Filter by gender
+- Filter by T-shirt size
+- Filter by activity status
+- Sort by Name A-Z, Tag then name, Total hours high-low, or Last active newest
+- Click a volunteer row to expand the full profile
+- Edit volunteer fields inline
+- Edit attendance rows inline
+- Add attendance rows
+- Delete attendance rows
+
+The table shows:
+
+- Name
+- Phone
+- Email
+- Gender
+- Address
+- Chat Session
+- Chat Session Date Conducted
+- Interests
+- Languages Spoken
+- Tags
+- T-Shirt Size
+- Dietary Requirements
+- Total Hours
+- Last Active
+
+## Central Database batch edit
+
+The **Batch Edit Visible Volunteers** card is shown in the Central Database view above the table. It is minimised by default. Click **Open** to expand it and **Minimise** to collapse it again.
+
+Batch edit applies only to volunteers currently visible after the current search, filters, and sort. This is intentional: filter or search first, preview the affected records, then apply the edit.
+
+Before using batch edit on real data, export a JSON backup.
+
+Supported batch-edit fields:
+
+- Tags
+- Gender
+- Chat Session
+- Chat Session Date Conducted
+- Interests
+- Languages Spoken
+- T-Shirt Size
+- Dietary Requirements
+- Notes
+
+Supported actions:
+
+- Tags: Add tags, Replace tags, Clear tags
+- Interests, Languages Spoken, Dietary Requirements, Notes: Replace value, Append value, Clear value
+- Gender, Chat Session, Chat Session Date Conducted, T-Shirt Size: Replace value, Clear value
+
+Batch edit validation:
+
+- Tags are parsed, normalised to lowercase, deduplicated, and capped by the existing tag limits
+- Chat Session Date Conducted must use `YYYY-MM-DD`
+- Text values use existing field limits
+- Preview shows the first 50 affected rows
+- Apply requires confirmation
+- Changes are saved to localStorage and then the table is re-rendered
+
+## Tags
+
+Tags are managed in each volunteer's expanded profile and through batch edit features.
+
+To assign tags manually:
+
+1. Go to **Central Database**
+2. Click a volunteer row to expand the profile
+3. Edit the **Tags** field
+4. Enter comma-separated tags, for example:
+
+```text
+youth, logistics, befriender
+```
+
+Tags are normalised to lowercase, deduplicated, and stored with the volunteer record.
+
+To recall volunteers by tag:
+
+1. Go to **Central Database**
+2. Use the **Recall by tag** dropdown
+3. Select a tag to show only volunteers with that tag
+
+You can also search by tag in the search box and sort by tag using **Tag then name**.
+
+## Export and backup
+
+Go to **Export**.
+
+Available exports:
+
+- **Export database.xlsx** — creates a full Excel workbook with Volunteer Particulars and Attendance Log sheets
+- **Export redacted roster.xlsx** — creates a lower-risk roster without phone, email, address, emergency contact, and notes fields
+- **Export merge log.xlsx** — exports merge and conflict review history
+- **Export JSON save file** — exports the full local database, suspected duplicate queue, and merge log
+
+Full XLSX and JSON exports show a confirmation warning before download.
+
+### Full Excel export
+
+The full workbook includes:
+
+- Volunteer particulars
+- Tags
+- Gender
+- Address
+- Chat Session
+- Chat Session Date Conducted
+- Interests
+- Languages Spoken
+- Emergency contact fields
+- T-Shirt size
+- Dietary requirements
+- Notes
+- Total hours
+- Last active date
+- Attendance log rows
+
+### Redacted roster export
+
+The redacted roster excludes higher-risk contact and address fields. It includes:
+
+- Name
+- Gender
+- Chat Session
+- Chat Session Date Conducted
+- Interests
+- Languages Spoken
+- Tags
+- T-Shirt Size
+- Dietary Requirements
+- Total Hours
+- Last Active
+
+### Formula-safe exports
+
+Spreadsheet exports neutralise formula-like values by prefixing values that begin with these characters:
+
+```text
+= + - @ tab carriage-return
+```
+
+This reduces formula injection risk when exported files are opened in spreadsheet software.
+
+## JSON backup and restore
+
+Use JSON export for full backups and moving the local database between browsers/devices.
+
+Use **Import JSON save file** only with files exported by this tool.
+
+Before restore, the app validates and normalises:
+
+- Volunteer array shape
+- Volunteer field types and length limits
+- Tags
+- Attendance rows
+- Suspected duplicate queue
+- Merge log rows
+
+Invalid or oversized JSON restore files are rejected. Valid restores replace the current browser-local database after confirmation.
+
+## Suspected Duplicates queue
+
+Go to **Suspected Duplicates** to review unresolved fuzzy or medium-confidence matches that were skipped during import.
+
+Each queued item can be resolved by choosing:
+
+- Confirm merge
+- Keep separate
+- Skip for now
+
+Resolving a queued duplicate updates the local database and removes that item from the queue.
+
+## Browser storage
 
 The database is stored in the browser's `localStorage` under this key:
 
@@ -295,9 +447,21 @@ The site should become available at:
 https://aqideh.github.io/voldatabasetool/
 ```
 
+## Development notes
+
+- No framework is used
+- No backend is used
+- No build command is required
+- The app is split into HTML, CSS, and JavaScript assets
+- `assets/app.js` contains the core application logic
+- `assets/batch-edit.js` contains the Central Database batch edit feature
+- `assets/info.js` contains Info tab behaviour
+- Vendor browser libraries are stored in `vendor/`
+- The code favours direct, readable control flow over abstractions
+
 ## How to add a new volunteer field
 
-The volunteer schema is defined near the top of `index.html` in the clearly labelled section:
+The volunteer schema is defined near the top of `assets/app.js`:
 
 ```js
 const VOLUNTEER_SCHEMA = [
@@ -306,7 +470,7 @@ const VOLUNTEER_SCHEMA = [
 ];
 ```
 
-Gender, Address, Chat Session, Chat Session Date Conducted, Interests, and Languages Spoken are included in the schema and roster import template:
+The current extended roster fields include:
 
 ```js
 { key:'gender', label:'Gender', type:'text' }
@@ -319,21 +483,17 @@ Gender, Address, Chat Session, Chat Session Date Conducted, Interests, and Langu
 
 To add another new field:
 
-1. Add a new object to `VOLUNTEER_SCHEMA`.
-2. If the field should be imported from `volunteer_roster.xlsx`, add the exact Excel header to `ROSTER_HEADERS`.
+1. Add a new object to `VOLUNTEER_SCHEMA` in `assets/app.js`.
+2. If the field should be imported from the roster template, add the exact Excel header to `ROSTER_HEADERS`.
 3. Update `mapRosterRow()` so the new column is read into the matching field key.
-4. Update `exportDatabaseXlsx()` if the field should appear in the exported workbook.
-5. Update JSON validation if the new field needs a different length or type rule.
-6. Test with a sample roster file using the new exact header order.
-
-## Development notes
-
-- No framework is used.
-- No backend is used.
-- No build command is required.
-- All application logic is in `index.html`.
-- The code favours direct, readable control flow over abstractions.
+4. Update `sanitizeVolunteerRow()` and JSON validation if the field needs special validation.
+5. Update `findFieldConflicts()` if the field should be included in merge conflict review.
+6. Update Central Database search/table/profile rendering if the field should be visible or searchable.
+7. Update `assets/batch-edit.js` if the field should support Central Database batch edits.
+8. Update `exportDatabaseXlsx()` and `exportRedactedXlsx()` if the field should appear in exports.
+9. Update `downloadSampleRoster()` if the sample template should include the field.
+10. Test with a sample roster file using the new exact header order.
 
 ## Limitations
 
-This is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, tagging, and exports. It is not a multi-user system and does not provide authentication, role-based access control, encrypted shared storage, server-side backups, or audit-grade data integrity.
+This is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, tagging, batch edits, and exports. It is not a multi-user system and does not provide authentication, role-based access control, encrypted shared storage, server-side backups, or audit-grade data integrity.
