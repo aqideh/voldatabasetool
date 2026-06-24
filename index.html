@@ -11,7 +11,7 @@
     2. Data is stored in browser localStorage and is only changed after explicit user actions.
     3. Upload and paste import paths both produce the same two-dimensional row structure.
     4. The same strict header validator handles Excel and pasted spreadsheet cells.
-    5. Merge Review stages clean additions, conflicts, and suspected duplicates before saving.
+    5. Merge Review stages clean additions, conflicts, suspected duplicates, and pre-merge batch edits before saving.
     6. Central Database provides search, tags, filters, sorting, expandable profiles, and inline editing.
     7. Export provides XLSX database export, XLSX merge-log export, and JSON save files.
   -->
@@ -133,10 +133,11 @@
     <section id="mergeView" class="view">
       <div class="card">
         <h2>Merge Review</h2>
-        <p class="muted">Nothing is written to the database until Confirm Import is clicked.</p>
+        <p class="muted">Nothing is written to the database until Confirm Import is clicked. Use pre-merge edits before confirming.</p>
         <div id="mergeSummary"></div>
         <div class="row"><button id="confirmImport" class="primary">Confirm Import</button><button id="discardImport">Discard Pending Import</button></div>
       </div>
+      <div id="batchEditBucket" class="card"></div>
       <div id="cleanBucket" class="card"></div>
       <div id="conflictBucket" class="card"></div>
       <div id="suspectBucket" class="card"></div>
@@ -572,21 +573,98 @@ function discardImport() {
 function renderMergeReview() {
   if (!pendingImport) {
     document.getElementById('mergeSummary').innerHTML = '<div class="notice warn">No pending import. Upload or paste data first.</div>';
+    document.getElementById('batchEditBucket').innerHTML = '<h3>Pre-merge tags and batch edit</h3><p class="muted">No pending import to edit.</p>';
     document.getElementById('cleanBucket').innerHTML = '<h3>Clean additions</h3><p class="muted">No pending rows.</p>';
     document.getElementById('conflictBucket').innerHTML = '<h3>Conflicts</h3><p class="muted">No pending conflicts.</p>';
     document.getElementById('suspectBucket').innerHTML = '<h3>Suspected duplicates</h3><p class="muted">No pending suspected duplicates.</p>';
     return;
   }
   document.getElementById('mergeSummary').innerHTML = '<p><span class="pill ok">' + pendingImport.clean.length + ' clean</span> <span class="pill warn">' + pendingImport.conflicts.length + ' conflicts</span> <span class="pill neutral">' + pendingImport.suspects.length + ' suspected</span></p>';
+  renderBatchEditBucket();
   renderCleanBucket();
   renderConflictBucket();
   renderSuspectBucket();
 }
 
+// Renders controls for adding tags and batch-editing pending import rows before saving.
+function renderBatchEditBucket() {
+  let html = '<h3>Pre-merge tags and batch edit</h3>';
+  html += '<p class="muted">These changes apply only to the staged import until Confirm Import is clicked.</p>';
+  html += '<div class="grid"><div><label for="batchTarget">Apply to</label><select id="batchTarget"><option value="all">All pending rows</option><option value="clean">Clean additions</option><option value="conflicts">Conflicts</option><option value="suspects">Suspected duplicates</option></select></div>';
+  html += '<div><label for="batchTags">Tags to add</label><input id="batchTags" placeholder="youth, logistics, befriender"></div></div>';
+  html += '<div class="row"><button onclick="applyBatchTags()" class="primary">Add tags to selected rows</button></div>';
+  html += '<hr><div class="grid"><div><label for="batchField">Field to edit</label><select id="batchField">' + getBatchEditableOptions() + '</select></div><div><label for="batchValue">New value</label><input id="batchValue" placeholder="Value to apply"></div></div>';
+  html += '<div class="row"><button onclick="applyBatchFieldEdit()">Apply batch edit</button></div>';
+  html += '<h4>Pending row tags</h4><div class="table-wrap">' + renderPendingTagTable() + '</div>';
+  document.getElementById('batchEditBucket').innerHTML = html;
+}
+
+// Returns HTML options for fields that can be safely batch edited after matching is staged.
+function getBatchEditableOptions() {
+  const rosterFields = [
+    ['emergencyName','Emergency Contact Name'],
+    ['emergencyPhone','Emergency Contact Phone'],
+    ['shirtSize','T-Shirt Size'],
+    ['dietary','Dietary Requirements'],
+    ['notes','Notes']
+  ];
+  const attendanceFields = [
+    ['eventName','Event Name'],
+    ['date','Date'],
+    ['hours','Hours'],
+    ['role','Role']
+  ];
+  const fields = pendingImport && pendingImport.type === 'attendance' ? attendanceFields : rosterFields;
+  return fields.map(function option(field) { return '<option value="' + field[0] + '">' + field[1] + '</option>'; }).join('');
+}
+
+// Renders a compact table showing pending rows and their staged tags.
+function renderPendingTagTable() {
+  const rows = getPendingItemsByTarget('all').map(function rowForTable(item) { return [item.incoming.name, item.incoming.phone, item.incoming.email, tagsToText(item.incoming.tags)]; });
+  return rows.length ? makeTable(['Name','Phone','Email','Staged tags'], rows) : '<p class="muted">No pending rows.</p>';
+}
+
+// Adds comma-separated tags to all pending rows in the selected batch target.
+function applyBatchTags() {
+  if (!pendingImport) return;
+  const tags = parseTags(document.getElementById('batchTags').value);
+  const target = document.getElementById('batchTarget').value;
+  if (!tags.length) return;
+  getPendingItemsByTarget(target).forEach(function addTagsToItem(item) { item.incoming.tags = mergeTags(item.incoming.tags, tags); });
+  renderMergeReview();
+}
+
+// Applies one batch field edit to all pending rows in the selected batch target.
+function applyBatchFieldEdit() {
+  if (!pendingImport) return;
+  const target = document.getElementById('batchTarget').value;
+  const field = document.getElementById('batchField').value;
+  const value = document.getElementById('batchValue').value;
+  getPendingItemsByTarget(target).forEach(function editItem(item) { setIncomingField(item.incoming, field, value); });
+  renderMergeReview();
+}
+
+// Returns clean, conflict, suspect, or all pending items as a unified list.
+function getPendingItemsByTarget(target) {
+  if (!pendingImport) return [];
+  const clean = pendingImport.clean;
+  const conflicts = pendingImport.conflicts;
+  const suspects = pendingImport.suspects;
+  if (target === 'clean') return clean;
+  if (target === 'conflicts') return conflicts;
+  if (target === 'suspects') return suspects;
+  return clean.concat(conflicts).concat(suspects);
+}
+
+// Updates an incoming staged row field with the correct value type.
+function setIncomingField(incoming, field, value) {
+  incoming[field] = field === 'hours' ? Number(value) || 0 : value;
+}
+
 // Renders rows that can be added or merged without conflict choices.
 function renderCleanBucket() {
-  const rows = pendingImport.clean.map(function row(item) { return [item.action, item.incoming.name, item.incoming.phone, item.incoming.email, item.reason]; });
-  document.getElementById('cleanBucket').innerHTML = '<h3>Clean additions</h3>' + (rows.length ? makeTable(['Action','Name','Phone','Email','Reason'], rows) : '<p class="muted">None.</p>');
+  const rows = pendingImport.clean.map(function row(item) { return [item.action, item.incoming.name, item.incoming.phone, item.incoming.email, tagsToText(item.incoming.tags), item.reason]; });
+  document.getElementById('cleanBucket').innerHTML = '<h3>Clean additions</h3>' + (rows.length ? makeTable(['Action','Name','Phone','Email','Staged tags','Reason'], rows) : '<p class="muted">None.</p>');
 }
 
 // Renders side-by-side conflict controls for user choice or typed correction.
@@ -598,7 +676,7 @@ function renderConflictBucket() {
   }
   pendingImport.conflicts.forEach(function renderConflict(conflict) {
     const existing = getVolunteer(conflict.existingId);
-    html += '<div class="choice-box"><h4>' + escapeHtml(existing.name) + ' vs ' + escapeHtml(conflict.incoming.name) + '</h4>';
+    html += '<div class="choice-box"><h4>' + escapeHtml(existing.name) + ' vs ' + escapeHtml(conflict.incoming.name) + '</h4><p><strong>Staged tags:</strong> ' + escapeHtml(tagsToText(conflict.incoming.tags)) + '</p>';
     conflict.fields.forEach(function renderField(field) {
       html += '<label>' + escapeHtml(field.label) + '</label><div class="two-col"><button class="small" onclick="chooseConflictValue(\'' + conflict.id + '\',\'' + field.key + '\',\'existing\')">Use existing: ' + escapeHtml(field.existing) + '</button><button class="small" onclick="chooseConflictValue(\'' + conflict.id + '\',\'' + field.key + '\',\'incoming\')">Use incoming: ' + escapeHtml(field.incoming) + '</button></div><input value="' + escapeHtml(conflict.resolvedValues[field.key] || '') + '" oninput="typeConflictValue(\'' + conflict.id + '\',\'' + field.key + '\', this.value)">';
     });
@@ -714,6 +792,7 @@ function addNewVolunteerFromRow(row, type) {
 function mergeRowIntoVolunteer(volunteer, row, type) {
   if (!volunteer) return;
   if (!Array.isArray(volunteer.tags)) volunteer.tags = [];
+  volunteer.tags = mergeTags(volunteer.tags, row.tags || []);
   if (type === 'roster') VOLUNTEER_SCHEMA.forEach(function fill(field) { if (field.key !== 'tags' && !volunteer[field.key] && row[field.key]) volunteer[field.key] = row[field.key]; });
   if (type === 'attendance') volunteer.attendance.push(makeAttendanceFromRow(row));
 }
@@ -824,6 +903,16 @@ function parseTags(text) {
   const unique = [];
   tags.forEach(function addUnique(tag) { if (unique.indexOf(tag) === -1) unique.push(tag); });
   return unique.sort();
+}
+
+// Merges two tag arrays into one unique sorted tag array.
+function mergeTags(existingTags, newTags) {
+  const combined = [];
+  (existingTags || []).concat(newTags || []).forEach(function addTag(tag) {
+    const cleanTag = cleanText(tag).toLowerCase();
+    if (cleanTag && combined.indexOf(cleanTag) === -1) combined.push(cleanTag);
+  });
+  return combined.sort();
 }
 
 // Converts a tag array into comma-separated text for editing and export.
