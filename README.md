@@ -9,6 +9,41 @@ The app uses SheetJS from CDN for `.xlsx` import/export, Fuse.js from CDN for fu
 - `index.html` — the complete application
 - `README.md` — this guide
 
+## Security and privacy posture
+
+This is a browser-local tool. Volunteer data is stored in the browser's `localStorage`, not on GitHub Pages. This means the data stays on the device/browser profile, but it is not encrypted by the app.
+
+Do not use shared devices for real volunteer personal data. Exported files contain personal data and should be stored and transmitted securely.
+
+Current hardening controls:
+
+- Content Security Policy meta tag added
+- File import size limit: 5 MB
+- Pasted-cell size limit: 1 MB
+- JSON restore file size limit: 10 MB
+- Import row limit: 5,000 rows per import
+- Volunteer record limit on JSON restore: 20,000 volunteers
+- Attendance limit on JSON restore: 2,000 attendance rows per volunteer
+- Standard text field length limit: 500 characters
+- Address and Notes length limit: 2,000 characters
+- Tag limit: 50 tags per volunteer
+- Tag length limit: 60 characters
+- Attendance hours are constrained between 0 and 100
+- JSON restore is schema-normalised before replacing local data
+- XLSX exports neutralise formula-like values beginning with `=`, `+`, `-`, `@`, tab, or carriage return
+- Full XLSX and JSON exports require confirmation
+- Redacted roster export is available for lower-risk sharing
+
+Known residual risks:
+
+- The browser-local database is still unencrypted in `localStorage`
+- SheetJS and Fuse.js are still loaded from CDN
+- The current single-file structure still uses inline scripts and inline event handlers, so the CSP must allow inline scripts
+- There is no authentication or role-based access control
+- There is no audit log for manual edits by design
+
+For production-grade handling of sensitive volunteer PII, use an authenticated backend with access control, server-side validation, encrypted storage, and audit logging.
+
 ## How to use the tool
 
 Open the hosted page or open `index.html` directly in a browser.
@@ -160,7 +195,7 @@ Tags, gender, and address are included in:
 - The Central Database table
 - Volunteer profile editing
 - Search text
-- `database.xlsx` export
+- Full `database.xlsx` export
 - JSON save files
 
 ### 6. Export and back up
@@ -169,13 +204,29 @@ Go to **Export**.
 
 Available exports:
 
-- **Export database.xlsx** — creates an Excel workbook with two sheets: Volunteer Particulars and Attendance Log
+- **Export database.xlsx** — creates a full Excel workbook with Volunteer Particulars and Attendance Log sheets
+- **Export redacted roster.xlsx** — creates a lower-risk roster without phone, email, address, emergency contact, and notes fields
 - **Export merge log.xlsx** — exports merge and conflict review history
 - **Export JSON save file** — exports the full local database, suspected duplicate queue, merge log, tags, gender, and address
 
-You can also import a JSON save file to restore or move the database to another browser.
+Full XLSX and JSON exports show a confirmation warning before download.
 
-### 7. Resolve suspected duplicates later
+### 7. Restore from JSON
+
+Use **Import JSON save file** only with files exported by this tool.
+
+Before restore, the app validates and normalises:
+
+- Volunteer array shape
+- Volunteer field types and length limits
+- Tags
+- Attendance rows
+- Suspected duplicate queue
+- Merge log rows
+
+Invalid or oversized JSON restore files are rejected.
+
+### 8. Resolve suspected duplicates later
 
 Go to **Suspected Duplicates**. This page shows unresolved fuzzy or medium-confidence matches that were skipped during import.
 
@@ -258,7 +309,8 @@ To add another new field:
 2. If the field should be imported from `volunteer_roster.xlsx`, add the exact Excel header to `ROSTER_HEADERS`.
 3. Update `mapRosterRow()` so the new column is read into the matching field key.
 4. Update `exportDatabaseXlsx()` if the field should appear in the exported workbook.
-5. Test with a sample roster file using the new exact header order.
+5. Update JSON validation if the new field needs a different length or type rule.
+6. Test with a sample roster file using the new exact header order.
 
 ## Development notes
 
@@ -266,9 +318,8 @@ To add another new field:
 - No backend is used.
 - No build command is required.
 - All application logic is in `index.html`.
-- Every function has a plain-English comment above it.
 - The code favours direct, readable control flow over abstractions.
 
 ## Limitations
 
-This is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, tagging, and exports. It is not a multi-user system and does not provide authentication, role-based access control, server-side backups, or audit-grade data integrity.
+This is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, tagging, and exports. It is not a multi-user system and does not provide authentication, role-based access control, encrypted shared storage, server-side backups, or audit-grade data integrity.
