@@ -75,9 +75,46 @@ Go to **Central Database**.
 
 You can search, filter by T-shirt size, filter by attendance activity, click a row to expand a full profile, edit personal particulars inline, view the volunteer's full attendance log, edit attendance rows inline, and add or delete attendance rows.
 
-The table shows Name, Phone, Email, T-Shirt, Dietary, Total Hours, and Last Active.
+The table shows Name, Phone, Email, Tags, T-Shirt, Dietary, Total Hours, and Last Active.
 
-### 4. Export and back up
+### 4. Assign and recall tags
+
+Tags are managed in each volunteer's expanded profile.
+
+To assign tags:
+
+1. Go to **Central Database**
+2. Click a volunteer row to expand the profile
+3. Edit the **Tags** field
+4. Enter comma-separated tags, for example:
+
+```text
+youth, logistics, befriender
+```
+
+Tags are normalised to lowercase, deduplicated, and stored with the volunteer record.
+
+To recall volunteers by tag:
+
+1. Go to **Central Database**
+2. Use the **Recall by tag** dropdown
+3. Select a tag to show only volunteers with that tag
+
+You can also search by tag in the search box.
+
+To sort by tags, use the **Sort** dropdown and choose **Tag then name**. Other sort options include Name A-Z, Total hours high-low, and Last active newest.
+
+Tags are included in:
+
+- The Central Database table
+- Volunteer profile editing
+- Search text
+- Tag recall dropdown
+- Tag sorting
+- `database.xlsx` export
+- JSON save files
+
+### 5. Export and back up
 
 Go to **Export**.
 
@@ -85,11 +122,11 @@ Available exports:
 
 - **Export database.xlsx** — creates an Excel workbook with two sheets: Volunteer Particulars and Attendance Log
 - **Export merge log.xlsx** — exports merge and conflict review history
-- **Export JSON save file** — exports the full local database, suspected duplicate queue, and merge log
+- **Export JSON save file** — exports the full local database, suspected duplicate queue, merge log, and tags
 
 You can also import a JSON save file to restore or move the database to another browser.
 
-### 5. Resolve suspected duplicates later
+### 6. Resolve suspected duplicates later
 
 Go to **Suspected Duplicates**. This page shows unresolved fuzzy or medium-confidence matches that were skipped during import.
 
@@ -159,7 +196,13 @@ const VOLUNTEER_SCHEMA = [
 ];
 ```
 
-To add a new field:
+Tags are already included in the schema as:
+
+```js
+{ key:'tags', label:'Tags', type:'tags' }
+```
+
+To add another new field:
 
 1. Add a new object to `VOLUNTEER_SCHEMA`.
 
@@ -194,4 +237,4 @@ preferredLanguage: cleanText(row[8])
 
 ## Limitations
 
-This is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, and exports. It is not a multi-user system and does not provide authentication, role-based access control, server-side backups, or audit-grade data integrity.
+This is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, tagging, and exports. It is not a multi-user system and does not provide authentication, role-based access control, server-side backups, or audit-grade data integrity.
