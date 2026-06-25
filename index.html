@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
 <title>MakLom | Volunteer Data Management</title>
+<link rel="icon" type="image/png" href="assets/maklom-favicon.png">
+<link rel="apple-touch-icon" href="assets/maklom-touch-icon.png">
 <!--
   MakLom Volunteer Database Tool
   Hardened browser-local static app:
@@ -24,6 +26,7 @@
 <nav><button class="active" data-view="uploadView">Upload</button><button data-view="mergeView">Merge Review</button><button data-view="databaseView">Central Database</button><button data-view="exportView">Export</button><button data-view="duplicatesView">Suspected Duplicates <span id="dupCount" class="pill neutral">0</span></button><button id="infoTab" class="info-tab" type="button" aria-expanded="false" aria-controls="infoPanel">Info</button></nav>
 <div id="infoPanel" class="info-panel hidden" role="dialog" aria-modal="false" aria-labelledby="infoTitle">
   <div class="info-card">
+    <div class="info-brand"><img src="assets/maklom-logo.png" alt="MakLom logo"></div>
     <div class="info-header"><h2 id="infoTitle">How MakLom works</h2><button id="closeInfoPanel" class="small" type="button">Close</button></div>
     <p>MakLom runs in your browser and stores its working database locally on this device. It does not send volunteer data to a server.</p>
     <p>Use Upload to import a roster or attendance template. MakLom validates headers, previews rows, and stages clean records, conflicts, and suspected duplicates for review before saving.</p>
