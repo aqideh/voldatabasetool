@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">MakLom logo</title>
+  <desc id="desc">MakLom logo showing a friendly hijab-wearing character with a spreadsheet and chart.</desc>
+  <rect width="512" height="512" fill="#fffaf0"/>
+  <rect x="106" y="50" width="300" height="300" rx="58" fill="none" stroke="#075a56" stroke-width="8"/>
+  <g transform="translate(152 78)">
+    <line x1="0" y1="110" x2="70" y2="110" stroke="#075a56" stroke-width="6" stroke-linecap="round"/>
+    <rect x="9" y="76" width="18" height="34" rx="3" fill="#075a56"/>
+    <rect x="35" y="58" width="18" height="52" rx="3" fill="#1aa69c"/>
+    <rect x="61" y="38" width="18" height="72" rx="3" fill="#f2634f"/>
+  </g>
+  <g transform="translate(204 86)">
+    <path d="M122 214c-10 22-30 37-62 37H2c-1-59 17-91 43-118 9-62 45-105 94-105 55 0 91 45 91 107 0 47-11 80-37 116h-57c-9-5-14-17-14-37z" fill="#0c8278" stroke="#075a56" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M59 112c4-45 36-72 77-72 47 0 78 38 78 92 0 28-4 48-14 69" fill="#1aa69c" opacity=".75"/>
+    <ellipse cx="117" cy="116" rx="55" ry="61" fill="#ffd39a" stroke="#075a56" stroke-width="6"/>
+    <path d="M61 111c7-43 42-73 89-69 29 3 52 20 64 46-10-50-39-78-79-78-47 0-78 39-82 97z" fill="#075a56" opacity=".55"/>
+    <circle cx="88" cy="112" r="20" fill="none" stroke="#075a56" stroke-width="5"/>
+    <circle cx="150" cy="112" r="20" fill="none" stroke="#075a56" stroke-width="5"/>
+    <line x1="108" y1="111" x2="130" y2="111" stroke="#075a56" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="91" cy="110" r="5" fill="#075a56"/>
+    <path d="M143 110c6-8 16-8 23-1" fill="none" stroke="#075a56" stroke-width="5" stroke-linecap="round"/>
+    <path d="M105 153c13 16 34 15 46 0" fill="none" stroke="#075a56" stroke-width="5" stroke-linecap="round"/>
+    <path d="M57 151c-17 0-28 13-30 35-2 23 8 44 27 45 20 1 27-18 24-43" fill="#ffd39a" stroke="#075a56" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M61 177v-58" stroke="#075a56" stroke-width="7" stroke-linecap="round"/>
+    <path d="M53 187c13 1 17 16 6 25" fill="none" stroke="#075a56" stroke-width="5" stroke-linecap="round"/>
+    <g transform="rotate(10 164 237)">
+      <rect x="116" y="205" width="104" height="68" rx="10" fill="#ffffff" stroke="#075a56" stroke-width="8"/>
+      <rect x="130" y="219" width="24" height="20" fill="#1aa69c"/>
+      <path d="M158 219h50M130 244h78M130 263h78M158 219v44M183 219v44" stroke="#8dc8c1" stroke-width="4"/>
+    </g>
+  </g>
+  <text x="52" y="453" font-family="Arial Rounded MT Bold, Arial, sans-serif" font-size="77" font-weight="800" letter-spacing="-3">
+    <tspan fill="#075a56">Mak</tspan><tspan fill="#f2634f">Lom</tspan>
+  </text>
+</svg>
