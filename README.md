@@ -1,15 +1,20 @@
-# Volunteer Database Management Tool
+# MakLom
 
-A browser-local volunteer database management tool for importing volunteer rosters, importing attendance logs, reviewing merges, managing a central database, batch-editing visible volunteers, resolving suspected duplicates, and exporting backups or Excel workbooks.
+MakLom is a browser-local volunteer database tool for importing volunteer rosters, importing attendance logs, reviewing merges, managing a central database, batch-editing visible volunteers, resolving suspected duplicates, and exporting backups or Excel workbooks.
 
-The app is static and runs on GitHub Pages with no backend, no framework, and no build step. Volunteer data is stored in the browser's `localStorage` on the user's device/browser profile.
+The browser title and product label are **MakLom | Volunteer Data Management**. Where clarity is needed, this README refers to the product as the **MakLom Volunteer Database Tool**.
+
+MakLom is static and runs on GitHub Pages with no backend, no framework, and no build step. Volunteer data is stored in the browser's `localStorage` on the user's device/browser profile.
 
 ## Current app structure
 
 - `index.html` — static page shell, navigation, main view markup, privacy notice, Info panel markup, and script/style references
 - `assets/app.css` — app styling, responsive layout, Info panel styling, and batch edit styling
-- `assets/app.js` — core app logic: imports, validation, merge review, database view, exports, JSON restore, deduplication, and profile editing
+- `assets/profile-edit.css` — profile edit/review styling
+- `assets/app.js` — core app logic: imports, validation, merge review, database view, exports, JSON restore, deduplication, and attendance editing
+- `assets/profile-edit.js` — reviewed profile edit flow
 - `assets/batch-edit.js` — Central Database batch edit feature
+- `assets/empty-filters.js` — Central Database no-value filter support
 - `assets/info.js` — Info tab open/close behaviour
 - `vendor/xlsx-0.18.5.full.min.js` — vendored SheetJS browser build for Excel import/export
 - `vendor/fuse-6.6.2.min.js` — vendored Fuse.js browser build for fuzzy matching
@@ -25,16 +30,16 @@ The app is static and runs on GitHub Pages with no backend, no framework, and no
 - Medium/low-confidence duplicate review using phone/email and fuzzy name matching
 - Persistent suspected duplicate queue
 - Pre-merge tags and batch edits for staged import rows
-- Central Database search, filters, sorting, inline profile editing, and attendance editing
+- Central Database search, filters, no-value filter, sorting, reviewed profile editing, and attendance editing
 - Central Database batch edit for currently visible volunteers
 - Full Excel export, redacted roster export, merge log export, and JSON backup/restore
 - Formula-safe spreadsheet exports
 - Browser-local privacy warning and export confirmations
-- Info tab explaining how the tool works
+- Info tab explaining how MakLom works
 
 ## Security and privacy posture
 
-This is a browser-local tool. Volunteer data is stored in the browser's `localStorage`, not on GitHub Pages or any backend server. The data stays on the device/browser profile, but it is not encrypted by the app.
+MakLom is a browser-local tool. Volunteer data is stored in the browser's `localStorage`, not on GitHub Pages or any backend server. The data stays on the device/browser profile, but it is not encrypted by the app.
 
 Do not use shared devices for real volunteer personal data. Exported files may contain personal data and should be stored and transmitted securely.
 
@@ -70,19 +75,19 @@ For production-grade handling of sensitive volunteer PII, use an authenticated b
 
 ## Navigation
 
-The app has these top-level tabs:
+MakLom has these top-level tabs:
 
 - **Upload** — import roster or attendance files, or paste spreadsheet cells
 - **Merge Review** — review clean rows, conflicts, suspected duplicates, staged tags, and staged batch edits before committing
 - **Central Database** — search, filter, edit, batch-edit, and manage attendance
 - **Export** — export full/redacted Excel files, merge logs, and JSON backups
 - **Suspected Duplicates** — resolve duplicate candidates skipped during import
-- **Info** — right-aligned blue button in the nav bar explaining how the tool works
+- **Info** — right-aligned blue button in the nav bar explaining how MakLom works
 
 The Info panel includes a short explanation of the app flow and the footer text:
 
 ```text
-Designed and maintained by @aqideh 2026
+designed and maintained by @aqideh 2026
 ```
 
 ## Import workflow
@@ -94,7 +99,7 @@ You can import data in either of these ways:
 - Upload an Excel `.xlsx` or `.xls` workbook
 - Paste copied spreadsheet cells from Excel or Google Sheets
 
-Both methods use strict template validation. The first row must be the exact header row for the selected template. Column names and order must match exactly. The app does not infer, rename, reorder, or map columns.
+Both methods use strict template validation. The first row must be the exact header row for the selected template. Column names and order must match exactly. MakLom does not infer, rename, reorder, or map columns.
 
 ### Volunteer roster template
 
@@ -217,7 +222,7 @@ Name, Phone, and Email are not batch-edited in Merge Review because they are use
 
 ## Deduplication logic
 
-The tool normalises data before matching:
+MakLom normalises data before matching:
 
 - Names are lowercased
 - Name titles such as Mr, Mrs, Ms, and Dr are stripped
@@ -245,9 +250,10 @@ You can:
 - Filter by gender
 - Filter by T-shirt size
 - Filter by activity status
+- Filter by no-value status across displayed data columns
 - Sort by Name A-Z, Tag then name, Total hours high-low, or Last active newest
 - Click a volunteer row to expand the full profile
-- Edit volunteer fields inline
+- Edit volunteer profile fields through the reviewed edit flow
 - Edit attendance rows inline
 - Add attendance rows
 - Delete attendance rows
@@ -268,6 +274,45 @@ The table shows:
 - Dietary Requirements
 - Total Hours
 - Last Active
+
+## Reviewed profile edit flow
+
+Expanded volunteer profiles are read-only by default. Click **Edit profile** to make changes.
+
+Profile edits are stored in a temporary draft until they are reviewed and confirmed. Typing into fields does not immediately save the database and does not re-render the table on every keystroke.
+
+The edit flow is:
+
+1. Click **Edit profile**.
+2. Change profile fields.
+3. Click **Review changes**.
+4. Review the changed fields table.
+5. Click **Confirm edits**, **Back**, or **Discard edits**.
+
+Confirming edits validates and saves once. Discarding edits abandons the draft.
+
+## Central Database no-value filter
+
+The **No value filter** dropdown can identify volunteers with missing values in displayed Central Database columns.
+
+Supported no-value filter fields:
+
+- Name
+- Phone
+- Email
+- Gender
+- Address
+- Chat Session
+- Chat Session Date Conducted
+- Interests
+- Languages Spoken
+- Tags
+- T-Shirt Size
+- Dietary Requirements
+- Total Hours
+- Last Active
+
+For **Tags**, no value means no tags. For **Total Hours**, no value means total hours is `0`. For **Last Active**, no value means no attendance date.
 
 ## Central Database batch edit
 
@@ -312,8 +357,12 @@ To assign tags manually:
 
 1. Go to **Central Database**
 2. Click a volunteer row to expand the profile
-3. Edit the **Tags** field
-4. Enter comma-separated tags, for example:
+3. Click **Edit profile**
+4. Edit the **Tags** field
+5. Click **Review changes**
+6. Confirm or discard the edits
+
+Enter comma-separated tags, for example:
 
 ```text
 youth, logistics, befriender
@@ -392,7 +441,7 @@ This reduces formula injection risk when exported files are opened in spreadshee
 
 Use JSON export for full backups and moving the local database between browsers/devices.
 
-Use **Import JSON save file** only with files exported by this tool.
+Use **Import JSON save file** only with files exported by MakLom.
 
 Before restore, the app validates and normalises:
 
@@ -419,11 +468,13 @@ Resolving a queued duplicate updates the local database and removes that item fr
 
 ## Browser storage
 
-The database is stored in the browser's `localStorage` under this key:
+MakLom currently stores the database in the browser's `localStorage` under this existing key:
 
 ```text
 volunteerDatabaseTool.v1
 ```
+
+The key is intentionally unchanged during the MakLom rebrand so existing browser-local data remains readable.
 
 Data is local to the browser and device. Clearing browser data may erase the database. GitHub Pages does not store the database centrally. Regular JSON exports are recommended as backups.
 
@@ -454,7 +505,9 @@ https://aqideh.github.io/voldatabasetool/
 - No build command is required
 - The app is split into HTML, CSS, and JavaScript assets
 - `assets/app.js` contains the core application logic
+- `assets/profile-edit.js` contains the reviewed profile edit flow
 - `assets/batch-edit.js` contains the Central Database batch edit feature
+- `assets/empty-filters.js` contains Central Database no-value filtering
 - `assets/info.js` contains Info tab behaviour
 - Vendor browser libraries are stored in `vendor/`
 - The code favours direct, readable control flow over abstractions
@@ -489,11 +542,13 @@ To add another new field:
 4. Update `sanitizeVolunteerRow()` and JSON validation if the field needs special validation.
 5. Update `findFieldConflicts()` if the field should be included in merge conflict review.
 6. Update Central Database search/table/profile rendering if the field should be visible or searchable.
-7. Update `assets/batch-edit.js` if the field should support Central Database batch edits.
-8. Update `exportDatabaseXlsx()` and `exportRedactedXlsx()` if the field should appear in exports.
-9. Update `downloadSampleRoster()` if the sample template should include the field.
-10. Test with a sample roster file using the new exact header order.
+7. Update `assets/profile-edit.js` if the field should support reviewed profile edits.
+8. Update `assets/batch-edit.js` if the field should support Central Database batch edits.
+9. Update `assets/empty-filters.js` if the field should support no-value filtering.
+10. Update `exportDatabaseXlsx()` and `exportRedactedXlsx()` if the field should appear in exports.
+11. Update `downloadSampleRoster()` if the sample template should include the field.
+12. Test with a sample roster file using the new exact header order.
 
 ## Limitations
 
-This is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, tagging, batch edits, and exports. It is not a multi-user system and does not provide authentication, role-based access control, encrypted shared storage, server-side backups, or audit-grade data integrity.
+MakLom is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, tagging, batch edits, and exports. It is not a multi-user system and does not provide authentication, role-based access control, encrypted shared storage, server-side backups, or audit-grade data integrity.
