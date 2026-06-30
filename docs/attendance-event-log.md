@@ -29,6 +29,22 @@ A blank value means the volunteer was confirmed and deployed for the opportunity
 
 Any other value is rejected during import preview.
 
+## Event Log tab
+
+Use the **Event Log** tab to view and edit attendance event log rows in the app.
+
+The tab supports:
+
+- Search across name, email, contact, attendance, event name, event date, and hours
+- Attendance filter for all rows, `yes`, or blank/no-show rows
+- Clear event log filters
+- Add event log row
+- Inline editing for all event log fields
+- Delete event log row
+- Summary counts for total rows, attended rows, blank/no-show rows, visible rows, and total attended hours
+
+Edits are saved to browser localStorage immediately. Dashboard and Central Database attendance metrics refresh after edits.
+
 ## Unmatched volunteers
 
 When an attendance event log row refers to a volunteer who does not exist in the Central Database, MakLom creates a minimal placeholder volunteer profile using the row's name, email, and contact.
