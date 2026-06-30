@@ -8,17 +8,42 @@ MakLom is static and runs on GitHub Pages with no backend, no framework, and no 
 
 ## Current app structure
 
-- `index.html` — static page shell, navigation, main view markup, privacy notice, Info panel markup, and script/style references
+- `index.html` — static page shell, navigation, main view markup, privacy notice, Info panel markup, favicon reference, and script/style references
 - `assets/app.css` — app styling, responsive layout, Info panel styling, and batch edit styling
 - `assets/profile-edit.css` — profile edit/review styling
+- `assets/brand.css` — MakLom logo styling inside the Info panel
 - `assets/app.js` — core app logic: imports, validation, merge review, database view, exports, JSON restore, deduplication, and attendance editing
 - `assets/profile-edit.js` — reviewed profile edit flow
 - `assets/batch-edit.js` — Central Database batch edit feature
 - `assets/empty-filters.js` — Central Database no-value filter support
 - `assets/info.js` — Info tab open/close behaviour
+- `assets/maklom-logo.svg` — MakLom logo shown in the Info panel
+- `assets/maklom-favicon.svg` — MakLom favicon used by the browser tab
 - `vendor/xlsx-0.18.5.full.min.js` — vendored SheetJS browser build for Excel import/export
 - `vendor/fuse-6.6.2.min.js` — vendored Fuse.js browser build for fuzzy matching
 - `README.md` — this guide
+
+## Branding assets
+
+MakLom uses SVG brand assets stored in the repo:
+
+- `assets/maklom-logo.svg` for the Info panel logo
+- `assets/maklom-favicon.svg` for the browser favicon
+- `assets/brand.css` for the Info panel logo sizing and spacing
+
+The Info panel loads the full MakLom logo using:
+
+```html
+<div class="info-brand"><img src="assets/maklom-logo.svg" alt="MakLom logo"></div>
+```
+
+The favicon is declared in `index.html` using:
+
+```html
+<link rel="icon" type="image/svg+xml" href="assets/maklom-favicon.svg">
+```
+
+The current checked-in assets are SVG files. This keeps the site static, self-contained, and easy to serve from GitHub Pages.
 
 ## Core features
 
@@ -35,7 +60,7 @@ MakLom is static and runs on GitHub Pages with no backend, no framework, and no 
 - Full Excel export, redacted roster export, merge log export, and JSON backup/restore
 - Formula-safe spreadsheet exports
 - Browser-local privacy warning and export confirmations
-- Info tab explaining how MakLom works
+- Info tab explaining how MakLom works, with the MakLom logo displayed at the top
 
 ## Security and privacy posture
 
@@ -84,7 +109,7 @@ MakLom has these top-level tabs:
 - **Suspected Duplicates** — resolve duplicate candidates skipped during import
 - **Info** — right-aligned blue button in the nav bar explaining how MakLom works
 
-The Info panel includes a short explanation of the app flow and the footer text:
+The Info panel includes the MakLom logo, a short explanation of the app flow, and the footer text:
 
 ```text
 designed and maintained by @aqideh 2026
@@ -503,12 +528,14 @@ https://aqideh.github.io/voldatabasetool/
 - No framework is used
 - No backend is used
 - No build command is required
-- The app is split into HTML, CSS, and JavaScript assets
+- The app is split into HTML, CSS, JavaScript, SVG assets, and vendored browser libraries
 - `assets/app.js` contains the core application logic
 - `assets/profile-edit.js` contains the reviewed profile edit flow
 - `assets/batch-edit.js` contains the Central Database batch edit feature
 - `assets/empty-filters.js` contains Central Database no-value filtering
 - `assets/info.js` contains Info tab behaviour
+- `assets/brand.css` contains MakLom brand/logo styling
+- `assets/maklom-logo.svg` and `assets/maklom-favicon.svg` contain the current brand artwork
 - Vendor browser libraries are stored in `vendor/`
 - The code favours direct, readable control flow over abstractions
 
@@ -548,6 +575,16 @@ To add another new field:
 10. Update `exportDatabaseXlsx()` and `exportRedactedXlsx()` if the field should appear in exports.
 11. Update `downloadSampleRoster()` if the sample template should include the field.
 12. Test with a sample roster file using the new exact header order.
+
+## How to update MakLom brand assets
+
+To update the logo or favicon:
+
+1. Replace `assets/maklom-logo.svg` for the Info panel logo.
+2. Replace `assets/maklom-favicon.svg` for the browser favicon.
+3. Adjust `assets/brand.css` if the logo needs different sizing or spacing.
+4. Confirm `index.html` still points to the correct asset paths.
+5. Keep assets local to the repository. Do not use external image URLs.
 
 ## Limitations
 
