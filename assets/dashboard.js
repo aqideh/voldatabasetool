@@ -1,5 +1,7 @@
 function yearFromDate(value){const text=cleanText(value);const match=text.match(/^(\d{4})-/);return match?match[1]:'';}
 function yearFromValue(value){const text=cleanText(value);const match=text.match(/\b(19\d{2}|20\d{2}|21\d{2})\b/);return match?match[1]:'';}
+function dashboardEventLog(){return Array.isArray(appData.attendanceLog)?appData.attendanceLog:[];}
+function dashboardEventLogKey(row){return normalizeEmail(row.email)||normalizePhone(row.contact)||normalizeName(row.name);}
 
 function countByYearFromVolunteers(yearGetter){
   const counts={};
@@ -11,17 +13,16 @@ function countByYearFromVolunteers(yearGetter){
 }
 
 function deployedByYear(){
-  const yearToVolunteerIds={};
-  appData.volunteers.forEach(function(volunteer){
-    (volunteer.attendance||[]).forEach(function(attendance){
-      const year=yearFromDate(attendance.date);
-      if(!year)return;
-      if(!yearToVolunteerIds[year])yearToVolunteerIds[year]=[];
-      if(yearToVolunteerIds[year].indexOf(volunteer.id)===-1)yearToVolunteerIds[year].push(volunteer.id);
-    });
+  const yearToVolunteerKeys={};
+  dashboardEventLog().forEach(function(row){
+    const year=yearFromDate(row.eventDate);
+    const key=dashboardEventLogKey(row);
+    if(!year||!key)return;
+    if(!yearToVolunteerKeys[year])yearToVolunteerKeys[year]=[];
+    if(yearToVolunteerKeys[year].indexOf(key)===-1)yearToVolunteerKeys[year].push(key);
   });
   const counts={};
-  Object.keys(yearToVolunteerIds).forEach(function(year){counts[year]=yearToVolunteerIds[year].length;});
+  Object.keys(yearToVolunteerKeys).forEach(function(year){counts[year]=yearToVolunteerKeys[year].length;});
   return counts;
 }
 
@@ -38,9 +39,16 @@ function programmeCounts(){
   return counts;
 }
 
-function activeVolunteerCount(){return appData.volunteers.filter(function(v){return(v.attendance||[]).length>0;}).length;}
-function totalDeploymentRows(){return appData.volunteers.reduce(function(total,v){return total+(v.attendance||[]).length;},0);}
-function totalHoursAll(){return appData.volunteers.reduce(function(total,v){return total+getTotalHours(v);},0);}
+function activeVolunteerCount(){
+  const keys=[];
+  dashboardEventLog().filter(attendanceWasCaptured).forEach(function(row){
+    const key=dashboardEventLogKey(row);
+    if(key&&keys.indexOf(key)===-1)keys.push(key);
+  });
+  return keys.length;
+}
+function totalDeploymentRows(){return dashboardEventLog().length;}
+function totalHoursAll(){return dashboardEventLog().reduce(function(total,row){return total+(attendanceWasCaptured(row)?Number(row.hours)||0:0);},0);}
 function recruitedCount(){return appData.volunteers.filter(function(v){return yearFromValue(v.recruitedYear);}).length;}
 
 function sortedYearsFrom(){
@@ -82,18 +90,18 @@ function renderDashboard(){
   const active=activeVolunteerCount();
   const inactive=total-active;
   target.innerHTML=[
-    '<div class="card"><h2>Analytics Dashboard</h2><p class="muted">Recruitment is counted using <strong>Recruited Year</strong>. Deployment is counted using attendance dates; one volunteer is counted once per deployment year even if they have multiple attendance rows in that year.</p></div>',
+    '<div class="card"><h2>Analytics Dashboard</h2><p class="muted">Recruitment is counted using <strong>Recruited Year</strong>. Deployment is counted using the separate attendance event log; blank Attendance rows still count as deployed/no-show. Active volunteers and total hours count only rows where Attendance is <strong>yes</strong>.</p></div>',
     '<div class="dashboard-kpis">',
       renderMetricCard('Total Volunteers',String(total),'all records'),
       renderMetricCard('Recruited',String(recruitedCount()),'with recruited year'),
-      renderMetricCard('Active / Deployed',String(active),'with attendance'),
-      renderMetricCard('Total Hours',String(totalHoursAll()),'verified attendance hours'),
-      renderMetricCard('Deployment Rows',String(totalDeploymentRows()),'attendance records'),
-      renderMetricCard('Inactive',String(inactive),'no attendance'),
+      renderMetricCard('Active',String(active),'attendance marked yes'),
+      renderMetricCard('Total Hours',String(totalHoursAll()),'attendance marked yes'),
+      renderMetricCard('Deployment Rows',String(totalDeploymentRows()),'event log rows'),
+      renderMetricCard('Inactive',String(inactive),'no captured attendance'),
     '</div>',
     '<div class="grid dashboard-grid">',
       renderBarChart('Volunteers Recruited by Year',recruited,'No Recruited Year values found.'),
-      renderBarChart('Volunteers Deployed by Year',deployed,'No attendance dates found.'),
+      renderBarChart('Volunteers Deployed by Year',deployed,'No attendance event log dates found.'),
     '</div>',
     '<div class="grid dashboard-grid">',
       renderBarChart('Programmes Registered',programmes,'No programme data available.'),
