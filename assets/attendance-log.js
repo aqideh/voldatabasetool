@@ -5,6 +5,7 @@ function normaliseAttendanceFlag(value){return cleanText(value).toLowerCase()===
 function attendanceWasCaptured(row){return normaliseAttendanceFlag(row&&row.attendance)==='yes';}
 function normaliseContact(value){return safeText(value,'phone');}
 function normaliseWholeNumber(value,max){const text=cleanText(value);if(text==='')return 0;const n=Number(text);if(!Number.isFinite(n)||n<0||Math.floor(n)!==n)return 0;return Math.min(n,max);}
+function normaliseDurationMinutes(value,attendance){if(normaliseAttendanceFlag(attendance)!=='yes')return 0;const n=Number(value);if(!Number.isFinite(n)||n<0||Math.floor(n)!==n)return 0;return Math.min(n,MAX_HOURS*60+59);}
 function durationMinutesFromParts(hours,minutes,attendance){if(normaliseAttendanceFlag(attendance)!=='yes')return 0;return Math.min((normaliseWholeNumber(hours,MAX_HOURS)*60)+normaliseWholeNumber(minutes,59),MAX_HOURS*60+59);}
 function durationHoursPart(row){return Math.floor((Number(row.durationMinutes)||0)/60);}
 function durationMinutesPart(row){return (Number(row.durationMinutes)||0)%60;}
@@ -19,6 +20,7 @@ function ensureVolunteerForEventLogRow(row){let volunteer=findVolunteerForEventL
 
 function validateEventLogRow(raw){
   const attendance=normaliseAttendanceFlag(raw&&raw.attendance);
+  const hasStoredDuration=raw&&Object.prototype.hasOwnProperty.call(raw,'durationMinutes');
   return{
     id:safeText(raw&&raw.id||makeId('evt'),'id'),
     name:safeText(raw&&raw.name,'name'),
@@ -27,7 +29,7 @@ function validateEventLogRow(raw){
     attendance:attendance,
     eventName:safeText(raw&&raw.eventName,'eventName'),
     eventDate:safeDate(raw&&raw.eventDate,'eventDate'),
-    durationMinutes:durationMinutesFromParts(raw&&raw.hours,raw&&raw.minutes,attendance)
+    durationMinutes:hasStoredDuration?normaliseDurationMinutes(raw.durationMinutes,attendance):durationMinutesFromParts(raw&&raw.hours,raw&&raw.minutes,attendance)
   };
 }
 
