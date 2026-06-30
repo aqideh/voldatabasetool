@@ -5,6 +5,7 @@ const NO_VALUE_FILTER_FIELDS=[
   {key:'email',label:'Email'},
   {key:'gender',label:'Gender'},
   {key:'address',label:'Address'},
+  {key:'recruitedYear',label:'Recruited Year'},
   {key:'chatSession',label:'Chat Session'},
   {key:'chatSessionDate',label:'Chat Session Date Conducted'},
   {key:'interests',label:'Interests'},
@@ -61,7 +62,7 @@ function getFilteredVolunteers(){
   const noValue=document.getElementById('noValueFilter')?document.getElementById('noValueFilter').value:'';
   const filtered=appData.volunteers.filter(function(v){
     const tags=Array.isArray(v.tags)?v.tags:[];
-    const text=[v.name,v.phone,v.email,v.gender,v.address,v.chatSession,v.chatSessionDate,v.interests,v.languagesSpoken,v.programmesRegistered,v.notes,v.dietary,tags.join(' ')].join(' ').toLowerCase();
+    const text=[v.name,v.phone,v.email,v.gender,v.address,v.recruitedYear,v.chatSession,v.chatSessionDate,v.interests,v.languagesSpoken,v.programmesRegistered,v.notes,v.dietary,tags.join(' ')].join(' ').toLowerCase();
     const has=v.attendance&&v.attendance.length>0;
     return(!q||text.indexOf(q)>-1)&&(!tag||tags.indexOf(tag)>-1)&&(!gender||v.gender===gender)&&(!shirt||v.shirtSize===shirt)&&(!activity||(activity==='active'&&has)||(activity==='inactive'&&!has))&&noValueFilterMatches(v,noValue);
   });
