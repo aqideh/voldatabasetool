@@ -2,6 +2,7 @@ function yearFromDate(value){const text=cleanText(value);const match=text.match(
 function yearFromValue(value){const text=cleanText(value);const match=text.match(/\b(19\d{2}|20\d{2}|21\d{2})\b/);return match?match[1]:'';}
 function dashboardEventLog(){return Array.isArray(appData.attendanceLog)?appData.attendanceLog:[];}
 function dashboardEventLogKey(row){return normalizeEmail(row.email)||normalizePhone(row.contact)||normalizeName(row.name);}
+function totalDurationMinutesAll(){return dashboardEventLog().reduce(function(total,row){return total+(attendanceWasCaptured(row)?Number(row.durationMinutes)||0:0);},0);}
 
 function countByYearFromVolunteers(yearGetter){
   const counts={};
@@ -48,7 +49,7 @@ function activeVolunteerCount(){
   return keys.length;
 }
 function totalDeploymentRows(){return dashboardEventLog().length;}
-function totalHoursAll(){return dashboardEventLog().reduce(function(total,row){return total+(attendanceWasCaptured(row)?Number(row.hours)||0:0);},0);}
+function totalHoursAll(){return Math.round((totalDurationMinutesAll()/60)*100)/100;}
 function recruitedCount(){return appData.volunteers.filter(function(v){return yearFromValue(v.recruitedYear);}).length;}
 
 function sortedYearsFrom(){
@@ -90,12 +91,13 @@ function renderDashboard(){
   const active=activeVolunteerCount();
   const inactive=total-active;
   target.innerHTML=[
-    '<div class="card"><h2>Analytics Dashboard</h2><p class="muted">Recruitment is counted using <strong>Recruited Year</strong>. Deployment is counted using the separate attendance event log; blank Attendance rows still count as deployed/no-show. Active volunteers and total hours count only rows where Attendance is <strong>yes</strong>.</p></div>',
+    '<div class="card"><h2>Analytics Dashboard</h2><p class="muted">Recruitment is counted using <strong>Recruited Year</strong>. Deployment is counted using the separate attendance event log; blank Attendance rows still count as deployed/no-show. Active volunteers and total duration count only rows where Attendance is <strong>yes</strong>.</p></div>',
     '<div class="dashboard-kpis">',
       renderMetricCard('Total Volunteers',String(total),'all records'),
       renderMetricCard('Recruited',String(recruitedCount()),'with recruited year'),
       renderMetricCard('Active',String(active),'attendance marked yes'),
-      renderMetricCard('Total Hours',String(totalHoursAll()),'attendance marked yes'),
+      renderMetricCard('Total Duration',formatDuration({durationMinutes:totalDurationMinutesAll()}),'attendance marked yes'),
+      renderMetricCard('Decimal Hours',String(totalHoursAll()),'attendance marked yes'),
       renderMetricCard('Deployment Rows',String(totalDeploymentRows()),'event log rows'),
       renderMetricCard('Inactive',String(inactive),'no captured attendance'),
     '</div>',
