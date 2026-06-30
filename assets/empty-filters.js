@@ -52,6 +52,8 @@ function noValueFilterMatches(volunteer,key){
   return noValueFilterValue(volunteer,key)==='';
 }
 
+function volunteerHasCapturedAttendance(volunteer){return typeof eventLogRowsForVolunteer==='function'?eventLogRowsForVolunteer(volunteer).some(attendanceWasCaptured):!!(volunteer.attendance&&volunteer.attendance.length>0);}
+
 function getFilteredVolunteers(){
   const q=document.getElementById('searchBox').value.toLowerCase().trim();
   const tag=document.getElementById('tagFilter').value;
@@ -63,7 +65,7 @@ function getFilteredVolunteers(){
   const filtered=appData.volunteers.filter(function(v){
     const tags=Array.isArray(v.tags)?v.tags:[];
     const text=[v.name,v.phone,v.email,v.gender,v.address,v.recruitedYear,v.chatSession,v.chatSessionDate,v.interests,v.languagesSpoken,v.programmesRegistered,v.notes,v.dietary,tags.join(' ')].join(' ').toLowerCase();
-    const has=v.attendance&&v.attendance.length>0;
+    const has=volunteerHasCapturedAttendance(v);
     return(!q||text.indexOf(q)>-1)&&(!tag||tags.indexOf(tag)>-1)&&(!gender||v.gender===gender)&&(!shirt||v.shirtSize===shirt)&&(!activity||(activity==='active'&&has)||(activity==='inactive'&&!has))&&noValueFilterMatches(v,noValue);
   });
   sortVolunteers(filtered,sort);
