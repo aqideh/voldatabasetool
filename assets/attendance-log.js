@@ -6,7 +6,7 @@ function normaliseEventLogHours(value,attendance){return attendanceWasCaptured({
 function normaliseContact(value){return safeText(value,'phone');}
 function eventLogVolunteerKeyFromVolunteer(v){return normalizeEmail(v.email)||normalizePhone(v.phone);}
 function eventLogVolunteerKeyFromRow(row){return normalizeEmail(row.email)||normalizePhone(row.contact);}
-function eventLogRowsForVolunteer(v){const key=eventLogVolunteerKeyFromVolunteer(v);if(!key)return[];return(appData.attendanceLog||[]).filter(function(row){return eventLogVolunteerKeyFromRow(row)===key;});}
+function eventLogRowsForVolunteer(v){const email=normalizeEmail(v.email),phone=normalizePhone(v.phone);if(!email&&!phone)return[];return(appData.attendanceLog||[]).filter(function(row){const rowEmail=normalizeEmail(row.email),rowContact=normalizePhone(row.contact);return(!!email&&rowEmail===email)||(!!phone&&rowContact===phone);});}
 
 function validateEventLogRow(raw){
   const attendance=normaliseAttendanceFlag(raw&&raw.attendance);
