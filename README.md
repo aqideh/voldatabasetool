@@ -14,7 +14,7 @@ MakLom is static and runs on GitHub Pages with no backend, no framework, and no 
 - `assets/brand.css` — MakLom logo styling inside the Info panel
 - `assets/dashboard.css` — analytics dashboard KPI and chart styling
 - `assets/app.js` — core app logic: imports, validation, merge review, database view, exports, JSON restore, deduplication, and attendance editing
-- `assets/programmes.js` — Programmes Registered schema extension, import/export support, and programme display logic
+- `assets/programmes.js` — Recruited Year and Programmes Registered schema extensions, import/export support, and display logic
 - `assets/profile-edit.js` — reviewed profile edit flow
 - `assets/batch-edit.js` — Central Database batch edit feature
 - `assets/empty-filters.js` — Central Database no-value filter support
@@ -57,11 +57,12 @@ The current checked-in assets are SVG files. This keeps the site static, self-co
 - High-confidence merge preparation using name plus phone/email matching
 - Medium/low-confidence duplicate review using phone/email and fuzzy name matching
 - Persistent suspected duplicate queue
+- Recruited-year tracking through **Recruited Year**
 - Programme categorisation through **Programmes Registered**
 - Analytics dashboard with volunteer KPIs, recruited-by-year counts, deployed-by-year counts, and programme counts
 - Pre-merge tags and batch edits for staged import rows
 - Central Database search, filters, no-value filter, sorting, reviewed profile editing, and attendance editing
-- Central Database batch edit for currently visible volunteers, including programme batch edits
+- Central Database batch edit for currently visible volunteers, including recruited-year and programme batch edits
 - Full Excel export, redacted roster export, merge log export, and JSON backup/restore
 - Formula-safe spreadsheet exports
 - Browser-local privacy warning and export confirmations
@@ -141,16 +142,23 @@ The roster template must use this exact header order:
 3. Email
 4. Gender
 5. Address
-6. Chat Session
-7. Chat Session Date Conducted
-8. Interests
-9. Languages Spoken
-10. Emergency Contact Name
-11. Emergency Contact Phone
-12. T-Shirt Size
-13. Dietary Requirements
-14. Programmes Registered
-15. Notes
+6. Recruited Year
+7. Chat Session
+8. Chat Session Date Conducted
+9. Interests
+10. Languages Spoken
+11. Emergency Contact Name
+12. Emergency Contact Phone
+13. T-Shirt Size
+14. Dietary Requirements
+15. Programmes Registered
+16. Notes
+
+`Recruited Year` accepts a four-digit year such as:
+
+```text
+2026
+```
 
 `Programmes Registered` accepts comma-separated values from the allowed programme list:
 
@@ -182,6 +190,7 @@ Rows are flagged as invalid when they do not have:
 Additional validation and normalisation:
 
 - Email format is checked when email is provided
+- Recruited Year should use `YYYY`
 - Chat Session Date Conducted should use `YYYY-MM-DD`
 - Excel date values are normalised when possible
 - Hours are constrained between 0 and 100
@@ -189,6 +198,25 @@ Additional validation and normalisation:
 - Address, Interests, Languages Spoken, Programmes Registered, and Notes are capped at 2,000 characters
 - Programmes Registered is normalised to the allowed programme list
 - Invalid rows are previewed but not imported
+
+## Recruited Year
+
+MakLom includes a structured **Recruited Year** volunteer field for tracking recruitment year independently from Chat Session Date Conducted.
+
+This field is used by the Dashboard for recruited-by-year counts. This avoids undercounting volunteers who did not go through a chat session.
+
+The field can be edited in these places:
+
+- Volunteer roster imports
+- Expanded volunteer profile via **Edit profile**
+- Central Database batch edit
+- JSON restore/import if the field exists in saved data
+
+Valid values are four-digit years such as:
+
+```text
+2026
+```
 
 ## Programmes Registered
 
@@ -239,8 +267,8 @@ Dashboard charts include:
 Definitions used by the dashboard:
 
 - **Total Volunteers** — all records in `appData.volunteers`
-- **Recruited** — volunteers with a valid year in `Chat Session Date Conducted`
-- **Volunteers Recruited by Year** — grouped by the year in `Chat Session Date Conducted`
+- **Recruited** — volunteers with a valid value in `Recruited Year`
+- **Volunteers Recruited by Year** — grouped by `Recruited Year`
 - **Active / Deployed** — volunteers with at least one attendance row
 - **Volunteers Deployed by Year** — volunteers with attendance in that year; a volunteer is counted once per year even if they have multiple attendance rows in that year
 - **Deployment Rows** — total attendance rows across all volunteers
@@ -345,12 +373,12 @@ Go to **Central Database** after confirming imports.
 
 You can:
 
-- Search volunteers by name, phone, email, gender, address, chat session, interests, languages, programmes, notes, dietary requirements, and tags
+- Search volunteers by name, phone, email, gender, address, recruited year, chat session, interests, languages, programmes, notes, dietary requirements, and tags
 - Filter by tag
 - Filter by gender
 - Filter by T-shirt size
 - Filter by activity status
-- Filter by no-value status across displayed data columns, including Programmes Registered
+- Filter by no-value status across displayed data columns, including Recruited Year and Programmes Registered
 - Sort by Name A-Z, Tag then name, Total hours high-low, or Last active newest
 - Click a volunteer row to expand the full profile
 - Edit volunteer profile fields through the reviewed edit flow
@@ -365,6 +393,7 @@ The table shows:
 - Email
 - Gender
 - Address
+- Recruited Year
 - Chat Session
 - Chat Session Date Conducted
 - Interests
@@ -403,6 +432,7 @@ Supported no-value filter fields:
 - Email
 - Gender
 - Address
+- Recruited Year
 - Chat Session
 - Chat Session Date Conducted
 - Interests
@@ -414,7 +444,7 @@ Supported no-value filter fields:
 - Total Hours
 - Last Active
 
-For **Programmes Registered**, no value means no recognised programme category. For **Tags**, no value means no tags. For **Total Hours**, no value means total hours is `0`. For **Last Active**, no value means no attendance date.
+For **Recruited Year**, no value means no recognised four-digit year. For **Programmes Registered**, no value means no recognised programme category. For **Tags**, no value means no tags. For **Total Hours**, no value means total hours is `0`. For **Last Active**, no value means no attendance date.
 
 ## Central Database batch edit
 
@@ -428,6 +458,7 @@ Supported batch-edit fields:
 
 - Tags
 - Programmes Registered
+- Recruited Year
 - Gender
 - Chat Session
 - Chat Session Date Conducted
@@ -441,6 +472,7 @@ Supported actions:
 
 - Tags: Add tags, Replace tags, Clear tags
 - Programmes Registered: Add programmes, Replace programmes, Clear programmes
+- Recruited Year: Replace value, Clear value
 - Interests, Languages Spoken, Dietary Requirements, Notes: Replace value, Append value, Clear value
 - Gender, Chat Session, Chat Session Date Conducted, T-Shirt Size: Replace value, Clear value
 
@@ -448,6 +480,7 @@ Batch edit validation:
 
 - Tags are parsed, normalised to lowercase, deduplicated, and capped by the existing tag limits
 - Programmes Registered is parsed against the allowed programme categories
+- Recruited Year must use `YYYY`
 - Chat Session Date Conducted must use `YYYY-MM-DD`
 - Text values use existing field limits
 - Preview shows the first 50 affected rows
@@ -501,6 +534,7 @@ Full XLSX and JSON exports show a confirmation warning before download.
 The full workbook includes:
 
 - Volunteer particulars
+- Recruited Year
 - Tags
 - Programmes Registered
 - Gender
@@ -523,6 +557,7 @@ The redacted roster excludes higher-risk contact and address fields. It includes
 
 - Name
 - Gender
+- Recruited Year
 - Chat Session
 - Chat Session Date Conducted
 - Interests
@@ -554,6 +589,7 @@ Before restore, the app validates and normalises:
 
 - Volunteer array shape
 - Volunteer field types and length limits
+- Recruited Year
 - Programmes Registered
 - Tags
 - Attendance rows
@@ -613,7 +649,7 @@ https://aqideh.github.io/voldatabasetool/
 - No build command is required
 - The app is split into HTML, CSS, JavaScript, SVG assets, and vendored browser libraries
 - `assets/app.js` contains the core application logic
-- `assets/programmes.js` contains the Programmes Registered schema extension and related import/export/display overrides
+- `assets/programmes.js` contains the Recruited Year and Programmes Registered schema extensions and related import/export/display overrides
 - `assets/profile-edit.js` contains the reviewed profile edit flow
 - `assets/batch-edit.js` contains the Central Database batch edit feature
 - `assets/empty-filters.js` contains Central Database no-value filtering
@@ -634,6 +670,7 @@ The current extended roster fields include:
 ```js
 { key:'gender', label:'Gender', type:'text' }
 { key:'address', label:'Address', type:'textarea' }
+{ key:'recruitedYear', label:'Recruited Year', type:'text' }
 { key:'chatSession', label:'Chat Session', type:'text' }
 { key:'chatSessionDate', label:'Chat Session Date Conducted', type:'date' }
 { key:'interests', label:'Interests', type:'textarea' }
