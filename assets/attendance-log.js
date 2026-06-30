@@ -1,4 +1,5 @@
 const EVENT_LOG_HEADERS=['Name','Email','Contact','Attendance','Event Name','Event Date','Hours'];
+const ATTENDANCE_PLACEHOLDER_TAG='needs profile update';
 
 function normaliseAttendanceFlag(value){return cleanText(value).toLowerCase()==='yes'?'yes':'';}
 function attendanceWasCaptured(row){return normaliseAttendanceFlag(row&&row.attendance)==='yes';}
@@ -7,6 +8,9 @@ function normaliseContact(value){return safeText(value,'phone');}
 function eventLogVolunteerKeyFromVolunteer(v){return normalizeEmail(v.email)||normalizePhone(v.phone);}
 function eventLogVolunteerKeyFromRow(row){return normalizeEmail(row.email)||normalizePhone(row.contact);}
 function eventLogRowsForVolunteer(v){const email=normalizeEmail(v.email),phone=normalizePhone(v.phone);if(!email&&!phone)return[];return(appData.attendanceLog||[]).filter(function(row){const rowEmail=normalizeEmail(row.email),rowContact=normalizePhone(row.contact);return(!!email&&rowEmail===email)||(!!phone&&rowContact===phone);});}
+function findVolunteerForEventLogRow(row){const email=normalizeEmail(row.email),phone=normalizePhone(row.contact);return appData.volunteers.find(function(v){return(!!email&&normalizeEmail(v.email)===email)||(!!phone&&normalizePhone(v.phone)===phone);})||null;}
+function makePlaceholderVolunteerFromEventLogRow(row){return validateVolunteer({id:makeId('vol'),name:row.name,phone:row.contact,email:row.email,gender:'',address:'',recruitedYear:'',chatSession:'',chatSessionDate:'',interests:'',languagesSpoken:'',emergencyName:'',emergencyPhone:'',shirtSize:'',dietary:'',programmesRegistered:'',tags:[ATTENDANCE_PLACEHOLDER_TAG],notes:'Created from attendance event log import. Update volunteer profile.',attendance:[]});}
+function ensureVolunteerForEventLogRow(row){let volunteer=findVolunteerForEventLogRow(row);if(volunteer)return volunteer;volunteer=makePlaceholderVolunteerFromEventLogRow(row);appData.volunteers.push(volunteer);appData.mergeLog.push({date:new Date().toISOString(),level:'info',action:'placeholder volunteer created',existingName:'',incomingName:row.name,reason:'Attendance event log row did not match an existing volunteer. Tagged '+ATTENDANCE_PLACEHOLDER_TAG+'.'});return volunteer;}
 
 function validateEventLogRow(raw){
   const attendance=normaliseAttendanceFlag(raw&&raw.attendance);
@@ -115,7 +119,7 @@ prepareMergeReview=function(){
   if(uploadedType!=='attendance')return originalPrepareMergeReviewForEventLog();
   const valid=uploadedRows.filter(function(r){return r.valid;});
   if(!valid.length){showNotice('uploadStatus','bad','No valid rows are available to import.');return;}
-  pendingImport={type:'attendanceLog',clean:valid.map(function(row){return{action:'addEventLog',incoming:row,reason:attendanceWasCaptured(row)?'Attendance captured.':'Confirmed/deployed but did not attend.'};}),conflicts:[],suspects:[],autoMergeLog:[]};
+  pendingImport={type:'attendanceLog',clean:valid.map(function(row){const matched=!!findVolunteerForEventLogRow(row);return{action:'addEventLog',incoming:row,reason:matched?(attendanceWasCaptured(row)?'Attendance captured.':'Confirmed/deployed but did not attend.'):'New placeholder volunteer will be created and tagged '+ATTENDANCE_PLACEHOLDER_TAG+'.'};}),conflicts:[],suspects:[],autoMergeLog:[]};
   showView('mergeView');
 };
 
@@ -154,7 +158,7 @@ renderBatchEditBucket=function(){
   document.getElementById('batchEditBucket').innerHTML=html;
 };
 
-function appendAttendanceLogRow(row){appData.attendanceLog=Array.isArray(appData.attendanceLog)?appData.attendanceLog:[];appData.attendanceLog.push(validateEventLogRow(row));}
+function appendAttendanceLogRow(row){appData.attendanceLog=Array.isArray(appData.attendanceLog)?appData.attendanceLog:[];ensureVolunteerForEventLogRow(row);appData.attendanceLog.push(validateEventLogRow(row));}
 
 const originalConfirmImportForEventLog=confirmImport;
 confirmImport=function(){
