@@ -1,10 +1,15 @@
-const EVENT_LOG_HEADERS=['Name','Email','Contact','Attendance','Event Name','Event Date','Hours'];
+const EVENT_LOG_HEADERS=['Name','Email','Contact','Attendance','Event Name','Event Date','Hours','Minutes'];
 const ATTENDANCE_PLACEHOLDER_TAG='needs profile update';
 
 function normaliseAttendanceFlag(value){return cleanText(value).toLowerCase()==='yes'?'yes':'';}
 function attendanceWasCaptured(row){return normaliseAttendanceFlag(row&&row.attendance)==='yes';}
-function normaliseEventLogHours(value,attendance){return attendanceWasCaptured({attendance:attendance})?normaliseHours(value):0;}
 function normaliseContact(value){return safeText(value,'phone');}
+function normaliseWholeNumber(value,max){const text=cleanText(value);if(text==='')return 0;const n=Number(text);if(!Number.isFinite(n)||n<0||Math.floor(n)!==n)return 0;return Math.min(n,max);}
+function durationMinutesFromParts(hours,minutes,attendance){if(normaliseAttendanceFlag(attendance)!=='yes')return 0;return Math.min((normaliseWholeNumber(hours,MAX_HOURS)*60)+normaliseWholeNumber(minutes,59),MAX_HOURS*60+59);}
+function durationHoursPart(row){return Math.floor((Number(row.durationMinutes)||0)/60);}
+function durationMinutesPart(row){return (Number(row.durationMinutes)||0)%60;}
+function durationDecimalHours(row){return Math.round(((Number(row.durationMinutes)||0)/60)*100)/100;}
+function formatDuration(row){const total=Number(row.durationMinutes)||0;const h=Math.floor(total/60),m=total%60;if(h&&m)return h+'h '+m+'m';if(h)return h+'h';if(m)return m+'m';return '0m';}
 function eventLogVolunteerKeyFromVolunteer(v){return normalizeEmail(v.email)||normalizePhone(v.phone);}
 function eventLogVolunteerKeyFromRow(row){return normalizeEmail(row.email)||normalizePhone(row.contact);}
 function eventLogRowsForVolunteer(v){const email=normalizeEmail(v.email),phone=normalizePhone(v.phone);if(!email&&!phone)return[];return(appData.attendanceLog||[]).filter(function(row){const rowEmail=normalizeEmail(row.email),rowContact=normalizePhone(row.contact);return(!!email&&rowEmail===email)||(!!phone&&rowContact===phone);});}
@@ -22,28 +27,15 @@ function validateEventLogRow(raw){
     attendance:attendance,
     eventName:safeText(raw&&raw.eventName,'eventName'),
     eventDate:safeDate(raw&&raw.eventDate,'eventDate'),
-    hours:normaliseEventLogHours(raw&&raw.hours,attendance)
+    durationMinutes:durationMinutesFromParts(raw&&raw.hours,raw&&raw.minutes,attendance)
   };
-}
-
-function migrateLegacyAttendanceRows(volunteers){
-  const rows=[];
-  volunteers.forEach(function(v){
-    (v.attendance||[]).forEach(function(a){
-      rows.push(validateEventLogRow({id:a.id||makeId('evt'),name:v.name,email:v.email,contact:v.phone,attendance:'yes',eventName:a.eventName,eventDate:a.date,hours:a.hours}));
-    });
-    v.attendance=[];
-  });
-  return rows;
 }
 
 const originalValidateJsonSaveForEventLog=validateJsonSave;
 validateJsonSave=function(raw){
   const cleaned=originalValidateJsonSaveForEventLog(raw);
   const source=raw&&typeof raw==='object'?raw:{};
-  const explicitLog=Array.isArray(source.attendanceLog)?source.attendanceLog.slice(0,MAX_IMPORT_ROWS).map(validateEventLogRow):[];
-  const migrated=explicitLog.length?[]:migrateLegacyAttendanceRows(cleaned.volunteers);
-  cleaned.attendanceLog=explicitLog.concat(migrated).slice(0,MAX_IMPORT_ROWS);
+  cleaned.attendanceLog=Array.isArray(source.attendanceLog)?source.attendanceLog.slice(0,MAX_IMPORT_ROWS).map(validateEventLogRow):[];
   return cleaned;
 };
 
@@ -62,7 +54,9 @@ mapAttendanceRow=function(row,rowNumber){
     attendance:attendance,
     eventName:safeText(row[4],'eventName'),
     eventDate:safeDate(row[5],'eventDate'),
-    hours:normaliseEventLogHours(row[6],attendance)
+    hours:normaliseWholeNumber(row[6],MAX_HOURS),
+    minutes:normaliseWholeNumber(row[7],59),
+    durationMinutes:durationMinutesFromParts(row[6],row[7],attendance)
   };
 };
 
@@ -76,6 +70,8 @@ validateMappedRow=function(row,type){
   if(cleanText(row.attendance)!==''&&normaliseAttendanceFlag(row.attendance)!=='yes')issues.push('Attendance must be yes or blank');
   if(cleanText(row.eventName)==='')issues.push('Event Name is required');
   if(row.eventDate&&!/^\d{4}-\d{2}-\d{2}$/.test(row.eventDate))issues.push('Event Date should use YYYY-MM-DD');
+  if(cleanText(row.hours)!==''&&(!Number.isFinite(Number(row.hours))||Number(row.hours)<0||Math.floor(Number(row.hours))!==Number(row.hours)||Number(row.hours)>MAX_HOURS))issues.push('Hours must be a whole number from 0 to '+MAX_HOURS);
+  if(cleanText(row.minutes)!==''&&(!Number.isFinite(Number(row.minutes))||Number(row.minutes)<0||Math.floor(Number(row.minutes))!==Number(row.minutes)||Number(row.minutes)>59))issues.push('Minutes must be a whole number from 0 to 59');
   return issues.join('; ');
 };
 
@@ -107,10 +103,10 @@ const originalRenderPreviewForEventLog=renderPreview;
 renderPreview=function(){
   if(uploadedType!=='attendance')return originalRenderPreviewForEventLog();
   const invalid=uploadedRows.filter(function(r){return !r.valid;}).length;
-  const rows=uploadedRows.map(function(r){return[r.rowNumber,r.valid?'Ready':r.issue,r.name,r.email,r.contact,r.attendance,r.eventName,r.eventDate,r.hours];});
+  const rows=uploadedRows.map(function(r){return[r.rowNumber,r.valid?'Ready':r.issue,r.name,r.email,r.contact,r.attendance,r.eventName,r.eventDate,r.hours,r.minutes,formatDuration(r)];});
   document.getElementById('previewCard').classList.remove('hidden');
   document.getElementById('previewMeta').innerHTML='<p><span class="pill neutral">'+uploadedRows.length+' rows</span> <span class="pill '+(invalid?'bad':'ok')+'">'+invalid+' invalid rows</span></p>';
-  document.getElementById('previewTable').innerHTML=makeTable(['Row','Status'].concat(EVENT_LOG_HEADERS),rows);
+  document.getElementById('previewTable').innerHTML=makeTable(['Row','Status'].concat(EVENT_LOG_HEADERS).concat(['Duration']),rows);
   showNotice('uploadStatus',invalid?'warn':'ok',invalid?'Preview created. Invalid rows are flagged and will not be imported.':'Preview created. Attendance event log rows are ready.');
 };
 
@@ -125,7 +121,7 @@ prepareMergeReview=function(){
 
 const originalGetBatchEditableOptionsForEventLog=getBatchEditableOptions;
 getBatchEditableOptions=function(){
-  if(pendingImport&&pendingImport.type==='attendanceLog')return[['attendance','Attendance'],['eventName','Event Name'],['eventDate','Event Date'],['hours','Hours']].map(function(f){return'<option value="'+f[0]+'">'+f[1]+'</option>';}).join('');
+  if(pendingImport&&pendingImport.type==='attendanceLog')return[['attendance','Attendance'],['eventName','Event Name'],['eventDate','Event Date'],['hours','Hours'],['minutes','Minutes']].map(function(f){return'<option value="'+f[0]+'">'+f[1]+'</option>';}).join('');
   return originalGetBatchEditableOptionsForEventLog();
 };
 
@@ -134,11 +130,12 @@ applyBatchFieldEdit=function(){
   if(!pendingImport||pendingImport.type!=='attendanceLog')return originalApplyBatchFieldEditForEventLog();
   const target=document.getElementById('batchTarget').value,field=document.getElementById('batchField').value,value=document.getElementById('batchValue').value;
   getPendingItemsByTarget(target).forEach(function(item){
-    if(field==='hours')item.incoming.hours=normaliseEventLogHours(value,item.incoming.attendance);
+    if(field==='hours')item.incoming.hours=normaliseWholeNumber(value,MAX_HOURS);
+    else if(field==='minutes')item.incoming.minutes=normaliseWholeNumber(value,59);
     else if(field==='attendance')item.incoming.attendance=normaliseAttendanceFlag(value);
     else if(field==='eventDate')item.incoming.eventDate=safeDate(value,field);
     else item.incoming[field]=safeText(value,field);
-    if(field==='attendance'&&item.incoming.attendance==='')item.incoming.hours=0;
+    item.incoming.durationMinutes=durationMinutesFromParts(item.incoming.hours,item.incoming.minutes,item.incoming.attendance);
   });
   renderMergeReview();
 };
@@ -146,8 +143,8 @@ applyBatchFieldEdit=function(){
 const originalRenderCleanBucketForEventLog=renderCleanBucket;
 renderCleanBucket=function(){
   if(!pendingImport||pendingImport.type!=='attendanceLog')return originalRenderCleanBucketForEventLog();
-  const rows=pendingImport.clean.map(function(item){return[item.incoming.name,item.incoming.email,item.incoming.contact,item.incoming.attendance,item.incoming.eventName,item.incoming.eventDate,item.incoming.hours,item.reason];});
-  document.getElementById('cleanBucket').innerHTML='<h3>Attendance Event Log Rows</h3>'+(rows.length?makeTable(['Name','Email','Contact','Attendance','Event Name','Event Date','Hours','Status'],rows):'<p class="muted">None.</p>');
+  const rows=pendingImport.clean.map(function(item){return[item.incoming.name,item.incoming.email,item.incoming.contact,item.incoming.attendance,item.incoming.eventName,item.incoming.eventDate,item.incoming.hours,item.incoming.minutes,formatDuration(item.incoming),item.reason];});
+  document.getElementById('cleanBucket').innerHTML='<h3>Attendance Event Log Rows</h3>'+(rows.length?makeTable(['Name','Email','Contact','Attendance','Event Name','Event Date','Hours','Minutes','Duration','Status'],rows):'<p class="muted">None.</p>');
 };
 
 const originalRenderBatchEditBucketForEventLog=renderBatchEditBucket;
@@ -173,17 +170,17 @@ confirmImport=function(){
 renderAttendanceEditor=function(v){
   const rows=eventLogRowsForVolunteer(v).sort(function(a,b){return(a.eventDate||'').localeCompare(b.eventDate||'');});
   if(!rows.length)return '<p class="muted">No attendance event log rows recorded for this volunteer.</p>';
-  return makeTable(['Attendance','Event Name','Event Date','Hours'],rows.map(function(row){return[row.attendance,row.eventName,row.eventDate,row.hours];}));
+  return makeTable(['Attendance','Event Name','Event Date','Hours','Minutes','Duration'],rows.map(function(row){return[row.attendance,row.eventName,row.eventDate,durationHoursPart(row),durationMinutesPart(row),formatDuration(row)];}));
 };
 
 editAttendanceField=function(){};
 addAttendance=function(){alert('Attendance is managed through the separate attendance event log import.');};
 deleteAttendance=function(){alert('Attendance is managed through the separate attendance event log import.');};
 
-getTotalHours=function(v){return eventLogRowsForVolunteer(v).reduce(function(total,row){return total+(attendanceWasCaptured(row)?Number(row.hours)||0:0);},0);};
+getTotalHours=function(v){return eventLogRowsForVolunteer(v).reduce(function(total,row){return total+(attendanceWasCaptured(row)?durationDecimalHours(row):0);},0);};
 getLastActive=function(v){const dates=eventLogRowsForVolunteer(v).filter(attendanceWasCaptured).map(function(row){return row.eventDate;}).filter(Boolean).sort();return dates.length?dates[dates.length-1]:'';};
 
-function eventLogExportRows(){return(appData.attendanceLog||[]).map(function(row){return safeExportRow({Name:row.name,Email:row.email,Contact:row.contact,Attendance:row.attendance,'Event Name':row.eventName,'Event Date':row.eventDate,Hours:row.hours});});}
+function eventLogExportRows(){return(appData.attendanceLog||[]).map(function(row){return safeExportRow({Name:row.name,Email:row.email,Contact:row.contact,Attendance:row.attendance,'Event Name':row.eventName,'Event Date':row.eventDate,Hours:durationHoursPart(row),Minutes:durationMinutesPart(row),'Decimal Hours':durationDecimalHours(row),'Duration Minutes':row.durationMinutes});});}
 
 const originalExportDatabaseXlsxForEventLog=exportDatabaseXlsx;
 exportDatabaseXlsx=function(){
@@ -193,4 +190,4 @@ exportDatabaseXlsx=function(){
 };
 
 const originalDownloadSampleAttendanceForEventLog=downloadSampleAttendance;
-downloadSampleAttendance=function(){const sheet=XLSX.utils.aoa_to_sheet([EVENT_LOG_HEADERS,['Jane Tan','jane@example.com','9123 4567','yes','Community Event','2026-01-15',4],['Ali Ahmad','ali@example.com','8123 4567','','Community Event','2026-01-15',0]]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,sheet,'Attendance Event Log');XLSX.writeFile(wb,'attendance_event_log.xlsx');};
+downloadSampleAttendance=function(){const sheet=XLSX.utils.aoa_to_sheet([EVENT_LOG_HEADERS,['Jane Tan','jane@example.com','9123 4567','yes','Community Event','2026-01-15',4,30],['Ali Ahmad','ali@example.com','8123 4567','','Community Event','2026-01-15',0,0]]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,sheet,'Attendance Event Log');XLSX.writeFile(wb,'attendance_event_log.xlsx');};
