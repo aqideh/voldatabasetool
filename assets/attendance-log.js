@@ -56,8 +56,8 @@ mapAttendanceRow=function(row,rowNumber){
     attendance:attendance,
     eventName:safeText(row[4],'eventName'),
     eventDate:safeDate(row[5],'eventDate'),
-    hours:normaliseWholeNumber(row[6],MAX_HOURS),
-    minutes:normaliseWholeNumber(row[7],59),
+    hours:cleanText(row[6]),
+    minutes:cleanText(row[7]),
     durationMinutes:durationMinutesFromParts(row[6],row[7],attendance)
   };
 };
