@@ -28,15 +28,35 @@ function installNoValueFilter(){
   document.getElementById('noValueFilter').addEventListener('change',renderDatabase);
 }
 
+function installClearFiltersButton(){
+  const searchBox=document.getElementById('searchBox');
+  if(!searchBox||document.getElementById('clearDatabaseFilters'))return;
+  const container=searchBox.closest('.grid');
+  const wrapper=document.createElement('div');
+  wrapper.innerHTML='<label>&nbsp;</label><button id="clearDatabaseFilters" type="button">Clear filters</button>';
+  container.appendChild(wrapper);
+  document.getElementById('clearDatabaseFilters').addEventListener('click',clearDatabaseFilters);
+}
+
+function clearDatabaseFilters(){
+  const ids=['searchBox','tagFilter','genderFilter','shirtFilter','activityFilter','noValueFilter'];
+  ids.forEach(function(id){const el=document.getElementById(id);if(el)el.value='';});
+  const sort=document.getElementById('sortSelect');
+  if(sort)sort.value='name';
+  renderDatabase();
+}
+
+function installDatabaseFilterControls(){installNoValueFilter();installClearFiltersButton();}
+
 const originalWireDatabaseControls=wireDatabaseControls;
 wireDatabaseControls=function(){
   originalWireDatabaseControls();
-  installNoValueFilter();
+  installDatabaseFilterControls();
 };
 
 const originalRenderDatabase=renderDatabase;
 renderDatabase=function(){
-  installNoValueFilter();
+  installDatabaseFilterControls();
   originalRenderDatabase();
 };
 
@@ -72,4 +92,4 @@ function getFilteredVolunteers(){
   return filtered;
 }
 
-document.addEventListener('DOMContentLoaded',installNoValueFilter);
+document.addEventListener('DOMContentLoaded',installDatabaseFilterControls);
