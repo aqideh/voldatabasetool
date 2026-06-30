@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded',function(){
       '<div class="grid">',
         '<div><label for="batchDbField">Field to edit</label><select id="batchDbField">',
           '<option value="tags">Tags</option>',
+          '<option value="programmesRegistered">Programmes Registered</option>',
           '<option value="gender">Gender</option>',
           '<option value="chatSession">Chat Session</option>',
           '<option value="chatSessionDate">Chat Session Date Conducted</option>',
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded',function(){
         '</select></div>',
         '<div><label for="batchDbAction">Action</label><select id="batchDbAction"></select></div>',
       '</div>',
+      '<p class="muted"><strong>Programme categories:</strong> '+(typeof renderProgrammeOptions==='function'?renderProgrammeOptions():'#amPowered, RSL, Befrienders, Community Volunteers')+'</p>',
       '<label for="batchDbValue">Value</label>',
       '<textarea id="batchDbValue" maxlength="2000" placeholder="Enter the value to apply"></textarea>',
       '<div class="row"><button id="previewDbBatchEdit" class="primary">Preview changes</button><button id="applyDbBatchEdit">Apply batch edit</button><button id="clearDbBatchEdit">Clear</button></div>',
@@ -45,7 +47,7 @@ document.addEventListener('DOMContentLoaded',function(){
   const statusEl=document.getElementById('batchDbStatus');
   const previewEl=document.getElementById('batchDbPreview');
 
-  const fieldLabels={tags:'Tags',gender:'Gender',chatSession:'Chat Session',chatSessionDate:'Chat Session Date Conducted',interests:'Interests',languagesSpoken:'Languages Spoken',shirtSize:'T-Shirt Size',dietary:'Dietary Requirements',notes:'Notes'};
+  const fieldLabels={tags:'Tags',programmesRegistered:'Programmes Registered',gender:'Gender',chatSession:'Chat Session',chatSessionDate:'Chat Session Date Conducted',interests:'Interests',languagesSpoken:'Languages Spoken',shirtSize:'T-Shirt Size',dietary:'Dietary Requirements',notes:'Notes'};
   const longFields=['interests','languagesSpoken','dietary','notes'];
 
   function setBatchEditOpen(open){
@@ -57,6 +59,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
   function actionsForField(field){
     if(field==='tags')return[['add','Add tags'],['replace','Replace tags'],['clear','Clear tags']];
+    if(field==='programmesRegistered')return[['append','Add programmes'],['replace','Replace programmes'],['clear','Clear programmes']];
     if(longFields.indexOf(field)>-1)return[['replace','Replace value'],['append','Append value'],['clear','Clear value']];
     return[['replace','Replace value'],['clear','Clear value']];
   }
@@ -67,7 +70,9 @@ document.addEventListener('DOMContentLoaded',function(){
     actionEl.innerHTML=actions.map(function(a){return '<option value="'+a[0]+'">'+a[1]+'</option>';}).join('');
     if(actions.some(function(a){return a[0]===current;}))actionEl.value=current;
     valueEl.disabled=actionEl.value==='clear';
-    valueEl.placeholder=fieldEl.value==='tags'?'Comma-separated tags, for example: youth, logistics':'Enter the value to apply';
+    if(fieldEl.value==='tags')valueEl.placeholder='Comma-separated tags, for example: youth, logistics';
+    else if(fieldEl.value==='programmesRegistered')valueEl.placeholder='Comma-separated programmes: #amPowered, RSL, Befrienders, Community Volunteers';
+    else valueEl.placeholder='Enter the value to apply';
   }
 
   function visibleVolunteers(){
@@ -81,6 +86,11 @@ document.addEventListener('DOMContentLoaded',function(){
       const tags=parseTags(value);
       if(!tags.length)throw new Error('Enter at least one valid tag.');
       return tags;
+    }
+    if(field==='programmesRegistered'){
+      const programmes=parseProgrammesRegistered(value);
+      if(!programmes)throw new Error('Enter at least one valid programme: #amPowered, RSL, Befrienders, Community Volunteers.');
+      return programmes;
     }
     if(field==='chatSessionDate'){
       const date=safeDate(value,field);
@@ -97,6 +107,14 @@ document.addEventListener('DOMContentLoaded',function(){
       if(action==='clear')return[];
       if(action==='replace')return value;
       return mergeTags(volunteer.tags||[],value);
+    }
+    if(field==='programmesRegistered'){
+      if(action==='clear')return'';
+      if(action==='replace')return value;
+      const existing=programmesToArray(volunteer.programmesRegistered);
+      const incoming=programmesToArray(value);
+      incoming.forEach(function(programme){if(existing.indexOf(programme)===-1)existing.push(programme);});
+      return existing.join(', ');
     }
     if(action==='clear')return'';
     if(action==='append'){
