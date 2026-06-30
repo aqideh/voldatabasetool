@@ -21,6 +21,12 @@ function programmesToArray(value){
 
 function renderProgrammeOptions(){return PROGRAMME_OPTIONS.map(function(option){return '<span class="pill tag">'+escapeHtml(option)+'</span>';}).join(' ');}
 
+function renderProgrammePills(value){
+  const programmes=programmesToArray(value);
+  if(!programmes.length)return '<span class="muted">No programmes</span>';
+  return programmes.map(function(programme){return '<span class="pill tag">'+escapeHtml(programme)+'</span>';}).join('');
+}
+
 (function installProgrammeSchema(){
   if(!VOLUNTEER_SCHEMA.some(function(field){return field.key==='programmesRegistered';})){
     const tagIndex=VOLUNTEER_SCHEMA.findIndex(function(field){return field.key==='tags';});
@@ -42,6 +48,12 @@ safeText=function(value,key){
 mapRosterRow=function(row,rowNumber){return sanitizeVolunteerRow({rowNumber:rowNumber,name:row[0],phone:row[1],email:row[2],gender:row[3],address:row[4],chatSession:row[5],chatSessionDate:row[6],interests:row[7],languagesSpoken:row[8],emergencyName:row[9],emergencyPhone:row[10],shirtSize:row[11],dietary:row[12],programmesRegistered:row[13],notes:row[14],tags:[],attendance:[]});};
 
 sanitizeVolunteerRow=function(row){return{rowNumber:row.rowNumber||0,name:safeText(row.name,'name'),phone:safeText(row.phone,'phone'),email:safeText(row.email,'email'),gender:safeText(row.gender,'gender'),address:safeText(row.address,'address'),chatSession:safeText(row.chatSession,'chatSession'),chatSessionDate:safeDate(row.chatSessionDate,'chatSessionDate'),interests:safeText(row.interests,'interests'),languagesSpoken:safeText(row.languagesSpoken,'languagesSpoken'),emergencyName:safeText(row.emergencyName,'emergencyName'),emergencyPhone:safeText(row.emergencyPhone,'emergencyPhone'),shirtSize:safeText(row.shirtSize,'shirtSize'),dietary:safeText(row.dietary,'dietary'),programmesRegistered:safeText(row.programmesRegistered,'programmesRegistered'),notes:safeText(row.notes,'notes'),tags:sanitiseTags(row.tags),attendance:Array.isArray(row.attendance)?row.attendance:[]};};
+
+addNewVolunteerFromRow=function(row,type){const v=validateVolunteer({id:makeId('vol'),name:row.name,phone:row.phone,email:row.email,gender:row.gender||'',address:row.address||'',chatSession:row.chatSession||'',chatSessionDate:row.chatSessionDate||'',interests:row.interests||'',languagesSpoken:row.languagesSpoken||'',emergencyName:row.emergencyName||'',emergencyPhone:row.emergencyPhone||'',shirtSize:row.shirtSize||'',dietary:row.dietary||'',programmesRegistered:row.programmesRegistered||'',tags:Array.isArray(row.tags)?row.tags:[],notes:row.notes||'',attendance:[]});if(type==='attendance')v.attendance.push(makeAttendanceFromRow(row));appData.volunteers.push(v);};
+
+renderMiniProfile=function(p){if(!p)return'<p class="muted">Missing record</p>';return'<p>Name: '+escapeHtml(p.name)+'<br>Phone: '+escapeHtml(p.phone)+'<br>Email: '+escapeHtml(p.email)+'<br>Gender: '+escapeHtml(p.gender||'')+'<br>Address: '+escapeHtml(p.address||'')+'<br>Chat Session: '+escapeHtml(p.chatSession||'')+'<br>Chat Session Date Conducted: '+escapeHtml(p.chatSessionDate||'')+'<br>Interests: '+escapeHtml(p.interests||'')+'<br>Languages Spoken: '+escapeHtml(p.languagesSpoken||'')+'<br>Programmes Registered: '+escapeHtml(p.programmesRegistered||'')+'<br>Tags: '+escapeHtml(tagsToText(p.tags))+'</p>';};
+
+renderDatabase=function(){populateTagFilter();populateGenderFilter();populateShirtFilter();const rows=getFilteredVolunteers();let html='<table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Gender</th><th>Address</th><th>Chat Session</th><th>Chat Date</th><th>Interests</th><th>Languages</th><th>Programmes</th><th>Tags</th><th>T-Shirt</th><th>Dietary</th><th>Total Hours</th><th>Last Active</th></tr></thead><tbody>';rows.forEach(function(v){html+='<tr class="clickable" onclick="toggleProfile(\''+v.id+'\')"><td>'+escapeHtml(v.name)+'</td><td>'+escapeHtml(v.phone)+'</td><td>'+escapeHtml(v.email)+'</td><td>'+escapeHtml(v.gender)+'</td><td>'+escapeHtml(v.address)+'</td><td>'+escapeHtml(v.chatSession)+'</td><td>'+escapeHtml(v.chatSessionDate)+'</td><td>'+escapeHtml(v.interests)+'</td><td>'+escapeHtml(v.languagesSpoken)+'</td><td>'+renderProgrammePills(v.programmesRegistered)+'</td><td>'+renderTagPills(v.tags)+'</td><td>'+escapeHtml(v.shirtSize)+'</td><td>'+escapeHtml(v.dietary)+'</td><td>'+getTotalHours(v)+'</td><td>'+escapeHtml(getLastActive(v))+'</td></tr>';if(expandedVolunteerId===v.id)html+='<tr><td colspan="15" class="profile">'+renderFullProfile(v)+'</td></tr>';});html+='</tbody></table>';document.getElementById('databaseTable').innerHTML=rows.length?html:'<p class="muted">No volunteers match the current filters.</p>';};
 
 const originalRenderPreviewForProgrammes=renderPreview;
 renderPreview=function(){
