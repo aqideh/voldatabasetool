@@ -29,6 +29,24 @@ A blank value means the volunteer was confirmed and deployed for the opportunity
 
 Any other value is rejected during import preview.
 
+## Unmatched volunteers
+
+When an attendance event log row refers to a volunteer who does not exist in the Central Database, MakLom creates a minimal placeholder volunteer profile using the row's name, email, and contact.
+
+The placeholder volunteer is tagged:
+
+```text
+needs profile update
+```
+
+The placeholder profile also receives this note:
+
+```text
+Created from attendance event log import. Update volunteer profile.
+```
+
+This prevents deployed or attended volunteers from being lost just because the roster import was incomplete. Use the tag filter to find these profiles and complete their missing details.
+
 ## Dashboard definitions
 
 - **Volunteers Deployed by Year** counts unique volunteers appearing in the attendance event log for that event year, whether `Attendance` is `yes` or blank.
