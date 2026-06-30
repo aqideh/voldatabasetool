@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded',function(){
         '<div><label for="batchDbField">Field to edit</label><select id="batchDbField">',
           '<option value="tags">Tags</option>',
           '<option value="programmesRegistered">Programmes Registered</option>',
+          '<option value="recruitedYear">Recruited Year</option>',
           '<option value="gender">Gender</option>',
           '<option value="chatSession">Chat Session</option>',
           '<option value="chatSessionDate">Chat Session Date Conducted</option>',
@@ -47,7 +48,7 @@ document.addEventListener('DOMContentLoaded',function(){
   const statusEl=document.getElementById('batchDbStatus');
   const previewEl=document.getElementById('batchDbPreview');
 
-  const fieldLabels={tags:'Tags',programmesRegistered:'Programmes Registered',gender:'Gender',chatSession:'Chat Session',chatSessionDate:'Chat Session Date Conducted',interests:'Interests',languagesSpoken:'Languages Spoken',shirtSize:'T-Shirt Size',dietary:'Dietary Requirements',notes:'Notes'};
+  const fieldLabels={tags:'Tags',programmesRegistered:'Programmes Registered',recruitedYear:'Recruited Year',gender:'Gender',chatSession:'Chat Session',chatSessionDate:'Chat Session Date Conducted',interests:'Interests',languagesSpoken:'Languages Spoken',shirtSize:'T-Shirt Size',dietary:'Dietary Requirements',notes:'Notes'};
   const longFields=['interests','languagesSpoken','dietary','notes'];
 
   function setBatchEditOpen(open){
@@ -72,6 +73,7 @@ document.addEventListener('DOMContentLoaded',function(){
     valueEl.disabled=actionEl.value==='clear';
     if(fieldEl.value==='tags')valueEl.placeholder='Comma-separated tags, for example: youth, logistics';
     else if(fieldEl.value==='programmesRegistered')valueEl.placeholder='Comma-separated programmes: #amPowered, RSL, Befrienders, Community Volunteers';
+    else if(fieldEl.value==='recruitedYear')valueEl.placeholder='YYYY, for example: 2026';
     else valueEl.placeholder='Enter the value to apply';
   }
 
@@ -91,6 +93,11 @@ document.addEventListener('DOMContentLoaded',function(){
       const programmes=parseProgrammesRegistered(value);
       if(!programmes)throw new Error('Enter at least one valid programme: #amPowered, RSL, Befrienders, Community Volunteers.');
       return programmes;
+    }
+    if(field==='recruitedYear'){
+      const year=safeText(value,field);
+      if(year&&!/^\d{4}$/.test(year))throw new Error('Recruited Year must use YYYY.');
+      return year;
     }
     if(field==='chatSessionDate'){
       const date=safeDate(value,field);
