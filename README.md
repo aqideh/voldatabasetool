@@ -1,6 +1,6 @@
 # MakLom
 
-MakLom is a browser-local volunteer database tool for importing volunteer rosters, importing attendance logs, reviewing merges, managing a central database, batch-editing visible volunteers, resolving suspected duplicates, and exporting backups or Excel workbooks.
+MakLom is a browser-local volunteer database tool for importing volunteer rosters, importing attendance logs, reviewing merges, managing a central database, analysing volunteer statistics, batch-editing visible volunteers, resolving suspected duplicates, and exporting backups or Excel workbooks.
 
 The browser title and product label are **MakLom | Volunteer Data Management**. Where clarity is needed, this README refers to the product as the **MakLom Volunteer Database Tool**.
 
@@ -8,14 +8,17 @@ MakLom is static and runs on GitHub Pages with no backend, no framework, and no 
 
 ## Current app structure
 
-- `index.html` — static page shell, navigation, main view markup, privacy notice, Info panel markup, favicon reference, and script/style references
+- `index.html` — static page shell, navigation, main view markup, privacy notice, Info panel markup, favicon reference, dashboard view, and script/style references
 - `assets/app.css` — app styling, responsive layout, Info panel styling, and batch edit styling
 - `assets/profile-edit.css` — profile edit/review styling
 - `assets/brand.css` — MakLom logo styling inside the Info panel
+- `assets/dashboard.css` — analytics dashboard KPI and chart styling
 - `assets/app.js` — core app logic: imports, validation, merge review, database view, exports, JSON restore, deduplication, and attendance editing
+- `assets/programmes.js` — Programmes Registered schema extension, import/export support, and programme display logic
 - `assets/profile-edit.js` — reviewed profile edit flow
 - `assets/batch-edit.js` — Central Database batch edit feature
 - `assets/empty-filters.js` — Central Database no-value filter support
+- `assets/dashboard.js` — analytics dashboard calculations and rendering
 - `assets/info.js` — Info tab open/close behaviour
 - `assets/maklom-logo.svg` — MakLom logo shown in the Info panel
 - `assets/maklom-favicon.svg` — MakLom favicon used by the browser tab
@@ -54,9 +57,11 @@ The current checked-in assets are SVG files. This keeps the site static, self-co
 - High-confidence merge preparation using name plus phone/email matching
 - Medium/low-confidence duplicate review using phone/email and fuzzy name matching
 - Persistent suspected duplicate queue
+- Programme categorisation through **Programmes Registered**
+- Analytics dashboard with volunteer KPIs, recruited-by-year counts, deployed-by-year counts, and programme counts
 - Pre-merge tags and batch edits for staged import rows
 - Central Database search, filters, no-value filter, sorting, reviewed profile editing, and attendance editing
-- Central Database batch edit for currently visible volunteers
+- Central Database batch edit for currently visible volunteers, including programme batch edits
 - Full Excel export, redacted roster export, merge log export, and JSON backup/restore
 - Formula-safe spreadsheet exports
 - Browser-local privacy warning and export confirmations
@@ -79,7 +84,7 @@ Current hardening controls:
 - Volunteer record limit on JSON restore: 20,000 volunteers
 - Attendance limit on JSON restore: 2,000 attendance rows per volunteer
 - Standard text field length limit: 500 characters
-- Long text field length limit: 2,000 characters for Address, Interests, Languages Spoken, and Notes
+- Long text field length limit: 2,000 characters for Address, Interests, Languages Spoken, Programmes Registered, and Notes
 - Tag limit: 50 tags per volunteer
 - Tag length limit: 60 characters
 - Attendance hours constrained between 0 and 100
@@ -105,6 +110,7 @@ MakLom has these top-level tabs:
 - **Upload** — import roster or attendance files, or paste spreadsheet cells
 - **Merge Review** — review clean rows, conflicts, suspected duplicates, staged tags, and staged batch edits before committing
 - **Central Database** — search, filter, edit, batch-edit, and manage attendance
+- **Dashboard** — view important volunteer statistics and charts
 - **Export** — export full/redacted Excel files, merge logs, and JSON backups
 - **Suspected Duplicates** — resolve duplicate candidates skipped during import
 - **Info** — right-aligned blue button in the nav bar explaining how MakLom works
@@ -143,7 +149,16 @@ The roster template must use this exact header order:
 11. Emergency Contact Phone
 12. T-Shirt Size
 13. Dietary Requirements
-14. Notes
+14. Programmes Registered
+15. Notes
+
+`Programmes Registered` accepts comma-separated values from the allowed programme list:
+
+```text
+#amPowered, RSL, Befrienders, Community Volunteers
+```
+
+Values outside the allowed list are ignored during normalisation.
 
 ### Attendance log template
 
@@ -171,8 +186,68 @@ Additional validation and normalisation:
 - Excel date values are normalised when possible
 - Hours are constrained between 0 and 100
 - Standard text fields are trimmed and capped at 500 characters
-- Address, Interests, Languages Spoken, and Notes are capped at 2,000 characters
+- Address, Interests, Languages Spoken, Programmes Registered, and Notes are capped at 2,000 characters
+- Programmes Registered is normalised to the allowed programme list
 - Invalid rows are previewed but not imported
+
+## Programmes Registered
+
+MakLom includes a structured **Programmes Registered** volunteer field for tracking programme involvement.
+
+Allowed programme categories:
+
+- `#amPowered`
+- `RSL`
+- `Befrienders`
+- `Community Volunteers`
+
+The field can be edited in these places:
+
+- Volunteer roster imports
+- Expanded volunteer profile via **Edit profile**
+- Central Database batch edit
+- JSON restore/import if the field exists in saved data
+
+Multiple programmes are stored as comma-separated text, for example:
+
+```text
+#amPowered, RSL
+```
+
+The Central Database displays programmes as pill-style labels. The dashboard counts volunteers by programme category.
+
+## Dashboard
+
+The **Dashboard** tab analyses the current browser-local database.
+
+Dashboard KPI cards include:
+
+- Total Volunteers
+- Recruited
+- Active / Deployed
+- Total Hours
+- Deployment Rows
+- Inactive
+
+Dashboard charts include:
+
+- Volunteers Recruited by Year
+- Volunteers Deployed by Year
+- Programmes Registered
+- Recruited and Deployed by Year table
+
+Definitions used by the dashboard:
+
+- **Total Volunteers** — all records in `appData.volunteers`
+- **Recruited** — volunteers with a valid year in `Chat Session Date Conducted`
+- **Volunteers Recruited by Year** — grouped by the year in `Chat Session Date Conducted`
+- **Active / Deployed** — volunteers with at least one attendance row
+- **Volunteers Deployed by Year** — volunteers with attendance in that year; a volunteer is counted once per year even if they have multiple attendance rows in that year
+- **Deployment Rows** — total attendance rows across all volunteers
+- **Total Hours** — sum of recorded attendance hours
+- **Programmes Registered** — volunteers grouped by the allowed programme categories
+
+The dashboard is dependency-free. It uses HTML/CSS bars rather than a charting library.
 
 ## Merge Review workflow
 
@@ -270,12 +345,12 @@ Go to **Central Database** after confirming imports.
 
 You can:
 
-- Search volunteers by name, phone, email, gender, address, chat session, interests, languages, notes, dietary requirements, and tags
+- Search volunteers by name, phone, email, gender, address, chat session, interests, languages, programmes, notes, dietary requirements, and tags
 - Filter by tag
 - Filter by gender
 - Filter by T-shirt size
 - Filter by activity status
-- Filter by no-value status across displayed data columns
+- Filter by no-value status across displayed data columns, including Programmes Registered
 - Sort by Name A-Z, Tag then name, Total hours high-low, or Last active newest
 - Click a volunteer row to expand the full profile
 - Edit volunteer profile fields through the reviewed edit flow
@@ -294,6 +369,7 @@ The table shows:
 - Chat Session Date Conducted
 - Interests
 - Languages Spoken
+- Programmes Registered
 - Tags
 - T-Shirt Size
 - Dietary Requirements
@@ -331,13 +407,14 @@ Supported no-value filter fields:
 - Chat Session Date Conducted
 - Interests
 - Languages Spoken
+- Programmes Registered
 - Tags
 - T-Shirt Size
 - Dietary Requirements
 - Total Hours
 - Last Active
 
-For **Tags**, no value means no tags. For **Total Hours**, no value means total hours is `0`. For **Last Active**, no value means no attendance date.
+For **Programmes Registered**, no value means no recognised programme category. For **Tags**, no value means no tags. For **Total Hours**, no value means total hours is `0`. For **Last Active**, no value means no attendance date.
 
 ## Central Database batch edit
 
@@ -350,6 +427,7 @@ Before using batch edit on real data, export a JSON backup.
 Supported batch-edit fields:
 
 - Tags
+- Programmes Registered
 - Gender
 - Chat Session
 - Chat Session Date Conducted
@@ -362,12 +440,14 @@ Supported batch-edit fields:
 Supported actions:
 
 - Tags: Add tags, Replace tags, Clear tags
+- Programmes Registered: Add programmes, Replace programmes, Clear programmes
 - Interests, Languages Spoken, Dietary Requirements, Notes: Replace value, Append value, Clear value
 - Gender, Chat Session, Chat Session Date Conducted, T-Shirt Size: Replace value, Clear value
 
 Batch edit validation:
 
 - Tags are parsed, normalised to lowercase, deduplicated, and capped by the existing tag limits
+- Programmes Registered is parsed against the allowed programme categories
 - Chat Session Date Conducted must use `YYYY-MM-DD`
 - Text values use existing field limits
 - Preview shows the first 50 affected rows
@@ -422,6 +502,7 @@ The full workbook includes:
 
 - Volunteer particulars
 - Tags
+- Programmes Registered
 - Gender
 - Address
 - Chat Session
@@ -446,6 +527,7 @@ The redacted roster excludes higher-risk contact and address fields. It includes
 - Chat Session Date Conducted
 - Interests
 - Languages Spoken
+- Programmes Registered
 - Tags
 - T-Shirt Size
 - Dietary Requirements
@@ -472,6 +554,7 @@ Before restore, the app validates and normalises:
 
 - Volunteer array shape
 - Volunteer field types and length limits
+- Programmes Registered
 - Tags
 - Attendance rows
 - Suspected duplicate queue
@@ -530,9 +613,12 @@ https://aqideh.github.io/voldatabasetool/
 - No build command is required
 - The app is split into HTML, CSS, JavaScript, SVG assets, and vendored browser libraries
 - `assets/app.js` contains the core application logic
+- `assets/programmes.js` contains the Programmes Registered schema extension and related import/export/display overrides
 - `assets/profile-edit.js` contains the reviewed profile edit flow
 - `assets/batch-edit.js` contains the Central Database batch edit feature
 - `assets/empty-filters.js` contains Central Database no-value filtering
+- `assets/dashboard.js` contains analytics dashboard calculations and rendering
+- `assets/dashboard.css` contains dashboard KPI and bar chart styling
 - `assets/info.js` contains Info tab behaviour
 - `assets/brand.css` contains MakLom brand/logo styling
 - `assets/maklom-logo.svg` and `assets/maklom-favicon.svg` contain the current brand artwork
@@ -541,14 +627,7 @@ https://aqideh.github.io/voldatabasetool/
 
 ## How to add a new volunteer field
 
-The volunteer schema is defined near the top of `assets/app.js`:
-
-```js
-const VOLUNTEER_SCHEMA = [
-  { key:'name', label:'Name', type:'text' },
-  ...
-];
-```
+The volunteer schema is defined near the top of `assets/app.js`, and additional fields may also be installed through extension scripts such as `assets/programmes.js`.
 
 The current extended roster fields include:
 
@@ -559,11 +638,12 @@ The current extended roster fields include:
 { key:'chatSessionDate', label:'Chat Session Date Conducted', type:'date' }
 { key:'interests', label:'Interests', type:'textarea' }
 { key:'languagesSpoken', label:'Languages Spoken', type:'textarea' }
+{ key:'programmesRegistered', label:'Programmes Registered', type:'textarea' }
 ```
 
 To add another new field:
 
-1. Add a new object to `VOLUNTEER_SCHEMA` in `assets/app.js`.
+1. Add a new object to `VOLUNTEER_SCHEMA` in `assets/app.js` or install it through a clearly named extension script.
 2. If the field should be imported from the roster template, add the exact Excel header to `ROSTER_HEADERS`.
 3. Update `mapRosterRow()` so the new column is read into the matching field key.
 4. Update `sanitizeVolunteerRow()` and JSON validation if the field needs special validation.
@@ -588,4 +668,4 @@ To update the logo or favicon:
 
 ## Limitations
 
-MakLom is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, tagging, batch edits, and exports. It is not a multi-user system and does not provide authentication, role-based access control, encrypted shared storage, server-side backups, or audit-grade data integrity.
+MakLom is a browser-local tool. It is suitable for lightweight volunteer data management, import review, deduplication, tagging, programme categorisation, analytics, batch edits, and exports. It is not a multi-user system and does not provide authentication, role-based access control, encrypted shared storage, server-side backups, or audit-grade data integrity.
