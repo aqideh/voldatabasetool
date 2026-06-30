@@ -47,8 +47,19 @@ const originalClearLocalDataForEventLog=clearLocalData;
 clearLocalData=function(){if(!confirm('Clear the local volunteer database in this browser?'))return;appData={volunteers:[],attendanceLog:[],suspectedDuplicates:[],mergeLog:[]};pendingImport=null;expandedVolunteerId=null;saveData();renderAll();};
 
 mapAttendanceRow=function(row,rowNumber){
-  const attendance=normaliseAttendanceFlag(row[3]);
-  return validateEventLogRow({rowNumber:rowNumber,name:row[0],email:row[1],contact:row[2],attendance:attendance,eventName:row[4],eventDate:row[5],hours:row[6]});
+  const rawAttendance=cleanText(row[3]);
+  const attendance=rawAttendance===''?'':(rawAttendance.toLowerCase()==='yes'?'yes':rawAttendance);
+  return{
+    id:makeId('evt'),
+    rowNumber:rowNumber,
+    name:safeText(row[0],'name'),
+    email:safeText(row[1],'email'),
+    contact:normaliseContact(row[2]),
+    attendance:attendance,
+    eventName:safeText(row[4],'eventName'),
+    eventDate:safeDate(row[5],'eventDate'),
+    hours:normaliseEventLogHours(row[6],attendance)
+  };
 };
 
 const originalValidateMappedRowForEventLog=validateMappedRow;
@@ -81,7 +92,6 @@ validateAndPreviewRows=function(rows){
   for(let i=1;i<rows.length;i++){
     if(isBlankRow(rows[i]))continue;
     const mapped=mapAttendanceRow(rows[i],i+1);
-    mapped.rowNumber=i+1;
     mapped.issue=validateMappedRow(mapped,'attendance');
     mapped.valid=mapped.issue==='';
     uploadedRows.push(mapped);
@@ -170,6 +180,13 @@ getTotalHours=function(v){return eventLogRowsForVolunteer(v).reduce(function(tot
 getLastActive=function(v){const dates=eventLogRowsForVolunteer(v).filter(attendanceWasCaptured).map(function(row){return row.eventDate;}).filter(Boolean).sort();return dates.length?dates[dates.length-1]:'';};
 
 function eventLogExportRows(){return(appData.attendanceLog||[]).map(function(row){return safeExportRow({Name:row.name,Email:row.email,Contact:row.contact,Attendance:row.attendance,'Event Name':row.eventName,'Event Date':row.eventDate,Hours:row.hours});});}
+
+const originalExportDatabaseXlsxForEventLog=exportDatabaseXlsx;
+exportDatabaseXlsx=function(){
+  if(!confirm('Export full database? This file will contain volunteer personal data.'))return;
+  const particulars=appData.volunteers.map(function(v){return safeExportRow({Name:v.name,Phone:v.phone,Email:v.email,Gender:v.gender,Address:v.address,'Recruited Year':v.recruitedYear,'Chat Session':v.chatSession,'Chat Session Date Conducted':v.chatSessionDate,Interests:v.interests,'Languages Spoken':v.languagesSpoken,'Programmes Registered':v.programmesRegistered,Tags:tagsToText(v.tags),'Emergency Contact Name':v.emergencyName,'Emergency Contact Phone':v.emergencyPhone,'T-Shirt Size':v.shirtSize,'Dietary Requirements':v.dietary,Notes:v.notes,'Total Hours':getTotalHours(v),'Last Active':getLastActive(v)});});
+  writeWorkbook('volunteer_database.xlsx',[['Volunteer Particulars',particulars],['Attendance Event Log',eventLogExportRows()]]);
+};
 
 const originalDownloadSampleAttendanceForEventLog=downloadSampleAttendance;
 downloadSampleAttendance=function(){const sheet=XLSX.utils.aoa_to_sheet([EVENT_LOG_HEADERS,['Jane Tan','jane@example.com','9123 4567','yes','Community Event','2026-01-15',4],['Ali Ahmad','ali@example.com','8123 4567','','Community Event','2026-01-15',0]]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,sheet,'Attendance Event Log');XLSX.writeFile(wb,'attendance_event_log.xlsx');};
