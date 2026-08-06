@@ -1,3 +1,5 @@
+document.write('<script src="assets/nric-vouchers.js"><\/script>');
+
 document.addEventListener('DOMContentLoaded',function(){
   const tab=document.getElementById('infoTab');
   const panel=document.getElementById('infoPanel');
