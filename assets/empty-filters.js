@@ -38,6 +38,25 @@ function installClearFiltersButton(){
   document.getElementById('clearDatabaseFilters').addEventListener('click',clearDatabaseFilters);
 }
 
+function installDatabaseMatchCount(){
+  const searchBox=document.getElementById('searchBox');
+  if(!searchBox||document.getElementById('databaseMatchCount'))return;
+  const card=searchBox.closest('.card');
+  const heading=card?card.querySelector('h2'):null;
+  if(!heading)return;
+  const counter=document.createElement('p');
+  counter.id='databaseMatchCount';
+  counter.className='muted';
+  counter.setAttribute('aria-live','polite');
+  heading.insertAdjacentElement('afterend',counter);
+}
+
+function updateDatabaseMatchCount(count){
+  const counter=document.getElementById('databaseMatchCount');
+  if(!counter)return;
+  counter.innerHTML='<span class="pill neutral">'+count+'</span> '+(count===1?'volunteer matches':'volunteers match')+' the current filters';
+}
+
 function clearDatabaseFilters(){
   const ids=['searchBox','tagFilter','genderFilter','shirtFilter','activityFilter','noValueFilter'];
   ids.forEach(function(id){const el=document.getElementById(id);if(el)el.value='';});
@@ -46,7 +65,7 @@ function clearDatabaseFilters(){
   renderDatabase();
 }
 
-function installDatabaseFilterControls(){installNoValueFilter();installClearFiltersButton();}
+function installDatabaseFilterControls(){installNoValueFilter();installClearFiltersButton();installDatabaseMatchCount();}
 
 const originalWireDatabaseControls=wireDatabaseControls;
 wireDatabaseControls=function(){
@@ -89,6 +108,7 @@ function getFilteredVolunteers(){
     return(!q||text.indexOf(q)>-1)&&(!tag||tags.indexOf(tag)>-1)&&(!gender||v.gender===gender)&&(!shirt||v.shirtSize===shirt)&&(!activity||(activity==='active'&&has)||(activity==='inactive'&&!has))&&noValueFilterMatches(v,noValue);
   });
   sortVolunteers(filtered,sort);
+  updateDatabaseMatchCount(filtered.length);
   return filtered;
 }
 
