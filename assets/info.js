@@ -1,4 +1,11 @@
-document.write('<script src="assets/nric-vouchers.js"><\/script>');
+document.write('<script src="assets/nric-vouchers.js?v=20260813-3"><\/script>');
+
+const originalGetFilteredVolunteersForMatchCount=getFilteredVolunteers;
+getFilteredVolunteers=function(){
+  const rows=originalGetFilteredVolunteersForMatchCount();
+  if(typeof updateDatabaseMatchCount==='function')updateDatabaseMatchCount(rows.length);
+  return rows;
+};
 
 document.addEventListener('DOMContentLoaded',function(){
   const tab=document.getElementById('infoTab');
