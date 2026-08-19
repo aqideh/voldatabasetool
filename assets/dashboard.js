@@ -60,14 +60,15 @@ function sortedYearsFrom(){
 
 function renderMetricCard(label,value,note){return '<div class="dashboard-kpi"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value)+'</strong><em>'+escapeHtml(note||'')+'</em></div>';}
 
-function renderBarChart(title,counts,emptyText){
+function renderBarChart(title,counts,emptyText,scaleKeys){
   const keys=Object.keys(counts).filter(function(key){return counts[key]>0;});
   if(!keys.length)return '<div class="card"><h3>'+escapeHtml(title)+'</h3><p class="muted">'+escapeHtml(emptyText||'No data available.')+'</p></div>';
-  const max=Math.max.apply(null,keys.map(function(key){return counts[key];}));
+  const referenceKeys=Array.isArray(scaleKeys)?scaleKeys.filter(function(key){return counts[key]>0;}):keys;
+  const max=Math.max.apply(null,(referenceKeys.length?referenceKeys:keys).map(function(key){return counts[key];}));
   let html='<div class="card"><h3>'+escapeHtml(title)+'</h3><div class="dashboard-bars">';
   keys.forEach(function(key){
     const value=counts[key];
-    const width=max?Math.round((value/max)*10000)/100:0;
+    const width=max?Math.min(100,Math.round((value/max)*10000)/100):0;
     html+='<div class="dashboard-bar-row"><div class="dashboard-bar-label">'+escapeHtml(key)+'</div><div class="dashboard-bar-track"><div class="dashboard-bar-fill" style="width:'+width+'%"></div></div><div class="dashboard-bar-value">'+value+'</div></div>';
   });
   html+='</div></div>';
@@ -106,7 +107,7 @@ function renderDashboard(){
       renderBarChart('Volunteers Deployed by Year',deployed,'No attendance event log dates found.'),
     '</div>',
     '<div class="grid dashboard-grid">',
-      renderBarChart('Programmes Registered',programmes,'No programme data available.'),
+      renderBarChart('Programmes Registered',programmes,'No programme data available.',PROGRAMME_OPTIONS),
       renderYearTable(recruited,deployed),
     '</div>'
   ].join('');
