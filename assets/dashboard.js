@@ -67,7 +67,7 @@ function renderBarChart(title,counts,emptyText){
   let html='<div class="card"><h3>'+escapeHtml(title)+'</h3><div class="dashboard-bars">';
   keys.forEach(function(key){
     const value=counts[key];
-    const width=max?Math.max(4,Math.round((value/max)*100)):0;
+    const width=max?Math.round((value/max)*10000)/100:0;
     html+='<div class="dashboard-bar-row"><div class="dashboard-bar-label">'+escapeHtml(key)+'</div><div class="dashboard-bar-track"><div class="dashboard-bar-fill" style="width:'+width+'%"></div></div><div class="dashboard-bar-value">'+value+'</div></div>';
   });
   html+='</div></div>';
