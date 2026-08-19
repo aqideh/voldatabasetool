@@ -49,5 +49,6 @@
 
   window.getEventRegistrationCount=eventRegistrationCount;
   window.getEventAttendanceCount=eventAttendanceCount;
-  document.addEventListener('DOMContentLoaded',installSortOptions);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installSortOptions);
+  else installSortOptions();
 })();
