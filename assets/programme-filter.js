@@ -178,6 +178,9 @@
   }
   function wireDatabaseControls(){installBooleanQueryUi();const search=document.getElementById('searchBox');if(search&&!search.dataset.booleanQueryBound){search.dataset.booleanQueryBound='true';search.addEventListener('input',renderDatabase);}ensureQuerySortOptions();const sort=document.getElementById('sortSelect');if(sort&&!sort.dataset.booleanQueryBound){sort.dataset.booleanQueryBound='true';sort.addEventListener('change',renderDatabase);}const clear=document.getElementById('clearDatabaseQuery');if(clear&&!clear.dataset.booleanQueryBound){clear.dataset.booleanQueryBound='true';clear.addEventListener('click',clearDatabaseQuery);}const builder=document.getElementById('queryBuilder');if(builder&&!builder.dataset.booleanQueryBound){builder.dataset.booleanQueryBound='true';builder.addEventListener('click',handleBuilderClick);builder.addEventListener('change',handleBuilderChange);builder.addEventListener('input',handleBuilderInput);}renderQueryBuilder();}
 
+  window.wireDatabaseControls=wireDatabaseControls;
+  window.renderDatabase=renderDatabase;
+  window.getFilteredVolunteers=getFilteredVolunteers;
   window.updateDatabaseMatchCount=updateDatabaseMatchCount;
   window.clearDatabaseFilters=clearDatabaseQuery;
   window.volunteerHasCapturedAttendance=volunteerHasCapturedAttendance;
