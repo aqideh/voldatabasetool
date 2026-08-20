@@ -1,7 +1,14 @@
 (function installDashboardEventRetention(){
+  let retentionYear='';
+  let retentionWindow=90;
+
+  function localToday(){
+    const now=new Date();
+    return String(now.getFullYear()).padStart(4,'0')+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  }
   function analyticsOptions(){
     return{
-      today:new Date().toISOString().slice(0,10),
+      today:localToday(),
       isAttended:attendanceWasCaptured,
       volunteerKey:function(row){return normalizeEmail(row.email)||normalizePhone(row.contact);},
       normaliseEventName:function(value){return cleanText(value).toLowerCase().replace(/\s+/g,' ');}
@@ -9,8 +16,8 @@
   }
   function analyticsYears(){return EventRetentionAnalytics.years(dashboardEventLog(),analyticsOptions());}
   function defaultAnalyticsYear(){const years=analyticsYears(),current=String(new Date().getFullYear());return years.indexOf(current)>-1?current:(years.length?years[years.length-1]:current);}
-  function selectedYear(){const select=document.getElementById('dashboardAnalyticsYear');return select&&select.value?select.value:defaultAnalyticsYear();}
-  function selectedWindow(){const select=document.getElementById('dashboardRetentionWindow'),value=select?Number(select.value):90;return[30,60,90].indexOf(value)>-1?value:90;}
+  function selectedYear(){const years=analyticsYears();if(retentionYear&&(!years.length||years.indexOf(retentionYear)>-1))return retentionYear;retentionYear=defaultAnalyticsYear();return retentionYear;}
+  function selectedWindow(){return[30,60,90].indexOf(Number(retentionWindow))>-1?Number(retentionWindow):90;}
   function formatPercent(value){return value==null?'—':String(value.toFixed(1))+'%';}
   function formatRateWithCount(rate,numerator,denominator){return rate==null?'—':formatPercent(rate)+' ('+numerator+'/'+denominator+')';}
   function monthLabel(month){return['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(month)-1]||month;}
@@ -64,7 +71,12 @@
       renderCohortTable(monthlyRetention)
     ].join('');
   }
-  function wireControls(){['dashboardAnalyticsYear','dashboardRetentionWindow'].forEach(function(id){const el=document.getElementById(id);if(el&&!el.dataset.dashboardRetentionBound){el.dataset.dashboardRetentionBound='true';el.addEventListener('change',renderDashboard);}});}
+  function wireControls(){
+    const year=document.getElementById('dashboardAnalyticsYear');
+    if(year&&!year.dataset.dashboardRetentionBound){year.dataset.dashboardRetentionBound='true';year.addEventListener('change',function(){retentionYear=year.value;renderDashboard();});}
+    const windowSelect=document.getElementById('dashboardRetentionWindow');
+    if(windowSelect&&!windowSelect.dataset.dashboardRetentionBound){windowSelect.dataset.dashboardRetentionBound='true';windowSelect.addEventListener('change',function(){retentionWindow=Number(windowSelect.value);renderDashboard();});}
+  }
   function appendSection(){const target=document.getElementById('dashboardContent');if(!target||typeof EventRetentionAnalytics==='undefined')return;const old=document.getElementById('dashboardRetentionSection');if(old)old.remove();const section=document.createElement('div');section.id='dashboardRetentionSection';section.innerHTML=renderRetentionSection();target.appendChild(section);wireControls();}
 
   const previousRenderDashboard=renderDashboard;
