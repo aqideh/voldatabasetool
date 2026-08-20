@@ -117,3 +117,17 @@ const originalRenderAllForDashboard=renderAll;
 renderAll=function(){originalRenderAllForDashboard();renderDashboard();};
 
 document.addEventListener('DOMContentLoaded',renderDashboard);
+
+(function loadEventRetentionDashboard(){
+  function loadScript(src,key,onload){
+    if(document.querySelector('script[data-dashboard-module="'+key+'"]')){if(onload)onload();return;}
+    const script=document.createElement('script');
+    script.src=src;
+    script.dataset.dashboardModule=key;
+    if(onload)script.onload=onload;
+    document.head.appendChild(script);
+  }
+  loadScript('assets/event-retention-analytics.js?v=20260820-1','event-retention-analytics',function(){
+    loadScript('assets/dashboard-retention.js?v=20260820-1','dashboard-retention');
+  });
+})();
