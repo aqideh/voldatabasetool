@@ -4,8 +4,9 @@
 .shared-auth-card h1{margin-top:0}
 .shared-auth-card input{width:100%;box-sizing:border-box;margin-bottom:14px}
 .shared-auth-card button{width:100%;margin-top:6px}
-.shared-locked{visibility:hidden;pointer-events:none;height:100vh;overflow:hidden}
+.shared-locked,.shared-preauth #sharedAppShell{visibility:hidden;pointer-events:none;height:100vh;overflow:hidden}
 .shared-account{display:inline-flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;padding-left:8px}
 .shared-account button{white-space:nowrap}
-#sharedDatabaseNotice.hidden,#migrationPanel.hidden{display:none}
+.shared-safety-panel{border-width:2px}
+#sharedDatabaseNotice.hidden,#migrationPanel.hidden,#sharedSafetyPanel.hidden{display:none}
 @media(max-width:800px){.shared-account{width:100%;margin-left:0;padding:8px 0 0}.shared-auth-card{padding:22px}}
