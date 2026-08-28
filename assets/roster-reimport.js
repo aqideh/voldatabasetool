@@ -1,6 +1,7 @@
 (function installMaklomRosterReimport(){
   const EXPORT_FIELD_MAP={
     'Name':'name',
+    'Volunteer NRIC':'nric',
     'Phone':'phone',
     'Email':'email',
     'Gender':'gender',
