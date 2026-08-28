@@ -51,6 +51,10 @@ function activeVolunteerCount(){
 function totalDeploymentRows(){return dashboardEventLog().length;}
 function totalHoursAll(){return Math.round((totalDurationMinutesAll()/60)*100)/100;}
 function recruitedCount(){return appData.volunteers.filter(function(v){return yearFromValue(v.recruitedYear);}).length;}
+function communityDeploymentSummary(){
+  if(typeof CommunityDeploymentAnalytics==='undefined')return{attended:0,total:0};
+  return CommunityDeploymentAnalytics.summary(appData.volunteers,dashboardEventLog());
+}
 
 function sortedYearsFrom(){
   const years={};
@@ -91,8 +95,13 @@ function renderDashboard(){
   const total=appData.volunteers.length;
   const active=activeVolunteerCount();
   const inactive=total-active;
+  const communityDeployments=communityDeploymentSummary();
   target.innerHTML=[
     '<div class="card"><h2>Analytics Dashboard</h2><p class="muted">Recruitment is counted using <strong>Recruited Year</strong>. Deployment is counted using the separate attendance event log; blank Attendance rows still count as deployed/no-show. Active volunteers and total duration count only rows where Attendance is <strong>yes</strong>.</p></div>',
+    '<div class="card"><h3>Community Volunteers Deployment</h3><p class="muted">Counts deployments, not unique volunteers. A Community Volunteer appearing across multiple event rows is counted once per deployment. Total deployments include all attendance statuses.</p><div class="dashboard-kpis">',
+      renderMetricCard('Attended Deployments',String(communityDeployments.attended),'attendance marked yes'),
+      renderMetricCard('Total Deployments',String(communityDeployments.total),'all Community Volunteer event log rows'),
+    '</div></div>',
     '<div class="dashboard-kpis">',
       renderMetricCard('Total Volunteers',String(total),'all records'),
       renderMetricCard('Recruited',String(recruitedCount()),'with recruited year'),
