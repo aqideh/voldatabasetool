@@ -6,15 +6,6 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
 <title>MakLom | Volunteer Data Management</title>
 <link rel="icon" type="image/svg+xml" href="assets/maklom-favicon.svg">
-<!--
-  MakLom Volunteer Database Tool
-  Hardened browser-local static app:
-  1. Exact fixed-template validation for standard imports, plus recognised MakLom roster re-imports.
-  2. File, paste, row, field-length, tag, and JSON restore limits.
-  3. Formula-safe XLSX export values.
-  4. Strict JSON restore normalisation.
-  5. Privacy and export warnings for local PII handling.
--->
 <script src="vendor/xlsx-0.18.5.full.min.js"></script>
 <script src="vendor/fuse-6.6.2.min.js"></script>
 <link rel="stylesheet" href="assets/app.css">
@@ -31,17 +22,17 @@
     <div class="info-header"><h2 id="infoTitle">How MakLom works</h2><button id="closeInfoPanel" class="small" type="button">Close</button></div>
     <p>MakLom runs in your browser and stores its working database locally on this device. It does not send volunteer data to a server.</p>
     <p>Use Upload to import a roster or attendance event log template. MakLom validates headers, previews rows, and stages clean records, conflicts, and suspected duplicates for review before saving.</p>
-    <p>Use Merge Review to add tags, batch-edit staged rows, resolve conflicts, and confirm the import. Use Central Database to search and edit profiles. Use Event Log to view and edit attendance rows.</p>
+    <p>Use Merge Review to add tags, batch-edit staged rows, resolve conflicts, and confirm the import. Use Central Database to search and edit profiles. Use Event Log to view, edit, export, and re-import attendance rows.</p>
     <p>Use Dashboard to review volunteer counts, recruitment by year, deployment by year, and programme participation.</p>
-    <p>Use Export to download full, redacted, merge-log, or JSON backup files. Exported files may contain personal data and should be handled securely.</p>
+    <p>Use Export to download full, redacted, event-log, merge-log, or JSON backup files. Exported files may contain personal data and should be handled securely.</p>
     <p class="info-credit">designed and maintained by @aqideh 2026</p>
   </div>
 </div>
 <main>
 <div class="notice warn"><strong>Privacy notice:</strong> MakLom stores volunteer data only in this browser's localStorage. Do not use shared devices for real personal data. Exported files contain personal data and should be protected.</div>
 <section id="uploadView" class="view active">
-<div class="card"><h2>Import Data</h2><p class="muted">Choose the template type, then upload an Excel workbook or paste copied spreadsheet cells. Standard templates use exact headers. A roster previously exported from MakLom can also be modified in Excel and re-imported; recognised roster columns are mapped by header and changes go through Merge Review.</p><div class="row"><div><label for="fileType">Template type</label><select id="fileType"><option value="roster">Volunteer roster</option><option value="attendance">Attendance event log</option></select></div><div><label>&nbsp;</label><button id="downloadSampleRoster">Download sample roster</button><button id="downloadSampleAttendance">Download sample attendance</button></div></div></div>
-<div class="grid"><div class="card"><h3>Upload .xlsx</h3><div id="dropzone" class="dropzone" tabindex="0"><p><strong>Drop .xlsx here</strong> or click to select a file.</p><p class="muted">Maximum file size: 5 MB. Standard imports require the template headers; MakLom-exported rosters are recognised automatically.</p><input id="fileInput" class="hidden" type="file" accept=".xlsx,.xls"></div></div><div class="card"><h3>Paste spreadsheet cells</h3><p class="muted">Copy the header row and data rows from Excel or Google Sheets, then paste below. Maximum pasted text size: 1 MB.</p><label for="pasteBox">Pasted cells</label><textarea id="pasteBox" placeholder="Paste the full table here, including the header row."></textarea><div class="row"><button id="parsePaste" class="primary">Preview pasted cells</button><button id="clearPaste">Clear paste box</button></div></div></div>
+<div class="card"><h2>Import Data</h2><p class="muted">Choose the template type, then upload an Excel workbook or paste copied spreadsheet cells. Standard templates use exact headers. MakLom-exported rosters and event logs can also be modified in Excel and re-imported.</p><div class="row"><div><label for="fileType">Template type</label><select id="fileType"><option value="roster">Volunteer roster</option><option value="attendance">Attendance event log</option></select></div><div><label>&nbsp;</label><button id="downloadSampleRoster">Download sample roster</button><button id="downloadSampleAttendance">Download sample attendance</button></div></div></div>
+<div class="grid"><div class="card"><h3>Upload .xlsx</h3><div id="dropzone" class="dropzone" tabindex="0"><p><strong>Drop .xlsx here</strong> or click to select a file.</p><p class="muted">Maximum file size: 5 MB. Standard imports require the template headers; MakLom-exported files are recognised automatically.</p><input id="fileInput" class="hidden" type="file" accept=".xlsx,.xls"></div></div><div class="card"><h3>Paste spreadsheet cells</h3><p class="muted">Copy the header row and data rows from Excel or Google Sheets, then paste below. Maximum pasted text size: 1 MB.</p><label for="pasteBox">Pasted cells</label><textarea id="pasteBox" placeholder="Paste the full table here, including the header row."></textarea><div class="row"><button id="parsePaste" class="primary">Preview pasted cells</button><button id="clearPaste">Clear paste box</button></div></div></div>
 <div id="uploadStatus"></div><div id="previewCard" class="card hidden"><h3>Detected rows preview</h3><div id="previewMeta"></div><div id="previewTable" class="table-wrap"></div><p class="muted">Invalid rows are shown but will not be imported.</p><button id="prepareImport" class="primary">Prepare Merge Review</button></div>
 </section>
 <section id="mergeView" class="view"><div class="card"><h2>Merge Review</h2><p class="muted">Nothing is written to the database until Confirm Import is clicked. Use pre-merge edits before confirming.</p><div id="mergeSummary"></div><div class="row"><button id="confirmImport" class="primary">Confirm Import</button><button id="discardImport">Discard Pending Import</button></div></div><div id="batchEditBucket" class="card"></div><div id="cleanBucket" class="card"></div><div id="conflictBucket" class="card"></div><div id="suspectBucket" class="card"></div></section>
@@ -53,7 +44,7 @@
 </main>
 <script src="assets/app.js"></script>
 <script src="assets/programmes.js"></script>
-<script src="assets/roster-reimport.js?v=20260828-1"></script>
+<script src="assets/roster-reimport.js?v=20260828-2"></script>
 <script src="assets/attendance-log.js"></script>
 <script src="assets/empty-filters.js?v=20260813-2"></script>
 <script src="assets/profile-edit.js"></script>
@@ -67,6 +58,7 @@
 <script src="assets/filter-count-final.js?v=20260813-4"></script>
 <script src="assets/event-participation-filter.js?v=20260819-1"></script>
 <script src="assets/programme-filter.js?v=20260819-1"></script>
+<script src="assets/event-log-roundtrip.js?v=20260828-1"></script>
 <script src="assets/info.js?v=20260813-4"></script>
 </body>
 </html>
