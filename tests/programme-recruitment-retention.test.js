@@ -20,7 +20,7 @@ const rows=[
   {email:'old@example.com',contact:'',attendance:'yes',eventDate:'2025-12-01'}
 ];
 const result=analytics.summary(volunteers,rows,['Community Volunteers','RSL','Befrienders'],2026);
-assert.deepStrictEqual(result[0],{programme:'Community Volunteers',recruited:2,retained:2,missingRecruitedYear:1});
-assert.deepStrictEqual(result[1],{programme:'RSL',recruited:0,retained:2,missingRecruitedYear:0});
-assert.deepStrictEqual(result[2],{programme:'Befrienders',recruited:0,retained:1,missingRecruitedYear:0});
+assert.deepStrictEqual(result[0],{programme:'Community Volunteers',recruited:2,deployed:4,retained:2,missingRecruitedYear:1});
+assert.deepStrictEqual(result[1],{programme:'RSL',recruited:0,deployed:2,retained:2,missingRecruitedYear:0});
+assert.deepStrictEqual(result[2],{programme:'Befrienders',recruited:0,deployed:1,retained:1,missingRecruitedYear:0});
 console.log('programme recruitment retention tests passed');

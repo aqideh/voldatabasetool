@@ -91,11 +91,27 @@ function renderYearTable(recruited,deployed){
   return '<div class="card"><h3>Recruited and Deployed by Year</h3>'+makeTable(['Year','Recruited','Deployed'],rows)+'</div>';
 }
 
+function programmeDashboardLabel(programme){
+  if(programme==='RSL')return'ReadySetLearn';
+  return programme;
+}
+
 function renderProgrammeRecruitmentRetention(items){
   const currentYear=dashboardCurrentYear();
-  if(!items.length)return '<div class="card"><h3>Programme Recruitment & Retention — '+escapeHtml(currentYear)+'</h3><p class="muted">Programme analytics are loading.</p></div>';
-  const rows=items.map(function(item){return[item.programme,item.recruited,item.retained,item.missingRecruitedYear];});
-  return '<div class="card"><h3>Programme Recruitment & Retention — '+escapeHtml(currentYear)+'</h3><p class="muted"><strong>Recruited</strong> counts unique volunteers in the programme whose Recruited Year is '+escapeHtml(currentYear)+', regardless of activity. <strong>Retained</strong> counts unique volunteers in the programme who were recruited before '+escapeHtml(currentYear)+' and have at least one Attendance = yes event in '+escapeHtml(currentYear)+'. Missing Recruited Year records are excluded from both.</p>'+makeTable(['Programme','Recruited','Retained','Missing Recruited Year'],rows)+'</div>';
+  if(!items.length)return '<div class="card dashboard-programme-summary"><h2>Programme Summary — '+escapeHtml(currentYear)+'</h2><p class="muted">Programme analytics are loading.</p></div>';
+  const preferredOrder=['Befrienders','RSL','#amPowered','Community Volunteers'];
+  const byProgramme={};
+  items.forEach(function(item){byProgramme[item.programme]=item;});
+  const ordered=preferredOrder.map(function(programme){return byProgramme[programme]||{programme:programme,recruited:0,deployed:0,retained:0};});
+  const totals=ordered.reduce(function(total,item){
+    total.recruited+=Number(item.recruited)||0;
+    total.deployed+=Number(item.deployed)||0;
+    total.retained+=Number(item.retained)||0;
+    return total;
+  },{recruited:0,deployed:0,retained:0});
+  const rows=ordered.map(function(item){return[programmeDashboardLabel(item.programme),item.recruited,item.deployed,item.retained];});
+  rows.push(['Total',totals.recruited,totals.deployed,totals.retained]);
+  return '<div class="card dashboard-programme-summary"><h2>Programme Summary — '+escapeHtml(currentYear)+'</h2><p class="muted"><strong>Recruited</strong>: recruited in '+escapeHtml(currentYear)+'. <strong>Deployed</strong>: unique programme volunteers with at least one event-log row in '+escapeHtml(currentYear)+', including blank attendance/no-shows. <strong>Retained</strong>: recruited before '+escapeHtml(currentYear)+' and attended at least one event in '+escapeHtml(currentYear)+'.</p>'+makeTable(['Programme','Recruited','Deployed','Retained'],rows)+'</div>';
 }
 
 function renderDashboard(){
@@ -110,8 +126,8 @@ function renderDashboard(){
   const communityDeployments=communityDeploymentSummary();
   const programmeRecruitmentRetention=programmeRecruitmentRetentionSummary();
   target.innerHTML=[
-    '<div class="card"><h2>Analytics Dashboard</h2><p class="muted">Recruitment is counted using <strong>Recruited Year</strong>. Deployment is counted using the separate attendance event log; blank Attendance rows still count as deployed/no-show. Active volunteers and total duration count only rows where Attendance is <strong>yes</strong>.</p></div>',
     renderProgrammeRecruitmentRetention(programmeRecruitmentRetention),
+    '<div class="card"><h2>Analytics Dashboard</h2><p class="muted">Recruitment is counted using <strong>Recruited Year</strong>. Deployment is counted using the separate attendance event log; blank Attendance rows still count as deployed/no-show. Active volunteers and total duration count only rows where Attendance is <strong>yes</strong>.</p></div>',
     '<div class="card"><h3>Community Volunteers Deployment</h3><p class="muted">Counts deployments, not unique volunteers. A Community Volunteer appearing across multiple event rows is counted once per deployment. Total deployments include all attendance statuses.</p><div class="dashboard-kpis">',
       renderMetricCard('Attended Deployments',String(communityDeployments.attended),'attendance marked yes'),
       renderMetricCard('Total Deployments',String(communityDeployments.total),'all Community Volunteer event log rows'),
@@ -153,7 +169,7 @@ document.addEventListener('DOMContentLoaded',renderDashboard);
 (function loadProgrammeRecruitmentRetention(){
   if(typeof ProgrammeRecruitmentRetention!=='undefined')return;
   const script=document.createElement('script');
-  script.src='assets/programme-recruitment-retention.js?v=20260828-1';
+  script.src='assets/programme-recruitment-retention.js?v=20260828-2';
   script.dataset.dashboardModule='programme-recruitment-retention';
   script.onload=function(){renderDashboard();};
   document.head.appendChild(script);
