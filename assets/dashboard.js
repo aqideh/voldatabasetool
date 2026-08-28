@@ -127,6 +127,15 @@ renderAll=function(){originalRenderAllForDashboard();renderDashboard();};
 
 document.addEventListener('DOMContentLoaded',renderDashboard);
 
+(function loadCommunityDeploymentAnalytics(){
+  if(typeof CommunityDeploymentAnalytics!=='undefined')return;
+  const script=document.createElement('script');
+  script.src='assets/community-deployment-analytics.js?v=20260828-1';
+  script.dataset.dashboardModule='community-deployment-analytics';
+  script.onload=renderDashboard;
+  document.head.appendChild(script);
+})();
+
 (function loadEventRetentionDashboard(){
   function loadScript(src,key,onload){
     if(document.querySelector('script[data-dashboard-module="'+key+'"]')){if(onload)onload();return;}
