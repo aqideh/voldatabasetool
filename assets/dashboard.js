@@ -3,6 +3,7 @@ function yearFromValue(value){const text=cleanText(value);const match=text.match
 function dashboardEventLog(){return Array.isArray(appData.attendanceLog)?appData.attendanceLog:[];}
 function dashboardEventLogKey(row){return normalizeEmail(row.email)||normalizePhone(row.contact)||normalizeName(row.name);}
 function totalDurationMinutesAll(){return dashboardEventLog().reduce(function(total,row){return total+(attendanceWasCaptured(row)?Number(row.durationMinutes)||0:0);},0);}
+function dashboardCurrentYear(){return String(new Date().getFullYear());}
 
 function countByYearFromVolunteers(yearGetter){
   const counts={};
@@ -55,6 +56,10 @@ function communityDeploymentSummary(){
   if(typeof CommunityDeploymentAnalytics==='undefined')return{attended:0,total:0};
   return CommunityDeploymentAnalytics.summary(appData.volunteers,dashboardEventLog());
 }
+function programmeRecruitmentRetentionSummary(){
+  if(typeof ProgrammeRecruitmentRetention==='undefined')return[];
+  return ProgrammeRecruitmentRetention.summary(appData.volunteers,dashboardEventLog(),PROGRAMME_OPTIONS,dashboardCurrentYear());
+}
 
 function sortedYearsFrom(){
   const years={};
@@ -86,6 +91,13 @@ function renderYearTable(recruited,deployed){
   return '<div class="card"><h3>Recruited and Deployed by Year</h3>'+makeTable(['Year','Recruited','Deployed'],rows)+'</div>';
 }
 
+function renderProgrammeRecruitmentRetention(items){
+  const currentYear=dashboardCurrentYear();
+  if(!items.length)return '<div class="card"><h3>Programme Recruitment & Retention — '+escapeHtml(currentYear)+'</h3><p class="muted">Programme analytics are loading.</p></div>';
+  const rows=items.map(function(item){return[item.programme,item.recruited,item.retained,item.missingRecruitedYear];});
+  return '<div class="card"><h3>Programme Recruitment & Retention — '+escapeHtml(currentYear)+'</h3><p class="muted"><strong>Recruited</strong> counts unique volunteers in the programme whose Recruited Year is '+escapeHtml(currentYear)+', regardless of activity. <strong>Retained</strong> counts unique volunteers in the programme who were recruited before '+escapeHtml(currentYear)+' and have at least one Attendance = yes event in '+escapeHtml(currentYear)+'. Missing Recruited Year records are excluded from both.</p>'+makeTable(['Programme','Recruited','Retained','Missing Recruited Year'],rows)+'</div>';
+}
+
 function renderDashboard(){
   const target=document.getElementById('dashboardContent');
   if(!target)return;
@@ -96,8 +108,10 @@ function renderDashboard(){
   const active=activeVolunteerCount();
   const inactive=total-active;
   const communityDeployments=communityDeploymentSummary();
+  const programmeRecruitmentRetention=programmeRecruitmentRetentionSummary();
   target.innerHTML=[
     '<div class="card"><h2>Analytics Dashboard</h2><p class="muted">Recruitment is counted using <strong>Recruited Year</strong>. Deployment is counted using the separate attendance event log; blank Attendance rows still count as deployed/no-show. Active volunteers and total duration count only rows where Attendance is <strong>yes</strong>.</p></div>',
+    renderProgrammeRecruitmentRetention(programmeRecruitmentRetention),
     '<div class="card"><h3>Community Volunteers Deployment</h3><p class="muted">Counts deployments, not unique volunteers. A Community Volunteer appearing across multiple event rows is counted once per deployment. Total deployments include all attendance statuses.</p><div class="dashboard-kpis">',
       renderMetricCard('Attended Deployments',String(communityDeployments.attended),'attendance marked yes'),
       renderMetricCard('Total Deployments',String(communityDeployments.total),'all Community Volunteer event log rows'),
@@ -132,6 +146,15 @@ document.addEventListener('DOMContentLoaded',renderDashboard);
   const script=document.createElement('script');
   script.src='assets/community-deployment-analytics.js?v=20260828-1';
   script.dataset.dashboardModule='community-deployment-analytics';
+  script.onload=function(){renderDashboard();};
+  document.head.appendChild(script);
+})();
+
+(function loadProgrammeRecruitmentRetention(){
+  if(typeof ProgrammeRecruitmentRetention!=='undefined')return;
+  const script=document.createElement('script');
+  script.src='assets/programme-recruitment-retention.js?v=20260828-1';
+  script.dataset.dashboardModule='programme-recruitment-retention';
   script.onload=function(){renderDashboard();};
   document.head.appendChild(script);
 })();
