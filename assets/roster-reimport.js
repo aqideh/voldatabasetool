@@ -52,14 +52,7 @@
     return mapped;
   }
 
-  const originalValidateAndPreviewRows=validateAndPreviewRows;
-  validateAndPreviewRows=function(rows){
-    if(uploadedType!=='roster'||!rows.length||headersMatch(rows[0],ROSTER_HEADERS)){
-      return originalValidateAndPreviewRows(rows);
-    }
-    if(!looksLikeMaklomExport(rows[0])){
-      return originalValidateAndPreviewRows(rows);
-    }
+  function previewMaklomExport(rows){
     if(rows.length-1>MAX_IMPORT_ROWS){
       document.getElementById('previewCard').classList.add('hidden');
       showNotice('uploadStatus','bad','Import rejected. Maximum rows per import is '+MAX_IMPORT_ROWS+'.');
@@ -77,6 +70,17 @@
     renderPreview();
     const invalid=uploadedRows.filter(function(row){return !row.valid;}).length;
     showNotice('uploadStatus',invalid?'warn':'ok',invalid?'MakLom exported roster detected. Modified values will go through Merge Review; invalid rows are flagged.':'MakLom exported roster detected. Modified values will go through Merge Review before replacing existing values. Calculated columns such as Total Hours and Last Active are ignored.');
+  }
+
+  const originalValidateAndPreviewRows=validateAndPreviewRows;
+  validateAndPreviewRows=function(rows){
+    if(uploadedType!=='roster'||!rows.length||headersMatch(rows[0],ROSTER_HEADERS)){
+      return originalValidateAndPreviewRows(rows);
+    }
+    if(!looksLikeMaklomExport(rows[0])){
+      return originalValidateAndPreviewRows(rows);
+    }
+    previewMaklomExport(rows);
   };
 
   const originalFindHighConfidenceMatch=findHighConfidenceMatch;
@@ -121,4 +125,15 @@
     });
     appData.mergeLog.push({date:new Date().toISOString(),level:'conflict',action:'resolved MakLom roster re-import',existingName:volunteer.name,incomingName:conflict.incoming.name,reason:'User reviewed modified exported roster values.'});
   };
+
+  document.addEventListener('DOMContentLoaded',function(){
+    const finalValidateAndPreviewRows=validateAndPreviewRows;
+    validateAndPreviewRows=function(rows){
+      if(uploadedType==='roster'&&rows&&rows.length&&looksLikeMaklomExport(rows[0])){
+        previewMaklomExport(rows);
+        return;
+      }
+      return finalValidateAndPreviewRows(rows);
+    };
+  });
 })();
