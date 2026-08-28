@@ -28,5 +28,14 @@
 
   if(typeof window.exportPortableDatabase==='function'){
     exportDatabaseXlsx=window.exportPortableDatabase;
+    const button=document.getElementById('exportXlsx');
+    if(button&&!button.dataset.portableCapture){
+      button.dataset.portableCapture='true';
+      button.addEventListener('click',function(event){
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.exportPortableDatabase();
+      },true);
+    }
   }
 })();
