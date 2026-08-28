@@ -78,18 +78,46 @@
     showNotice('uploadStatus',invalid?'warn':'ok',invalid?'MakLom exported roster detected. Modified values will go through Merge Review; invalid rows are flagged.':'MakLom exported roster detected. Modified values will go through Merge Review before replacing existing values. Calculated columns such as Total Hours and Last Active are ignored.');
   };
 
+  const originalFindHighConfidenceMatch=findHighConfidenceMatch;
+  findHighConfidenceMatch=function(row){
+    if(!row||!row._maklomReimport)return originalFindHighConfidenceMatch(row);
+    const email=normalizeEmail(row.email);
+    const phone=normalizePhone(row.phone);
+    if(email){
+      const emailMatches=appData.volunteers.filter(function(v){return normalizeEmail(v.email)===email;});
+      if(emailMatches.length===1){emailMatches[0].matchReason='Unique Email from MakLom export';return emailMatches[0];}
+    }
+    if(phone){
+      const phoneMatches=appData.volunteers.filter(function(v){return normalizePhone(v.phone)===phone;});
+      if(phoneMatches.length===1){phoneMatches[0].matchReason='Unique Phone from MakLom export';return phoneMatches[0];}
+    }
+    return originalFindHighConfidenceMatch(row);
+  };
+
   const originalFindFieldConflicts=findFieldConflicts;
   findFieldConflicts=function(existing,incoming,type){
     if(type!=='roster'||!incoming||!incoming._maklomReimport)return originalFindFieldConflicts(existing,incoming,type);
-    const fields=VOLUNTEER_SCHEMA.filter(function(field){return field.key!=='tags';}).map(function(field){return field.key;});
+    const fields=VOLUNTEER_SCHEMA.map(function(field){return field.key;});
     const result={fields:[],resolvedValues:{}};
     fields.forEach(function(key){
-      const a=cleanText(existing[key]);
-      const b=cleanText(incoming[key]);
+      const a=key==='tags'?tagsToText(existing.tags):cleanText(existing[key]);
+      const b=key==='tags'?tagsToText(incoming.tags):cleanText(incoming[key]);
       if(a===b)return;
       result.fields.push({key:key,label:getVolunteerLabel(key),existing:a,incoming:b});
       result.resolvedValues[key]=a;
     });
     return result;
+  };
+
+  const originalCommitConflictItem=commitConflictItem;
+  commitConflictItem=function(conflict){
+    if(!conflict||!conflict.incoming||!conflict.incoming._maklomReimport)return originalCommitConflictItem(conflict);
+    const volunteer=getVolunteer(conflict.existingId);
+    if(!volunteer)return;
+    Object.keys(conflict.resolvedValues).forEach(function(key){
+      if(key==='tags')volunteer.tags=parseTags(conflict.resolvedValues[key]);
+      else volunteer[key]=safeText(conflict.resolvedValues[key],key);
+    });
+    appData.mergeLog.push({date:new Date().toISOString(),level:'conflict',action:'resolved MakLom roster re-import',existingName:volunteer.name,incomingName:conflict.incoming.name,reason:'User reviewed modified exported roster values.'});
   };
 })();
