@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded',renderDashboard);
   const script=document.createElement('script');
   script.src='assets/community-deployment-analytics.js?v=20260828-1';
   script.dataset.dashboardModule='community-deployment-analytics';
-  script.onload=renderDashboard;
+  script.onload=function(){renderDashboard();};
   document.head.appendChild(script);
 })();
 
