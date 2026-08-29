@@ -13,6 +13,7 @@ function installEventLogControls(){
   const search=document.getElementById('eventLogSearch');
   if(!search||search.dataset.wired==='true'){
     ensureEventLogFilterUi();
+    ensureCompactEventLogAddAction();
     updateEventLogFloatingUi();
     return;
   }
@@ -24,7 +25,23 @@ function installEventLogControls(){
   document.getElementById('clearEventLogFilters').addEventListener('click',clearEventLogFilters);
   document.getElementById('addEventLogRow').addEventListener('click',addEventLogRow);
   ensureEventLogFilterUi();
+  ensureCompactEventLogAddAction();
   updateEventLogFloatingUi();
+}
+
+function ensureCompactEventLogAddAction(){
+  if(document.getElementById('eventLogCompactAdd'))return;
+  const view=document.getElementById('eventLogView');
+  const heading=view&&view.querySelector(':scope > .card:first-child > h2');
+  if(!heading)return;
+  const button=document.createElement('button');
+  button.id='eventLogCompactAdd';
+  button.type='button';
+  button.className='event-log-compact-add primary';
+  button.textContent='+ Add';
+  button.setAttribute('aria-label','Add event log row');
+  button.addEventListener('click',addEventLogRow);
+  heading.insertAdjacentElement('afterend',button);
 }
 
 function ensureEventLogFilterUi(){
