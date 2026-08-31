@@ -1,0 +1,6 @@
+alter table public.form_submissions drop constraint if exists form_submissions_batch_id_fkey;
+alter table public.form_submissions add constraint form_submissions_batch_id_fkey foreign key (batch_id) references public.form_import_batches(id) on delete restrict;
+alter table public.attendance_reconciliations drop constraint if exists attendance_reconciliations_sign_in_submission_id_fkey;
+alter table public.attendance_reconciliations add constraint attendance_reconciliations_sign_in_submission_id_fkey foreign key (sign_in_submission_id) references public.form_submissions(id) on delete restrict;
+alter table public.attendance_reconciliations drop constraint if exists attendance_reconciliations_sign_out_submission_id_fkey;
+alter table public.attendance_reconciliations add constraint attendance_reconciliations_sign_out_submission_id_fkey foreign key (sign_out_submission_id) references public.form_submissions(id) on delete restrict;
