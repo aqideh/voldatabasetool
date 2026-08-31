@@ -62,7 +62,7 @@
 
   function renderImport(){
     const writeWarning=sharedReady()&&!canWrite()?'<div class="notice warn">This account can review form data but cannot import or edit it.</div>':'';
-    let html=writeWarning+'<div class="form-upload-grid"><label class="form-upload-box"><span>Sign-in CSV</span><small>Timestamp, identity, event and T-shirts</small><input id="formSignInFile" type="file" accept=".csv,text/csv"></label><label class="form-upload-box"><span>Sign-out CSV</span><small>Timestamp, identity, event and feedback</small><input id="formSignOutFile" type="file" accept=".csv,text/csv"></label></div><div class="form-import-actions"><button id="formAnalyzeButton" type="button" class="primary" '+(state.busy?'disabled':'')+'>Analyse files</button><span class="muted">Upload either file or both. Nothing is saved until Confirm import.</span></div>';
+    let html=writeWarning+'<div class="form-upload-grid"><label class="form-upload-box"><span>Sign-in CSV</span><small>Timestamp, identity, event and T-shirts</small><input id="formSignInFile" type="file" accept=".csv,text/csv"></label><label class="form-upload-box"><span>Sign-out CSV</span><small>Timestamp, identity, event and feedback</small><input id="formSignOutFile" type="file" accept=".csv,text/csv"></label></div><div class="form-import-actions"><button id="formAnalyzeButton" type="button" class="primary" '+(state.busy?'disabled':'')+'>Analyse files</button><span class="muted">Upload either file or both. Previously committed responses are skipped automatically. Nothing is saved until Confirm import.</span></div>';
     if(!state.sessions.length)return html+'<div class="form-empty"><strong>No reconciliation staged.</strong><span>Upload the exported CSV files to match sign-ins and sign-outs.</span></div>';
     const total=state.sessions.length,matched=state.sessions.filter(function(s){return s.matchStatus==='matched';}).length,needs=state.sessions.filter(needsReview).length,inOnly=state.sessions.filter(function(s){return s.matchStatus==='missing_sign_out';}).length,outOnly=state.sessions.filter(function(s){return s.matchStatus==='missing_sign_in';}).length;
     html+='<div class="form-kpis"><div><strong>'+total+'</strong><span>sessions</span></div><div><strong>'+matched+'</strong><span>paired</span></div><div class="'+(needs?'warn':'')+'"><strong>'+needs+'</strong><span>need review</span></div><div><strong>'+inOnly+'</strong><span>missing out</span></div><div><strong>'+outOnly+'</strong><span>missing in</span></div></div>';
@@ -150,12 +150,24 @@
     if((inFile&&inFile.size>5*1024*1024)||(outFile&&outFile.size>5*1024*1024)){status('Each CSV must be 5 MB or smaller.','bad');return;}
     setBusy(true,'Analysing…');status('');
     try{
-      state.signIns=inFile?C.parseSignInCsv(await inFile.text(),inFile.name):[];state.signOuts=outFile?C.parseSignOutCsv(await outFile.text(),outFile.name):[];state.signInFile=inFile?inFile.name:'';state.signOutFile=outFile?outFile.name:'';
+      let parsedIns=inFile?C.parseSignInCsv(await inFile.text(),inFile.name):[],parsedOuts=outFile?C.parseSignOutCsv(await outFile.text(),outFile.name):[];state.signInFile=inFile?inFile.name:'';state.signOutFile=outFile?outFile.name:'';
+      let skipped=0,retryBatch=null;
+      if(sharedReady()){
+        await loadPersisted();
+        const originalBatchId=C.batchId(parsedIns,parsedOuts);retryBatch=await getBatch(originalBatchId);
+        if(retryBatch&&retryBatch.status==='committed'){state.signIns=[];state.signOuts=[];state.sessions=[];state.batchId='';status('These exact form responses were already committed on '+String(retryBatch.completed_at||retryBatch.updated_at||retryBatch.created_at).slice(0,10)+'. No new rows were staged.','warn');render();return;}
+        if(!retryBatch){
+          const committedBatches={};state.batches.forEach(function(b){if(b.status==='committed')committedBatches[b.id]=true;});
+          const committedSubmissions={};state.submissions.forEach(function(r){if(committedBatches[r.batch_id])committedSubmissions[r.id]=true;});
+          const before=parsedIns.length+parsedOuts.length;parsedIns=parsedIns.filter(function(r){return !committedSubmissions[r.id];});parsedOuts=parsedOuts.filter(function(r){return !committedSubmissions[r.id];});skipped=before-(parsedIns.length+parsedOuts.length);
+        }
+      }
+      state.signIns=parsedIns;state.signOuts=parsedOuts;
+      if(!state.signIns.length&&!state.signOuts.length){state.sessions=[];state.batchId='';status(skipped?('No new form responses found. '+skipped+' previously committed responses were skipped.'):'No form responses were found in the selected files.','warn');render();return;}
       state.sessions=C.reconcile(state.signIns,state.signOuts,appData.volunteers||[]);state.batchId=C.batchId(state.signIns,state.signOuts);state.reviewFilter=state.sessions.some(needsReview)?'needs-review':'all';
       if(sharedReady()){
-        const existing=await getBatch(state.batchId);if(existing&&existing.status==='committed')status('These exact form responses were already committed on '+String(existing.completed_at||existing.updated_at||existing.created_at).slice(0,10)+'. Re-import is blocked to prevent duplicates.','warn');
-        else if(existing)status('A previous attempt for these responses is marked '+existing.status+'. Confirming again will safely retry the pending import.','warn');
-        else status('Files analysed. Review flagged sessions before confirming.','ok');
+        const existing=retryBatch||await getBatch(state.batchId);if(existing&&existing.status!=='committed')status('A previous attempt for these responses is marked '+existing.status+'. Confirming again will safely retry the pending import.'+(skipped?' '+skipped+' previously committed responses were skipped.':''),'warn');
+        else status('Files analysed. '+(skipped?skipped+' previously committed responses were skipped. ':'')+'Review flagged sessions before confirming.','ok');
       }else status('Files analysed locally. Sign in to MakLom before confirming the import.','warn');
       render();
     }catch(error){console.error(error);state.sessions=[];status(error.message||'Could not analyse these CSV files.','bad');}
