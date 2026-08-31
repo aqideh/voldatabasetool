@@ -77,6 +77,31 @@
   function needsReview(s){return !!((s.reviewFlags&&s.reviewFlags.length)||!s.volunteerMatch);}
   function flagLabel(flag){return({missing_sign_in:'Missing sign-in',missing_sign_out:'Missing sign-out',event_mismatch:'Event mismatch',possible_duplicate:'Possible duplicate',long_duration:'Long duration',volunteer_unmatched:'Volunteer not matched',volunteer_ambiguous:'Volunteer match ambiguous'})[flag]||flag.replace(/_/g,' ');}
   function sessionSource(s){return s.signIn||s.signOut;}
+  function initialiseVolunteerDraft(s){
+    if(s.newVolunteerDraft)return s.newVolunteerDraft;
+    const source=sessionSource(s)||{},feedback=s.signOut&&s.signOut.feedback||{},year=/^\d{4}/.test(C.clean(s.eventDate))?C.clean(s.eventDate).slice(0,4):'';
+    s.newVolunteerDraft={name:C.clean(source.name),email:C.clean(source.email),phone:C.clean(source.phone),gender:C.clean(feedback.gender),shirtSize:C.clean(s.signIn&&s.signIn.shirtSize),recruitedYear:year};
+    return s.newVolunteerDraft;
+  }
+  function exactVolunteerForDraft(draft){
+    const email=C.normalizeEmail(draft&&draft.email),phone=C.normalizePhone(draft&&draft.phone);
+    return(appData.volunteers||[]).find(function(v){return(email&&C.normalizeEmail(v.email)===email)||(phone&&C.normalizePhone(v.phone)===phone);})||null;
+  }
+  function linkSessionVolunteer(s,v,reason){
+    s.volunteerMatch={id:v.id,name:v.name,email:v.email||'',phone:v.phone||'',confidence:100,ambiguous:false,reason:reason||'staff selected'};
+    s.reviewFlags=(s.reviewFlags||[]).filter(function(f){return f!=='volunteer_unmatched'&&f!=='volunteer_ambiguous';});
+    s.reviewAcknowledged=s.reviewFlags.length===0;
+    s.newVolunteerOpen=false;delete s.newVolunteerDraft;
+  }
+  function renderVolunteerControl(s,volunteerValue){
+    const add=!s.volunteerMatch?'<button type="button" class="small" data-new-volunteer-open data-session-id="'+esc(s.id)+'" '+(!canWrite()?'disabled':'')+'>+ Add to database</button>':'';
+    return'<div><label>MakLom volunteer<input list="formVolunteerOptions" data-session-field="volunteer" data-session-id="'+esc(s.id)+'" value="'+esc(volunteerValue)+'" placeholder="Search existing volunteer"></label>'+add+'</div>';
+  }
+  function renderNewVolunteerPanel(s){
+    if(!s.newVolunteerOpen||s.volunteerMatch)return'';const d=initialiseVolunteerDraft(s);
+    return'<div class="form-source-note"><strong>Add new MakLom volunteer</strong> — prefilled from this form response. Review the details before saving.</div><div class="form-session-fields"><label>Name<input maxlength="500" data-new-volunteer-field="name" data-session-id="'+esc(s.id)+'" value="'+esc(d.name)+'"></label><label>Email<input type="email" maxlength="500" data-new-volunteer-field="email" data-session-id="'+esc(s.id)+'" value="'+esc(d.email)+'"></label><label>Phone<input maxlength="500" data-new-volunteer-field="phone" data-session-id="'+esc(s.id)+'" value="'+esc(d.phone)+'"></label><label>Gender<input maxlength="500" data-new-volunteer-field="gender" data-session-id="'+esc(s.id)+'" value="'+esc(d.gender)+'"></label><label>T-shirt size<input maxlength="500" data-new-volunteer-field="shirtSize" data-session-id="'+esc(s.id)+'" value="'+esc(d.shirtSize)+'"></label><label>Recruited year<input inputmode="numeric" maxlength="4" data-new-volunteer-field="recruitedYear" data-session-id="'+esc(s.id)+'" value="'+esc(d.recruitedYear)+'"></label><div class="form-import-actions"><button type="button" class="primary" data-new-volunteer-save data-session-id="'+esc(s.id)+'" '+(s.creatingVolunteer?'disabled':'')+'>'+(s.creatingVolunteer?'Saving…':'Create volunteer')+'</button><button type="button" data-new-volunteer-cancel data-session-id="'+esc(s.id)+'" '+(s.creatingVolunteer?'disabled':'')+'>Cancel</button></div></div>';
+  }
+
   function renderSessionCard(s){
     const source=sessionSource(s),name=source?source.name:'Unnamed',email=source?source.email:'',phone=source?source.phone:'';
     const volunteer=s.volunteerMatch&&s.volunteerMatch.id?(appData.volunteers||[]).find(function(v){return v.id===s.volunteerMatch.id;})||s.volunteerMatch:null;
@@ -86,7 +111,7 @@
     const shirt=s.signIn&&s.signIn.shirtQuantity?'<span>T-shirt: <strong>'+esc(s.signIn.shirtSize||'Unspecified')+' × '+esc(s.signIn.shirtQuantity)+'</strong></span>':'';
     const feedback=s.signOut?'<span>Feedback: <strong>received</strong></span>':'';
     const credited=s.staffCreditedMinutes==null?'':(Math.round((s.staffCreditedMinutes/60)*100)/100);
-    return '<article class="form-session '+(s.included===false?'excluded':'')+'" data-session="'+esc(s.id)+'"><div class="form-session-main"><label class="form-include"><input type="checkbox" data-session-field="included" data-session-id="'+esc(s.id)+'" '+(s.included===false?'':'checked')+'> Include</label><div class="form-session-person"><strong>'+esc(name)+'</strong><span>'+esc(email)+(email&&phone?' · ':'')+esc(phone)+'</span></div><div class="form-session-times"><span><b>In</b> '+formatTime(s.signIn&&s.signIn.timestamp.iso)+'</span><span><b>Out</b> '+formatTime(s.signOut&&s.signOut.timestamp.iso)+'</span><span><b>Calculated</b> '+esc(C.formatMinutes(s.calculatedMinutes))+'</span></div></div><div class="form-session-fields"><label>MakLom volunteer<input list="formVolunteerOptions" data-session-field="volunteer" data-session-id="'+esc(s.id)+'" value="'+esc(volunteerValue)+'" placeholder="Search existing volunteer"></label><label>Event<input list="formEventOptions" data-session-field="eventName" data-session-id="'+esc(s.id)+'" value="'+esc(s.eventName)+'"></label><label>Event date<input type="date" data-session-field="eventDate" data-session-id="'+esc(s.id)+'" value="'+esc(s.eventDate)+'"></label><label>Credited hours<input type="number" min="0" max="100" step="0.01" data-session-field="creditedHours" data-session-id="'+esc(s.id)+'" value="'+esc(credited)+'" placeholder="Calculated"></label><label>Adjustment note<input maxlength="500" data-session-field="staffCreditNote" data-session-id="'+esc(s.id)+'" value="'+esc(s.staffCreditNote||'')+'" placeholder="Optional"></label></div><div class="form-session-foot"><div class="form-session-flags">'+(flags||'<span class="pill ok">Matched</span>')+'</div><div class="form-session-extra">'+shirt+feedback+'<span>'+esc(formatDate(s.eventDate))+'</span></div></div>'+sourceEvents+(needsReview(s)?'<label class="form-ack"><input type="checkbox" data-session-field="reviewAcknowledged" data-session-id="'+esc(s.id)+'" '+(s.reviewAcknowledged?'checked':'')+'> I reviewed this flagged session and accept the pairing / exception.</label>':'')+'</article>';
+    return '<article class="form-session '+(s.included===false?'excluded':'')+'" data-session="'+esc(s.id)+'"><div class="form-session-main"><label class="form-include"><input type="checkbox" data-session-field="included" data-session-id="'+esc(s.id)+'" '+(s.included===false?'':'checked')+'> Include</label><div class="form-session-person"><strong>'+esc(name)+'</strong><span>'+esc(email)+(email&&phone?' · ':'')+esc(phone)+'</span></div><div class="form-session-times"><span><b>In</b> '+formatTime(s.signIn&&s.signIn.timestamp.iso)+'</span><span><b>Out</b> '+formatTime(s.signOut&&s.signOut.timestamp.iso)+'</span><span><b>Calculated</b> '+esc(C.formatMinutes(s.calculatedMinutes))+'</span></div></div><div class="form-session-fields">'+renderVolunteerControl(s,volunteerValue)+'<label>Event<input list="formEventOptions" data-session-field="eventName" data-session-id="'+esc(s.id)+'" value="'+esc(s.eventName)+'"></label><label>Event date<input type="date" data-session-field="eventDate" data-session-id="'+esc(s.id)+'" value="'+esc(s.eventDate)+'"></label><label>Credited hours<input type="number" min="0" max="100" step="0.01" data-session-field="creditedHours" data-session-id="'+esc(s.id)+'" value="'+esc(credited)+'" placeholder="Calculated"></label><label>Adjustment note<input maxlength="500" data-session-field="staffCreditNote" data-session-id="'+esc(s.id)+'" value="'+esc(s.staffCreditNote||'')+'" placeholder="Optional"></label></div>'+renderNewVolunteerPanel(s)+'<div class="form-session-foot"><div class="form-session-flags">'+(flags||'<span class="pill ok">Matched</span>')+'</div><div class="form-session-extra">'+shirt+feedback+'<span>'+esc(formatDate(s.eventDate))+'</span></div></div>'+sourceEvents+(needsReview(s)?'<label class="form-ack"><input type="checkbox" data-session-field="reviewAcknowledged" data-session-id="'+esc(s.id)+'" '+(s.reviewAcknowledged?'checked':'')+'> I reviewed this flagged session and accept the pairing / exception.</label>':'')+'</article>';
   }
 
   function renderSummaryFilters(){
@@ -121,6 +146,9 @@
   function handleModalClick(event){
     const tab=event.target.closest('[data-form-tab]');if(tab){switchTab(tab.dataset.formTab);return;}
     const filter=event.target.closest('[data-review-filter]');if(filter){state.reviewFilter=filter.dataset.reviewFilter;render();return;}
+    const open=event.target.closest('[data-new-volunteer-open]');if(open){const s=getSession(open.dataset.sessionId);if(s){s.newVolunteerOpen=true;initialiseVolunteerDraft(s);render();}return;}
+    const cancel=event.target.closest('[data-new-volunteer-cancel]');if(cancel){const s=getSession(cancel.dataset.sessionId);if(s){s.newVolunteerOpen=false;delete s.newVolunteerDraft;render();}return;}
+    const create=event.target.closest('[data-new-volunteer-save]');if(create){createVolunteerFromSession(create.dataset.sessionId);return;}
     if(event.target.id==='formAnalyzeButton'){analyseFiles();return;}
     if(event.target.id==='formConfirmImport'){confirmImport();return;}
     if(event.target.id==='formAcknowledgeVisible'){acknowledgeVisible();return;}
@@ -131,8 +159,12 @@
     if(event.target.id==='formSummaryTo'){state.summaryTo=event.target.value;render();return;}
     if(event.target.dataset.sessionField)updateSessionControl(event.target,true);
   }
-  function handleModalInput(event){if(event.target.dataset.sessionField&&['eventName','eventDate','creditedHours','staffCreditNote','volunteer'].indexOf(event.target.dataset.sessionField)>-1)updateSessionControl(event.target,false);}
+  function handleModalInput(event){
+    if(event.target.dataset.newVolunteerField){updateNewVolunteerDraft(event.target);return;}
+    if(event.target.dataset.sessionField&&['eventName','eventDate','creditedHours','staffCreditNote','volunteer'].indexOf(event.target.dataset.sessionField)>-1)updateSessionControl(event.target,false);
+  }
   function getSession(id){return state.sessions.find(function(s){return s.id===id;});}
+  function updateNewVolunteerDraft(el){const s=getSession(el.dataset.sessionId);if(!s)return;const d=initialiseVolunteerDraft(s);d[el.dataset.newVolunteerField]=C.clean(el.value);}
   function updateSessionControl(el,rerender){
     const s=getSession(el.dataset.sessionId);if(!s)return;const field=el.dataset.sessionField;
     if(field==='included')s.included=!!el.checked;
@@ -142,10 +174,27 @@
     else if(field==='staffCreditNote')s.staffCreditNote=C.clean(el.value);
     else if(field==='creditedHours'){const value=C.clean(el.value);s.staffCreditedMinutes=value===''?null:Math.max(0,Math.round(Number(value)*60));}
     else if(field==='volunteer'){
-      const v=volunteerDisplayMap()[el.value]||null;s.volunteerMatch=v?{id:v.id,name:v.name,email:v.email||'',phone:v.phone||'',confidence:100,ambiguous:false,reason:'staff selected'}:null;
-      s.reviewFlags=(s.reviewFlags||[]).filter(function(f){return f!=='volunteer_unmatched'&&f!=='volunteer_ambiguous';});if(!v)s.reviewFlags.push('volunteer_unmatched');s.reviewAcknowledged=false;
+      const v=volunteerDisplayMap()[el.value]||null;if(v)linkSessionVolunteer(s,v,'staff selected');else{s.volunteerMatch=null;s.reviewFlags=(s.reviewFlags||[]).filter(function(f){return f!=='volunteer_unmatched'&&f!=='volunteer_ambiguous';});s.reviewFlags.push('volunteer_unmatched');s.reviewAcknowledged=false;}
     }
     if(rerender)render();
+  }
+  async function createVolunteerFromSession(sessionId){
+    const s=getSession(sessionId);if(!s)return;if(!canWrite()){status('Your account does not have edit access.','bad');return;}if(!sharedReady()||!S().volunteerToDb){status('MakLom shared database is not ready.','bad');return;}
+    const d=initialiseVolunteerDraft(s),name=C.clean(d.name),email=C.clean(d.email),phone=C.clean(d.phone),year=C.clean(d.recruitedYear);
+    if(!name||(!email&&!phone)){status('The new volunteer needs a name and either an email address or phone number.','warn');return;}
+    if(email&&typeof isValidEmail==='function'&&!isValidEmail(email)){status('Enter a valid email address before creating the volunteer.','warn');return;}
+    if(year&&!/^\d{4}$/.test(year)){status('Recruited year must use YYYY.','warn');return;}
+    const existing=exactVolunteerForDraft(d);if(existing){linkSessionVolunteer(s,existing,'existing exact contact');status('An existing volunteer with the same email or phone was found and linked instead of creating a duplicate.','warn');render();return;}
+    const v=validateVolunteer({id:makeId('vol'),name:name,phone:phone,email:email,gender:C.clean(d.gender),address:'',recruitedYear:year,chatSession:'',chatSessionDate:'',interests:'',languagesSpoken:'',emergencyName:'',emergencyPhone:'',shirtSize:C.clean(d.shirtSize),dietary:'',programmesRegistered:'',tags:['needs profile update'],notes:'Created from Form Operations for '+C.clean(s.eventName)+' on '+C.clean(s.eventDate)+'. Review and complete this volunteer profile.',attendance:[]});
+    s.creatingVolunteer=true;render();
+    try{
+      const dbRow=S().volunteerToDb(v),added=await postRows('volunteers',[dbRow],'ignore');if(!added.length)throw new Error('The volunteer record was not returned after saving.');
+      appData.volunteers=Array.isArray(appData.volunteers)?appData.volunteers:[];appData.volunteers.push(v);
+      if(S().state&&S().state.remoteVersions&&S().state.lastSnapshot){S().state.remoteVersions.volunteers=S().state.remoteVersions.volunteers||{};S().state.remoteVersions.volunteers[v.id]=Number(added[0].row_version)||1;S().state.lastSnapshot.volunteers=S().state.lastSnapshot.volunteers||{};S().state.lastSnapshot.volunteers[v.id]=S().clone(dbRow);}
+      if(S().originalSaveData)S().originalSaveData();
+      const saved=(appData.volunteers||[]).find(function(row){return row.id===v.id;})||v;linkSessionVolunteer(s,saved,'created from form reconciliation');status(saved.name+' was added to the Central Database and linked to this attendance session.','ok');
+    }catch(error){console.error(error);status('Could not create the volunteer: '+error.message,'bad');}
+    finally{s.creatingVolunteer=false;render();}
   }
   function acknowledgeVisible(){state.sessions.forEach(function(s){let visible=state.reviewFilter==='all'||(state.reviewFilter==='needs-review'&&needsReview(s))||(state.reviewFilter==='matched'&&s.matchStatus==='matched')||(state.reviewFilter==='incomplete'&&s.matchStatus!=='matched');if(visible&&s.included!==false&&needsReview(s))s.reviewAcknowledged=true;});render();}
 
