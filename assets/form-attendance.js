@@ -12,7 +12,7 @@
   function S(){return window.MaklomSharedDB;}
   function byId(id){return document.getElementById(id);}
   function clean(v){return C.clean(v);}
-  function esc(v){return typeof escapeHtml==='function'?escapeHtml(String(v==null?'':v)):String(v==null?'':v).replace(/[&<>"']/g,function(ch){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];});}
+  function esc(v){return typeof escapeHtml==='function'?escapeHtml(String(v==null?'':v)):String(v==null?'':v).replace(/[&<>"']/g,function(ch){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'})[ch];});}
   function sharedReady(){return !!(S()&&S().ready);}
   function canWrite(){return !!(S()&&S().ready&&S().canWrite&&S().canWrite());}
   function status(message,type){const el=byId('formAttendanceStatus');if(!el)return;el.innerHTML=message?'<div class="notice '+(type||'ok')+'">'+esc(message)+'</div>':'';}
@@ -20,8 +20,8 @@
   function sourceOf(s){return s.signIn||s.signOut||{};}
   function originalIn(s){return s.signIn&&s.signIn.timestamp&&s.signIn.timestamp.iso||'';}
   function originalOut(s){return s.signOut&&s.signOut.timestamp&&s.signOut.timestamp.iso||'';}
-  function effectiveIn(s){return s.signInAt||originalIn(s)||'';}
-  function effectiveOut(s){return s.signOutAt||originalOut(s)||'';}
+  function effectiveIn(s){return Object.prototype.hasOwnProperty.call(s,'signInAt')?(s.signInAt||''):(originalIn(s)||'');}
+  function effectiveOut(s){return Object.prototype.hasOwnProperty.call(s,'signOutAt')?(s.signOutAt||''):(originalOut(s)||'');}
   function sessionTime(s){const value=effectiveIn(s)||effectiveOut(s)||sourceOf(s).timestamp&&sourceOf(s).timestamp.iso||'';const ms=Date.parse(value);return Number.isFinite(ms)?ms:Number.MAX_SAFE_INTEGER;}
   function sortOldest(list){return(list||[]).slice().sort(function(a,b){const d=sessionTime(a)-sessionTime(b);if(d)return d;return(clean(a.eventName)||'').localeCompare(clean(b.eventName)||'')||clean(sourceOf(a).name).localeCompare(clean(sourceOf(b).name));});}
   function formatDateTime(iso){if(!iso)return'—';const d=new Date(iso);if(!Number.isFinite(d.getTime()))return iso;return d.toLocaleString('en-SG',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Singapore'});}
@@ -32,7 +32,6 @@
     return parts.year+'-'+parts.month+'-'+parts.day+'T'+parts.hour+':'+parts.minute;
   }
   function singaporeIso(value){if(!value)return null;if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))return null;const iso=value+':00+08:00';return Number.isFinite(Date.parse(iso))?iso:null;}
-  function minutesBetween(a,b){if(!a||!b)return null;const delta=Math.round((Date.parse(b)-Date.parse(a))/60000);return Number.isFinite(delta)&&delta>=0?delta:null;}
   function volunteerName(id){const v=(appData.volunteers||[]).find(function(row){return row.id===id;});return v?v.name:'';}
   function databaseMatchLabel(s){const id=s.volunteerMatch&&s.volunteerMatch.id||s.volunteerId||'';if(!id)return'No main-database match';const name=volunteerName(id)||s.volunteerMatch&&s.volunteerMatch.name||'Matched volunteer';return'Matched to '+name;}
   function flagLabel(flag){return({missing_sign_in:'Missing sign-in',missing_sign_out:'Missing sign-out',event_mismatch:'Event mismatch',possible_duplicate:'Possible duplicate',long_duration:'Long duration',volunteer_unmatched:'No main-database match',volunteer_ambiguous:'Ambiguous main-database match',manual_time_edit:'Time amended manually',invalid_time_order:'Sign-out before sign-in'})[flag]||String(flag||'').replace(/_/g,' ');}
@@ -210,7 +209,7 @@
 
   async function loadPersisted(doRender){
     if(!sharedReady())return;const result=await Promise.all([S().fetchRows('form_import_batches','*'),S().fetchRows('form_submissions','*'),S().fetchRows('attendance_reconciliations','*')]);state.batches=result[0]||[];state.submissions=result[1]||[];const committed={};state.batches.forEach(function(b){if(b.status==='committed')committed[b.id]=true;});const map={};state.submissions.forEach(function(r){map[r.id]=dbSubmissionToCore(r);});
-    state.persisted=sortOldest((result[2]||[]).filter(function(r){return committed[r.batch_id];}).map(function(r){const s={id:r.id,batchId:r.batch_id,volunteerId:r.volunteer_id||null,signIn:r.sign_in_submission_id?map[r.sign_in_submission_id]||null:null,signOut:r.sign_out_submission_id?map[r.sign_out_submission_id]||null:null,eventName:r.event_name,eventDate:r.event_date,signInAt:r.sign_in_at||null,signOutAt:r.sign_out_at||null,calculatedMinutes:r.calculated_duration_minutes,staffCreditedMinutes:r.staff_credited_duration_minutes,staffCreditNote:r.staff_credit_note||'',matchStatus:r.match_status,matchConfidence:r.match_confidence,matchReason:r.match_reason||'',reviewFlags:Array.isArray(r.review_flags)?r.review_flags:[],included:r.included,rowVersion:Number(r.row_version)||1,updatedAt:r.updated_at||''};return prepareSession(s);}));if(doRender!==false)render();
+    state.persisted=sortOldest((result[2]||[]).filter(function(r){return committed[r.batch_id];}).map(function(r){const s={id:r.id,batchId:r.batch_id,volunteerId:r.volunteer_id||null,signIn:r.sign_in_submission_id?map[r.sign_in_submission_id]||null:null,signOut:r.sign_out_submission_id?map[r.sign_out_submission_id]||null:null,eventName:r.event_name,eventDate:r.event_date,signInAt:r.sign_in_at===null?null:r.sign_in_at,signOutAt:r.sign_out_at===null?null:r.sign_out_at,calculatedMinutes:r.calculated_duration_minutes,staffCreditedMinutes:r.staff_credited_duration_minutes,staffCreditNote:r.staff_credit_note||'',matchStatus:r.match_status,matchConfidence:r.match_confidence,matchReason:r.match_reason||'',reviewFlags:Array.isArray(r.review_flags)?r.review_flags:[],included:r.included,rowVersion:Number(r.row_version)||1,updatedAt:r.updated_at||''};return prepareSession(s);}));if(doRender!==false)render();
   }
 
   document.addEventListener('DOMContentLoaded',install);
