@@ -74,7 +74,7 @@
   S.loadMember=async function(){
     const userId=S.currentUserId();if(!userId)return null;
     const response=await S.apiFetch('/rest/v1/app_members?user_id=eq.'+encodeURIComponent(userId)+'&select=user_id,role,active',{method:'GET'});
-    if(!response.ok)throw new Error('Could not verify MakLom access.');const rows=await response.json();S.state.member=rows[0]||null;return S.state.member;
+    if(!response.ok)throw new Error('Could not verify MakLom access.');const rows=await response.json();S.state.member=rows[0]||null;S.emitAccessState();return S.state.member;
   };
   S.blankLocalData=function(){return validateJsonSave({volunteers:[],attendanceLog:[],suspectedDuplicates:[],mergeLog:[],reportingMetrics:[]});};
   S.clearCachedPii=function(){localStorage.removeItem(S.config.localDataKey);S.clearDirty();appData=S.blankLocalData();pendingImport=null;expandedVolunteerId=null;};
