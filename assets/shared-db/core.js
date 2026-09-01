@@ -28,6 +28,8 @@
   S.state.lastSnapshot=S.emptySnapshot();S.state.remoteVersions=S.emptyVersions();
   S.currentUserId=function(){const x=S.state.session;return x&&x.user&&x.user.id||null;};
   S.canWrite=function(){const m=S.state.member;return !!(m&&m.active&&(m.role==='editor'||m.role==='admin'));};
+  S.getAccessState=function(){const st=S.state,m=st.member;if(!st.session)return{status:'signed_out',ready:false,authenticated:false,active:false,role:null,canWrite:false,canDelete:false};if(!m)return{status:'loading',ready:false,authenticated:true,active:false,role:null,canWrite:false,canDelete:false};if(!m.active)return{status:'unauthorized',ready:false,authenticated:true,active:false,role:m.role||null,canWrite:false,canDelete:false};if(!st.ready)return{status:'loading',ready:false,authenticated:true,active:true,role:m.role||null,canWrite:false,canDelete:false};const writable=m.role==='editor'||m.role==='admin';return{status:writable?'writable':'read_only',ready:true,authenticated:true,active:true,role:m.role||null,canWrite:writable,canDelete:m.role==='admin'};};
+  S.emitAccessState=function(){const detail=S.getAccessState();window.dispatchEvent(new CustomEvent('maklom:access-state',{detail:detail}));return detail;};
   S.isDirty=function(){return sessionStorage.getItem(S.config.dirtyKey)==='1'||localStorage.getItem(S.config.dirtyKey)==='1';};
   S.markDirty=function(){sessionStorage.setItem(S.config.dirtyKey,'1');localStorage.setItem(S.config.dirtyKey,'1');};
   S.clearDirty=function(){sessionStorage.removeItem(S.config.dirtyKey);localStorage.removeItem(S.config.dirtyKey);};
