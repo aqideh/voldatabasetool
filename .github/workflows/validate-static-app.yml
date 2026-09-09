@@ -1,6 +1,13 @@
 name: Validate static app
 
 on:
+  push:
+    branches:
+      - 'feature/events-shifts-impact'
+    paths:
+      - 'assets/**/*.js'
+      - 'index.html'
+      - '.github/workflows/validate-static-app.yml'
   pull_request:
     paths:
       - 'assets/**/*.js'
