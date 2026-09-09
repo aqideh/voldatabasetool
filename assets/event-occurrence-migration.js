@@ -119,15 +119,16 @@
   function enhanceCandidateList(){
     const buttons=Array.from(document.querySelectorAll('[data-candidate-name]'));if(!buttons.length)return;
     const card=buttons[0].closest('.card');if(!card)return;
+    let changed=false;
     buttons.forEach(function(button){
       const row=button.closest('.event-candidate-row');if(!row||row.querySelector('[data-group-candidate]'))return;
       const name=clean(button.dataset.candidateName);const box=document.createElement('input');box.type='checkbox';box.dataset.groupCandidate=name;box.title='Select this log group for one combined event';box.checked=selected.has(name);
       box.addEventListener('change',function(){if(box.checked)selected.add(name);else selected.delete(name);refreshToolbar(card);});
-      row.insertBefore(box,row.firstChild);
+      row.classList.add('has-group-select');row.insertBefore(box,row.firstChild);changed=true;
     });
     let toolbar=card.querySelector('#eventCandidateGroupToolbar');
-    if(!toolbar){toolbar=document.createElement('div');toolbar.id='eventCandidateGroupToolbar';toolbar.className='event-candidate-toolbar';const heading=card.querySelector('h3');if(heading)heading.insertAdjacentElement('afterend',toolbar);else card.prepend(toolbar);}
-    refreshToolbar(card);
+    if(!toolbar){toolbar=document.createElement('div');toolbar.id='eventCandidateGroupToolbar';toolbar.className='event-candidate-toolbar';const heading=card.querySelector('h3');if(heading)heading.insertAdjacentElement('afterend',toolbar);else card.prepend(toolbar);changed=true;}
+    if(changed)refreshToolbar(card);
   }
 
   function refreshToolbar(card){
