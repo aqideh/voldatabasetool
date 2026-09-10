@@ -38,11 +38,32 @@
   function namesAreSimilar(a,b){return textIsSimilar(a,b,NAME_DISTANCE_RATIO,duplicateName);}
   function eventNamesAreSimilar(a,b){return textIsSimilar(a,b,EVENT_DISTANCE_RATIO,duplicateText);}
 
+  function explicitShiftFromName(value){
+    const name=duplicateText(value);
+    if(!name)return'';
+    if(/\b(?:a\s*m|am|morning)\b/.test(name))return'AM';
+    if(/\b(?:p\s*m|pm|afternoon)\b/.test(name))return'PM';
+    if(/\bevening\b/.test(name))return'EVENING';
+    if(/\bnight\b/.test(name))return'NIGHT';
+    if(/\b(?:full\s*day|all\s*day)\b/.test(name))return'FULL_DAY';
+    const numbered=name.match(/\bshift\s*(\d+)\b/);
+    return numbered?'SHIFT_'+numbered[1]:'';
+  }
+
+  function rowsHaveDifferentExplicitShifts(a,b){
+    const eventIdA=cleanText(a&&a.eventId),eventIdB=cleanText(b&&b.eventId);
+    const shiftIdA=cleanText(a&&a.shiftId),shiftIdB=cleanText(b&&b.shiftId);
+    if(eventIdA&&eventIdB&&eventIdA===eventIdB&&shiftIdA&&shiftIdB)return shiftIdA!==shiftIdB;
+    const shiftA=explicitShiftFromName(a&&a.eventName),shiftB=explicitShiftFromName(b&&b.eventName);
+    return !!(shiftA&&shiftB&&shiftA!==shiftB);
+  }
+
   function rowsAreSuspectedDuplicates(a,b){
     if(!a||!b)return false;
     if(a.id&&b.id&&a.id===b.id)return false;
     const dateA=cleanText(a.eventDate),dateB=cleanText(b.eventDate);
     if(!dateA||dateA!==dateB)return false;
+    if(rowsHaveDifferentExplicitShifts(a,b))return false;
     if(!eventNamesAreSimilar(a.eventName,b.eventName))return false;
     const emailA=duplicateEmail(a.email),emailB=duplicateEmail(b.email);
     if(emailA&&emailB)return emailA===emailB;
@@ -51,7 +72,9 @@
 
   function duplicateReason(a,b){
     const emailA=duplicateEmail(a&&a.email),emailB=duplicateEmail(b&&b.email);
-    return emailA&&emailB&&emailA===emailB?'same email, same event date, similar event name':'similar name, same event date, similar event name';
+    const shift=explicitShiftFromName(a&&a.eventName)||explicitShiftFromName(b&&b.eventName);
+    const shiftText=shift?' and same/ambiguous shift':'';
+    return emailA&&emailB&&emailA===emailB?'same email, same event date, similar event name'+shiftText:'similar name, same event date, similar event name'+shiftText;
   }
 
   function detectDuplicatePairs(rows){
@@ -189,4 +212,5 @@
 
   window.detectEventLogDuplicatePairs=detectDuplicatePairs;
   window.eventLogRowsAreSuspectedDuplicates=rowsAreSuspectedDuplicates;
+  window.eventLogExplicitShiftFromName=explicitShiftFromName;
 })();
