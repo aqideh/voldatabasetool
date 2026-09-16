@@ -1,26 +1,26 @@
 name: Validate static app
 
 on:
-  push:
-    branches:
-      - 'feature/events-shifts-impact'
-    paths:
-      - 'assets/**/*.js'
-      - 'index.html'
-      - '.github/workflows/validate-static-app.yml'
   pull_request:
     paths:
-      - 'assets/**/*.js'
+      - 'assets/**'
+      - 'src/**'
+      - 'scripts/**'
       - 'index.html'
+      - 'package.json'
+      - 'vercel.json'
       - '.github/workflows/validate-static-app.yml'
   workflow_dispatch:
 
 jobs:
-  javascript-syntax:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check JavaScript syntax
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check legacy JavaScript syntax
         shell: bash
         run: |
           set -euo pipefail
@@ -28,3 +28,14 @@ jobs:
             echo "Checking $file"
             node --check "$file"
           done
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build Mantine shell
+        run: npm run build
+      - name: Verify build output
+        shell: bash
+        run: |
+          test -f dist/index.html
+          test -f dist/assets/mantine-shell.js
+          test -f dist/assets/mantine.css
+          test -f dist/assets/mantine-bridge.css

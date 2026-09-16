@@ -1,0 +1,18 @@
+#mantineShell{display:none}
+body.mantine-shell-active #mantineShell{display:block}
+body.mantine-shell-active>#sharedAppShell>header,
+body.mantine-shell-active>#sharedAppShell>nav,
+body.mantine-shell-active>header,
+body.mantine-shell-active>nav{display:none}
+body.mantine-shell-active{background:#f6f8fb}
+body.mantine-shell-active main{margin-left:230px;padding-top:82px;min-height:100vh}
+body.mantine-shell-active .maklom-mantine-header{border-bottom:1px solid #e5e7eb;background:rgba(255,255,255,.96);backdrop-filter:blur(12px)}
+body.mantine-shell-active .maklom-mantine-navbar{border-right:1px solid #e5e7eb;background:#fff;padding-top:4px}
+body.mantine-shell-active .maklom-account-label{overflow-wrap:anywhere;line-height:1.35}
+body.mantine-shell-active .card{border-color:#e5e7eb;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+body.mantine-shell-active button{font-family:inherit}
+body.mantine-shell-active .info-panel{top:76px}
+@media(max-width:47.99em){
+  body.mantine-shell-active main{margin-left:0;padding-top:78px}
+  body.mantine-shell-active .info-panel{top:72px;right:14px}
+}
