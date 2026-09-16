@@ -14,6 +14,8 @@ import {
   Badge,
   ActionIcon,
   Tooltip,
+  Button,
+  Divider,
 } from '@mantine/core';
 
 const NAV_ITEMS = [
@@ -35,8 +37,12 @@ const theme = createTheme({
   headings: { fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
 });
 
+function legacyNav() {
+  return document.querySelector('#sharedAppShell > nav, body > nav');
+}
+
 function legacyButton(view) {
-  return document.querySelector(`body > nav button[data-view="${view}"]`);
+  return legacyNav()?.querySelector(`button[data-view="${view}"]`) || null;
 }
 
 function currentLegacyView() {
@@ -44,10 +50,21 @@ function currentLegacyView() {
   return active?.id || 'uploadView';
 }
 
+function syncSnapshot() {
+  const sync = document.getElementById('sharedSyncStatus');
+  const account = document.getElementById('sharedAccountLabel');
+  return {
+    duplicateCount: (document.getElementById('dupCount')?.textContent || '0').trim(),
+    syncLabel: (sync?.textContent || '').trim(),
+    syncKind: sync?.classList.contains('bad') ? 'red' : sync?.classList.contains('ok') ? 'green' : 'gray',
+    accountLabel: (account?.textContent || '').trim(),
+  };
+}
+
 function Shell() {
   const [mobileOpened, setMobileOpened] = useState(false);
   const [activeView, setActiveView] = useState(currentLegacyView());
-  const [duplicateCount, setDuplicateCount] = useState('0');
+  const [snapshot, setSnapshot] = useState(syncSnapshot());
   const [, forceSync] = useState(0);
 
   useEffect(() => {
@@ -55,17 +72,16 @@ function Shell() {
 
     const sync = () => {
       setActiveView(currentLegacyView());
-      const count = document.getElementById('dupCount');
-      setDuplicateCount((count?.textContent || '0').trim());
+      setSnapshot(syncSnapshot());
       forceSync((value) => value + 1);
     };
     sync();
 
     const observer = new MutationObserver(sync);
     const main = document.querySelector('main');
-    const legacyNav = document.querySelector('body > nav');
+    const nav = legacyNav();
     if (main) observer.observe(main, { subtree: true, attributes: true, attributeFilter: ['class'] });
-    if (legacyNav) observer.observe(legacyNav, { subtree: true, childList: true, characterData: true });
+    if (nav) observer.observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
 
     window.addEventListener('maklom:access-state', sync);
     return () => {
@@ -85,8 +101,8 @@ function Shell() {
     setMobileOpened(false);
   }
 
-  function openInfo() {
-    document.getElementById('infoTab')?.click();
+  function clickLegacy(id) {
+    document.getElementById(id)?.click();
     setMobileOpened(false);
   }
 
@@ -105,9 +121,12 @@ function Shell() {
               <Text size="xs" c="dimmed" visibleFrom="xs">Volunteer data management</Text>
             </div>
           </Group>
-          <Tooltip label="About MakLom">
-            <ActionIcon variant="light" size="lg" radius="md" aria-label="About MakLom" onClick={openInfo}>i</ActionIcon>
-          </Tooltip>
+          <Group gap="xs" wrap="nowrap">
+            {snapshot.syncLabel ? <Badge variant="light" color={snapshot.syncKind} visibleFrom="xs">{snapshot.syncLabel}</Badge> : null}
+            <Tooltip label="About MakLom">
+              <ActionIcon variant="light" size="lg" radius="md" aria-label="About MakLom" onClick={() => clickLegacy('infoTab')}>i</ActionIcon>
+            </Tooltip>
+          </Group>
         </Group>
       </AppShell.Header>
 
@@ -121,11 +140,17 @@ function Shell() {
                 label={label}
                 active={activeView === view}
                 onClick={() => go(view)}
-                rightSection={view === 'duplicatesView' && duplicateCount !== '0' ? <Badge size="sm" variant="light">{duplicateCount}</Badge> : null}
+                rightSection={view === 'duplicatesView' && snapshot.duplicateCount !== '0' ? <Badge size="sm" variant="light">{snapshot.duplicateCount}</Badge> : null}
                 variant="light"
                 bdrs="md"
               />
             ))}
+            <Divider my="sm" />
+            {snapshot.accountLabel ? <Text size="xs" c="dimmed" px="sm" className="maklom-account-label">{snapshot.accountLabel}</Text> : null}
+            <Group grow gap="xs" px="xs">
+              <Button size="compact-sm" variant="light" onClick={() => clickLegacy('sharedRefresh')}>Refresh</Button>
+              <Button size="compact-sm" variant="default" onClick={() => clickLegacy('sharedSignOut')}>Sign out</Button>
+            </Group>
           </Stack>
         </ScrollArea>
       </AppShell.Navbar>
