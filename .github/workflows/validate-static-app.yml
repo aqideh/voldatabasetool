@@ -30,12 +30,17 @@ jobs:
           done
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Build Mantine shell
+      - name: Build static app
         run: npm run build
-      - name: Verify build output
+      - name: Verify Web Awesome build output
         shell: bash
         run: |
+          set -euo pipefail
           test -f dist/index.html
-          test -f dist/assets/mantine-shell.js
-          test -f dist/assets/mantine.css
-          test -f dist/assets/mantine-bridge.css
+          test -f dist/assets/webawesome-events.js
+          test -f dist/assets/webawesome-events.css
+          test -f dist/vendor/webawesome/webawesome.loader.js
+          test -f dist/vendor/webawesome/styles/webawesome.css
+          grep -q 'vendor/webawesome/webawesome.loader.js' dist/index.html
+          grep -q 'assets/webawesome-events.js' dist/index.html
+          ! grep -q 'mantine' dist/index.html
