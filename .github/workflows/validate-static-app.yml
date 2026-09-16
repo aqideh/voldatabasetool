@@ -39,8 +39,11 @@ jobs:
           test -f dist/index.html
           test -f dist/assets/webawesome-events.js
           test -f dist/assets/webawesome-events.css
+          test -f dist/assets/webawesome-ui.js
+          test -f dist/assets/webawesome-ui.css
           test -f dist/vendor/webawesome/webawesome.loader.js
           test -f dist/vendor/webawesome/styles/webawesome.css
           grep -q 'vendor/webawesome/webawesome.loader.js' dist/index.html
-          grep -q 'assets/webawesome-events.js' dist/index.html
-          ! grep -q 'mantine' dist/index.html
+          grep -q 'assets/webawesome-ui.js' dist/index.html
+          grep -q 'assets/webawesome-ui.css' dist/index.html
+          ! grep -qi 'mantine' dist/index.html
