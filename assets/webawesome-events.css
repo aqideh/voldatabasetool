@@ -1,0 +1,11 @@
+#eventsView .wa-proxy-source{display:none!important}
+#eventsView .maklom-wa-button{vertical-align:middle}
+#eventsView .event-inline-actions .maklom-wa-button{margin:0}
+#eventsView .row .maklom-wa-button{margin:0}
+#eventsView wa-button::part(base){font-weight:600;border-radius:8px}
+#eventsView wa-button[variant="brand"]::part(base){background:var(--brand);border-color:var(--brand)}
+#eventsView wa-button[variant="danger"]::part(base){background:var(--bad);border-color:var(--bad)}
+#eventsView wa-badge{vertical-align:middle}
+#eventsView wa-badge[variant="neutral"]{--wa-color-fill-loud:var(--text)}
+#eventsView .event-manager-head wa-button{flex:0 0 auto}
+@media(max-width:720px){#eventsView .event-manager-head wa-button{width:100%}#eventsView .event-inline-actions wa-button{width:auto}}
