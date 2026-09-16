@@ -7,10 +7,16 @@ await mkdir('dist/vendor', { recursive: true });
 await Promise.all([
   cp('assets', 'dist/assets', { recursive: true }),
   cp('vendor', 'dist/vendor', { recursive: true }),
-  cp('node_modules/@awesome.me/webawesome/dist-cdn', 'dist/vendor/webawesome', { recursive: true }),
 ]);
+await cp('node_modules/@awesome.me/webawesome/dist-cdn', 'dist/vendor/webawesome', { recursive: true });
 
-const sourceHtml = await readFile('index.html', 'utf8');
+let sourceHtml = await readFile('index.html', 'utf8');
+sourceHtml = sourceHtml
+  .replace('<link rel="stylesheet" href="assets/mantine.css">\n', '')
+  .replace('<link rel="stylesheet" href="assets/mantine-bridge.css?v=20260916-1">\n', '')
+  .replace('<div id="mantineShell"></div>\n', '')
+  .replace('<script src="assets/mantine-shell.js?v=20260916-1"></script>\n', '');
+
 const webAwesomeHead = [
   '<link rel="stylesheet" href="vendor/webawesome/styles/webawesome.css">',
   '<link rel="stylesheet" href="assets/webawesome-events.css?v=20260916-1">',
