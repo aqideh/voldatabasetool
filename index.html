@@ -8,7 +8,6 @@
 <link rel="icon" type="image/svg+xml" href="assets/maklom-favicon.svg">
 <script src="vendor/xlsx-0.18.5.full.min.js"></script>
 <script src="vendor/fuse-6.6.2.min.js"></script>
-<link rel="stylesheet" href="assets/mantine.css">
 <link rel="stylesheet" href="assets/app.css?v=20260829-1">
 <link rel="stylesheet" href="assets/form-attendance.css?v=20260831-2">
 <link rel="stylesheet" href="assets/profile-edit.css">
@@ -16,10 +15,8 @@
 <link rel="stylesheet" href="assets/dashboard.css">
 <link rel="stylesheet" href="assets/events.css?v=20260909-2">
 <link rel="stylesheet" href="assets/supabase-shared.css?v=20260828-2">
-<link rel="stylesheet" href="assets/mantine-bridge.css?v=20260916-1">
 </head>
 <body>
-<div id="mantineShell"></div>
 <header><h1>MakLom</h1><p>Shared volunteer roster, attendance event log, tags, deduplication, review, analytics, and export tool.</p></header>
 <nav><button class="active" data-view="uploadView">Upload</button><button data-view="mergeView">Merge Review</button><button data-view="databaseView">Central Database</button><button data-view="eventLogView">Event Log</button><button data-view="formAttendanceView">Form Attendance</button><button data-view="dashboardView">Dashboard</button><button data-view="exportView">Export</button><button data-view="duplicatesView">Suspected Duplicates <span id="dupCount" class="pill neutral">0</span></button><button id="infoTab" class="info-tab" type="button" aria-expanded="false" aria-controls="infoPanel">Info</button></nav>
 <div id="infoPanel" class="info-panel hidden" role="dialog" aria-modal="false" aria-labelledby="infoTitle">
@@ -91,6 +88,5 @@
 <script src="assets/shift-row-management.js?v=20260909-1"></script>
 <script src="assets/shift-row-additions.js?v=20260909-1"></script>
 <script src="assets/imported-shift-event-planner.js?v=20260910-1"></script>
-<script src="assets/mantine-shell.js?v=20260916-1"></script>
 </body>
 </html>

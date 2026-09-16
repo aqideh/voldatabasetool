@@ -20,12 +20,16 @@ sourceHtml = sourceHtml
 const webAwesomeHead = [
   '<link rel="stylesheet" href="vendor/webawesome/styles/webawesome.css">',
   '<link rel="stylesheet" href="assets/webawesome-events.css?v=20260916-1">',
+  '<link rel="stylesheet" href="assets/webawesome-ui.css?v=20260916-1">',
   '<script type="module" src="vendor/webawesome/webawesome.loader.js"></script>',
 ].join('\n');
-const webAwesomeScript = '<script src="assets/webawesome-events.js?v=20260916-1"></script>';
+const webAwesomeScripts = [
+  '<script src="assets/webawesome-events.js?v=20260916-1"></script>',
+  '<script src="assets/webawesome-ui.js?v=20260916-1"></script>',
+].join('\n');
 
 let outputHtml = sourceHtml.replace('</head>', webAwesomeHead + '\n</head>');
-outputHtml = outputHtml.replace('</body>', webAwesomeScript + '\n</body>');
+outputHtml = outputHtml.replace('</body>', webAwesomeScripts + '\n</body>');
 await writeFile('dist/index.html', outputHtml);
 
 console.log('Built dist/ with self-hosted Web Awesome 3.12.0');
