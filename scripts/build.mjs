@@ -10,22 +10,19 @@ await Promise.all([
 ]);
 await cp('node_modules/@awesome.me/webawesome/dist-cdn', 'dist/vendor/webawesome', { recursive: true });
 
-let sourceHtml = await readFile('index.html', 'utf8');
-sourceHtml = sourceHtml
-  .replace('<link rel="stylesheet" href="assets/mantine.css">\n', '')
-  .replace('<link rel="stylesheet" href="assets/mantine-bridge.css?v=20260916-1">\n', '')
-  .replace('<div id="mantineShell"></div>\n', '')
-  .replace('<script src="assets/mantine-shell.js?v=20260916-1"></script>\n', '');
-
+const sourceHtml = await readFile('index.html', 'utf8');
 const webAwesomeHead = [
   '<link rel="stylesheet" href="vendor/webawesome/styles/webawesome.css">',
   '<link rel="stylesheet" href="assets/webawesome-events.css?v=20260916-1">',
   '<link rel="stylesheet" href="assets/webawesome-ui.css?v=20260916-1">',
+  '<link rel="stylesheet" href="assets/webawesome-overlays.css?v=20260916-1">',
   '<script type="module" src="vendor/webawesome/webawesome.loader.js"></script>',
 ].join('\n');
 const webAwesomeScripts = [
   '<script src="assets/webawesome-events.js?v=20260916-1"></script>',
   '<script src="assets/webawesome-ui.js?v=20260916-1"></script>',
+  '<script src="assets/webawesome-event-forms.js?v=20260916-1"></script>',
+  '<script src="assets/webawesome-overlays.js?v=20260916-1"></script>',
 ].join('\n');
 
 let outputHtml = sourceHtml.replace('</head>', webAwesomeHead + '\n</head>');
