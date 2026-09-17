@@ -1,6 +1,6 @@
 .maklom-info-drawer{--size:min(430px,calc(100vw - 24px))}
-.maklom-info-drawer::part(panel),.maklom-filter-drawer::part(panel){background:var(--panel,#fff)}
-.maklom-info-drawer::part(title),.maklom-filter-drawer::part(title){font-weight:700;color:var(--text)}
+.maklom-info-drawer::part(panel),.maklom-filter-drawer::part(panel),.maklom-dialog::part(panel){background:var(--panel,#fff)}
+.maklom-info-drawer::part(title),.maklom-filter-drawer::part(title),.maklom-dialog::part(title){font-weight:700;color:var(--text)}
 .maklom-info-drawer .info-brand{margin:4px 0 18px}
 .maklom-info-drawer p{line-height:1.5;margin:0 0 12px}
 .maklom-info-drawer .info-credit{border-top:1px solid var(--line);padding-top:12px;margin-top:18px;color:var(--muted);font-size:13px}
@@ -10,16 +10,12 @@
 .maklom-filter-drawer .event-filter-fields>div{display:grid;gap:5px}
 .maklom-filter-drawer .event-filter-fields label{margin:0;font-size:13px;font-weight:700;color:var(--text)}
 .maklom-filter-drawer .event-filter-fields select{width:100%}
-.maklom-filter-drawer wa-button[slot="footer"]{margin-left:8px}
+.maklom-filter-drawer wa-button[slot="footer"],.maklom-dialog wa-button[slot="footer"]{margin-left:8px}
 wa-button.maklom-filter-fab.event-filter-fab{display:flex;padding:0;border:0;background:transparent;box-shadow:none}
 wa-button.maklom-filter-fab.event-filter-fab::part(base){width:56px;height:56px;padding:0;border-radius:50%;background:var(--brand);color:#fff;border:0;box-shadow:0 10px 26px rgba(29,78,216,.32)}
 wa-button.maklom-filter-fab.event-filter-fab svg{width:24px;height:24px;fill:currentColor}
 wa-button.maklom-filter-fab.event-filter-fab .event-filter-badge{position:absolute;right:-2px;top:-3px;z-index:2}
-#eventsView .wa-event-source{display:none!important}
-#eventsView .maklom-wa-event-field{width:100%}
-#eventsView wa-input.maklom-wa-event-field::part(base),#eventsView wa-select.maklom-wa-event-field::part(combobox),#eventsView wa-textarea.maklom-wa-event-field::part(base){border-radius:7px}
-#eventsView wa-input.maklom-wa-event-field::part(label),#eventsView wa-select.maklom-wa-event-field::part(label),#eventsView wa-textarea.maklom-wa-event-field::part(label){font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px}
-#eventsView label:has(>.maklom-wa-event-field){font-size:0;margin-top:0;font-weight:normal}
-#eventsView label:has(>.maklom-wa-event-field)>.maklom-wa-event-field{font-size:14px}
-#eventsView input[type="date"],#eventsView input[type="time"]{min-height:36px;border-radius:7px;background:#fff}
-@media(max-width:700px){.maklom-filter-drawer{--size:min(520px,82vh)}wa-button.maklom-filter-fab.event-filter-fab::part(base){width:54px;height:54px}}
+.maklom-dialog{--width:min(480px,calc(100vw - 24px))}
+.maklom-dialog-message{white-space:pre-line;line-height:1.5;color:var(--text)}
+.maklom-dialog-input{width:100%;margin-top:14px}
+@media(max-width:700px){.maklom-filter-drawer{--size:min(520px,82vh)}wa-button.maklom-filter-fab.event-filter-fab::part(base){width:54px;height:54px}.maklom-dialog{--width:calc(100vw - 20px)}}
