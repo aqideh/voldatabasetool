@@ -17,6 +17,7 @@ const webAwesomeHead = [
   '<link rel="stylesheet" href="assets/webawesome-ui.css?v=20260916-1">',
   '<link rel="stylesheet" href="assets/webawesome-overlays.css?v=20260916-1">',
   '<link rel="stylesheet" href="assets/webawesome-static-workflows.css?v=20260917-1">',
+  '<link rel="stylesheet" href="assets/webawesome-workflows.css?v=20260917-1">',
   '<script type="module" src="vendor/webawesome/webawesome.loader.js"></script>',
 ].join('\n');
 const webAwesomeScripts = [
@@ -25,6 +26,7 @@ const webAwesomeScripts = [
   '<script src="assets/webawesome-event-forms.js?v=20260916-1"></script>',
   '<script src="assets/webawesome-overlays.js?v=20260916-1"></script>',
   '<script src="assets/webawesome-static-workflows.js?v=20260917-1"></script>',
+  '<script src="assets/webawesome-workflows.js?v=20260917-1"></script>',
 ].join('\n');
 
 let outputHtml = sourceHtml.replace('</head>', webAwesomeHead + '\n</head>');
