@@ -46,6 +46,8 @@ jobs:
           test -f dist/assets/webawesome-overlays.css
           test -f dist/assets/webawesome-static-workflows.js
           test -f dist/assets/webawesome-static-workflows.css
+          test -f dist/assets/webawesome-workflows.js
+          test -f dist/assets/webawesome-workflows.css
           test -f dist/vendor/webawesome/webawesome.loader.js
           test -f dist/vendor/webawesome/styles/webawesome.css
           grep -q 'vendor/webawesome/webawesome.loader.js' dist/index.html
@@ -53,4 +55,6 @@ jobs:
           grep -q 'assets/webawesome-overlays.js' dist/index.html
           grep -q 'assets/webawesome-static-workflows.js' dist/index.html
           grep -q 'assets/webawesome-static-workflows.css' dist/index.html
+          grep -q 'assets/webawesome-workflows.js' dist/index.html
+          grep -q 'assets/webawesome-workflows.css' dist/index.html
           ! grep -qi 'mantine' dist/index.html
