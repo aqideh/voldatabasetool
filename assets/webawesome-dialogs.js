@@ -1,9 +1,12 @@
 (function installMaklomDialogs(){
   'use strict';
 
+  const nativeConfirm=window.confirm.bind(window);
   let dialog=null;
   let resolver=null;
   let promptInput=null;
+  let currentActionTarget=null;
+  let allowNextConfirm=false;
 
   function ensureDialog(){
     if(dialog)return dialog;
@@ -58,9 +61,48 @@
     return promise;
   }
 
+  function isDangerousMessage(message){return /\b(delete|clear|replace|remove|overwrite|discard)\b/i.test(String(message||''));}
+
   window.MaklomDialogs={
     confirm:function(message,options){options=options||{};return open({title:options.title||'Confirm action',message:message,confirmLabel:options.confirmLabel||'Confirm',cancelLabel:options.cancelLabel||'Cancel',danger:!!options.danger,showCancel:true}).then(function(result){return result.confirmed;});},
     alert:function(message,options){options=options||{};return open({title:options.title||'Notice',message:message,confirmLabel:options.confirmLabel||'OK',danger:false,showCancel:false}).then(function(){return true;});},
     prompt:function(message,value,options){options=options||{};return open({title:options.title||'Edit value',message:message,prompt:true,value:value,placeholder:options.placeholder||'',confirmLabel:options.confirmLabel||'Save',cancelLabel:options.cancelLabel||'Cancel',danger:false,showCancel:true}).then(function(result){return result.confirmed?result.value:null;});}
   };
+
+  document.addEventListener('click',function(event){
+    const target=event.target&&event.target.closest?event.target.closest('button,wa-button,[role="button"]'):null;
+    if(target)currentActionTarget=target;
+    setTimeout(function(){if(currentActionTarget===target)currentActionTarget=null;},0);
+  },true);
+
+  window.confirm=function(message){
+    if(allowNextConfirm){allowNextConfirm=false;return true;}
+    const target=currentActionTarget;
+    if(!target)return nativeConfirm(message);
+    window.MaklomDialogs.confirm(message,{danger:isDangerousMessage(message)}).then(function(confirmed){
+      if(!confirmed||!target.isConnected)return;
+      allowNextConfirm=true;
+      target.click();
+    });
+    return false;
+  };
+
+  window.alert=function(message){window.MaklomDialogs.alert(message,{title:'MakLom'});};
+
+  if(typeof window.importJsonSave==='function'){
+    window.importJsonSave=function(event){
+      const file=event.target.files[0];if(!file)return;
+      if(file.size>MAX_JSON_BYTES){window.alert('JSON restore file rejected. Maximum file size is 10 MB.');event.target.value='';return;}
+      const reader=new FileReader();
+      reader.onload=function(load){
+        try{
+          const parsed=JSON.parse(load.target.result);const cleaned=validateJsonSave(parsed);
+          window.MaklomDialogs.confirm('Replace the current local database with this validated JSON save file?',{danger:true,confirmLabel:'Replace database'}).then(function(confirmed){
+            if(!confirmed)return;appData=cleaned;saveData();renderAll();
+          });
+        }catch(error){window.alert('This JSON file is not a valid save file.');}
+      };
+      reader.readAsText(file);event.target.value='';
+    };
+  }
 })();
