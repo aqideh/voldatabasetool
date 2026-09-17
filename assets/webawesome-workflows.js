@@ -1,7 +1,7 @@
 (function installWebAwesomeWorkflows(){
   'use strict';
 
-  const SCOPES=['#uploadView','#mergeView','#formAttendanceView','#exportView','#databaseTable'];
+  const SCOPES=['#formAttendanceView','#databaseTable'];
   const FIELD_TYPES=['text','email','number','search','tel','url','password'];
 
   function inScope(node){
@@ -59,7 +59,7 @@
   }
 
   function enhanceButton(button){
-    if(!button||!inScope(button)||button.dataset.waWorkflowEnhanced==='true'||button.dataset.waEnhanced==='true'||button.classList.contains('wa-proxy-source')||button.classList.contains('wa-workflow-source'))return;
+    if(!button||!inScope(button)||button.dataset.waWorkflowEnhanced==='true'||button.dataset.waEnhanced==='true'||button.dataset.waStaticEnhanced==='true'||button.classList.contains('wa-proxy-source')||button.classList.contains('wa-static-source')||button.classList.contains('wa-workflow-source'))return;
     if(button.closest('wa-button'))return;
 
     const proxy=document.createElement('wa-button');
@@ -96,7 +96,7 @@
   }
 
   function enhanceInput(source){
-    if(!source||!inScope(source)||source.dataset.waWorkflowEnhanced==='true'||source.dataset.waEnhanced==='true'||source.classList.contains('wa-proxy-source')||source.classList.contains('wa-workflow-source'))return;
+    if(!source||!inScope(source)||source.dataset.waWorkflowEnhanced==='true'||source.dataset.waEnhanced==='true'||source.dataset.waStaticEnhanced==='true'||source.classList.contains('wa-proxy-source')||source.classList.contains('wa-static-source')||source.classList.contains('wa-workflow-source'))return;
     const type=(source.type||'text').toLowerCase();
     if(FIELD_TYPES.indexOf(type)===-1)return;
 
@@ -114,17 +114,10 @@
     source.parentNode.insertBefore(proxy,source);
     syncInput(source);
 
-    proxy.addEventListener('input',function(){
-      source.value=proxy.value;
-      source.dispatchEvent(new Event('input',{bubbles:true}));
-    });
-    proxy.addEventListener('change',function(){
-      source.value=proxy.value;
-      source.dispatchEvent(new Event('change',{bubbles:true}));
-    });
+    proxy.addEventListener('input',function(){source.value=proxy.value;source.dispatchEvent(new Event('input',{bubbles:true}));});
+    proxy.addEventListener('change',function(){source.value=proxy.value;source.dispatchEvent(new Event('change',{bubbles:true}));});
     source.addEventListener('input',function(){syncInput(source);});
     source.addEventListener('change',function(){syncInput(source);});
-
     new MutationObserver(function(){syncInput(source);}).observe(source,{attributes:true,attributeFilter:['disabled','placeholder','min','max','step','maxlength']});
   }
 
@@ -145,7 +138,7 @@
   }
 
   function enhanceSelect(source){
-    if(!source||!inScope(source)||source.dataset.waWorkflowEnhanced==='true'||source.dataset.waEnhanced==='true'||source.classList.contains('wa-proxy-source')||source.classList.contains('wa-workflow-source'))return;
+    if(!source||!inScope(source)||source.dataset.waWorkflowEnhanced==='true'||source.dataset.waEnhanced==='true'||source.dataset.waStaticEnhanced==='true'||source.classList.contains('wa-proxy-source')||source.classList.contains('wa-static-source')||source.classList.contains('wa-workflow-source'))return;
     const proxy=document.createElement('wa-select');
     proxy.id=proxyId(source,'waWorkflowSelect');
     proxy.className='maklom-wa-workflow-field';
@@ -158,10 +151,7 @@
     source.parentNode.insertBefore(proxy,source);
     rebuildSelect(source);
 
-    proxy.addEventListener('change',function(){
-      source.value=proxy.value;
-      source.dispatchEvent(new Event('change',{bubbles:true}));
-    });
+    proxy.addEventListener('change',function(){source.value=proxy.value;source.dispatchEvent(new Event('change',{bubbles:true}));});
     source.addEventListener('change',function(){rebuildSelect(source);});
     new MutationObserver(function(){rebuildSelect(source);}).observe(source,{attributes:true,childList:true,subtree:true,characterData:true});
   }
@@ -176,7 +166,7 @@
   }
 
   function enhanceTextarea(source){
-    if(!source||!inScope(source)||source.dataset.waWorkflowEnhanced==='true'||source.dataset.waEnhanced==='true'||source.classList.contains('wa-proxy-source')||source.classList.contains('wa-workflow-source'))return;
+    if(!source||!inScope(source)||source.dataset.waWorkflowEnhanced==='true'||source.dataset.waEnhanced==='true'||source.dataset.waStaticEnhanced==='true'||source.classList.contains('wa-proxy-source')||source.classList.contains('wa-static-source')||source.classList.contains('wa-workflow-source'))return;
     const proxy=document.createElement('wa-textarea');
     proxy.id=proxyId(source,'waWorkflowTextarea');
     proxy.className='maklom-wa-workflow-field';
@@ -190,14 +180,8 @@
     source.parentNode.insertBefore(proxy,source);
     syncTextarea(source);
 
-    proxy.addEventListener('input',function(){
-      source.value=proxy.value;
-      source.dispatchEvent(new Event('input',{bubbles:true}));
-    });
-    proxy.addEventListener('change',function(){
-      source.value=proxy.value;
-      source.dispatchEvent(new Event('change',{bubbles:true}));
-    });
+    proxy.addEventListener('input',function(){source.value=proxy.value;source.dispatchEvent(new Event('input',{bubbles:true}));});
+    proxy.addEventListener('change',function(){source.value=proxy.value;source.dispatchEvent(new Event('change',{bubbles:true}));});
     source.addEventListener('input',function(){syncTextarea(source);});
     source.addEventListener('change',function(){syncTextarea(source);});
     new MutationObserver(function(){syncTextarea(source);}).observe(source,{attributes:true,attributeFilter:['disabled','placeholder','maxlength']});
@@ -219,12 +203,9 @@
 
   function start(){
     enhance(document);
-    const observer=new MutationObserver(function(mutations){
-      mutations.forEach(function(mutation){
-        mutation.addedNodes.forEach(function(node){if(node.nodeType===1)enhance(node);});
-      });
-    });
-    observer.observe(document.body,{childList:true,subtree:true});
+    new MutationObserver(function(mutations){
+      mutations.forEach(function(mutation){mutation.addedNodes.forEach(function(node){if(node.nodeType===1)enhance(node);});});
+    }).observe(document.body,{childList:true,subtree:true});
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
