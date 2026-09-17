@@ -51,7 +51,7 @@
       d.appendChild(promptInput);
     }
     const promise=new Promise(function(resolve){resolver=resolve;});
-    d.appendChild(button(options.cancelLabel||'Cancel','neutral',function(){close({confirmed:false,value:null});}));
+    if(options.showCancel!==false)d.appendChild(button(options.cancelLabel||'Cancel','neutral',function(){close({confirmed:false,value:null});}));
     d.appendChild(button(options.confirmLabel||'Confirm',options.danger?'danger':'brand',function(){close({confirmed:true,value:promptInput?promptInput.value:null});}));
     d.setAttribute('open','');
     if(promptInput)setTimeout(function(){promptInput.focus();},0);
@@ -59,8 +59,8 @@
   }
 
   window.MaklomDialogs={
-    confirm:function(message,options){options=options||{};return open({title:options.title||'Confirm action',message:message,confirmLabel:options.confirmLabel||'Confirm',cancelLabel:options.cancelLabel||'Cancel',danger:!!options.danger}).then(function(result){return result.confirmed;});},
-    alert:function(message,options){options=options||{};return open({title:options.title||'Notice',message:message,confirmLabel:options.confirmLabel||'OK',cancelLabel:'Close'}).then(function(){return true;});},
-    prompt:function(message,value,options){options=options||{};return open({title:options.title||'Edit value',message:message,prompt:true,value:value,placeholder:options.placeholder||'',confirmLabel:options.confirmLabel||'Save',cancelLabel:options.cancelLabel||'Cancel',danger:false}).then(function(result){return result.confirmed?result.value:null;});}
+    confirm:function(message,options){options=options||{};return open({title:options.title||'Confirm action',message:message,confirmLabel:options.confirmLabel||'Confirm',cancelLabel:options.cancelLabel||'Cancel',danger:!!options.danger,showCancel:true}).then(function(result){return result.confirmed;});},
+    alert:function(message,options){options=options||{};return open({title:options.title||'Notice',message:message,confirmLabel:options.confirmLabel||'OK',danger:false,showCancel:false}).then(function(){return true;});},
+    prompt:function(message,value,options){options=options||{};return open({title:options.title||'Edit value',message:message,prompt:true,value:value,placeholder:options.placeholder||'',confirmLabel:options.confirmLabel||'Save',cancelLabel:options.cancelLabel||'Cancel',danger:false,showCancel:true}).then(function(result){return result.confirmed?result.value:null;});}
   };
 })();
