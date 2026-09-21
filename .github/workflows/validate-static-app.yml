@@ -56,5 +56,8 @@ jobs:
           ! grep -q 'assets/webawesome-static-workflows.js' dist/index.html
           ! grep -q 'assets/webawesome-workflows.js' dist/index.html
           ! grep -qi 'mantine' dist/index.html
-          grep -q 'assets/webawesome-ui.js?v=20260921-1' dist/index.html
+          grep -q 'assets/webawesome-ui.js?v=20260921-2' dist/index.html
+          grep -q 'assets/webawesome-controls.js?v=20260921-1' dist/index.html
+          ! grep -q "scope.querySelectorAll('button').forEach(enhanceButton)" assets/webawesome-ui.js
+          ! grep -q "scope.querySelectorAll('button').forEach(enhanceButton)" assets/webawesome-controls.js
           ! grep -A6 'const observer=new MutationObserver(function(mutations)' assets/webawesome-ui.js | grep -q 'syncAllFields();'
