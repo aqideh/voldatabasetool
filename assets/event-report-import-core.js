@@ -45,8 +45,7 @@
   function shiftKey(row){return clean(row.date)+'|'+lower(row.shift);}
   function sourceKey(row){
     return [
-      lower(row.event_title),clean(row.date),lower(row.shift),identity(row),
-      clean(row.attendance_session_id)
+      lower(row.event_title),clean(row.date),lower(row.shift),identity(row)
     ].join('|');
   }
   function validateHeaders(headers){
