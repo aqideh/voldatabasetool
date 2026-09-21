@@ -28,6 +28,8 @@ jobs:
             echo "Checking $file"
             node --check "$file"
           done
+      - name: Run event report import tests
+        run: node tests/event-report-import-core.test.js
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Build static app
@@ -51,6 +53,8 @@ jobs:
           grep -q 'assets/webawesome-controls.js' dist/index.html
           grep -q 'assets/webawesome-overlays.js' dist/index.html
           grep -q 'assets/webawesome-dialogs.js' dist/index.html
+          grep -q 'assets/event-report-import-core.js?v=20260921-1' dist/index.html
+          grep -q 'assets/event-report-import.js?v=20260921-1' dist/index.html
           ! grep -q 'assets/webawesome-events.js' dist/index.html
           ! grep -q 'assets/webawesome-event-forms.js' dist/index.html
           ! grep -q 'assets/webawesome-static-workflows.js' dist/index.html
