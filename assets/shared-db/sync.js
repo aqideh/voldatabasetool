@@ -47,9 +47,38 @@
 
   S.adoptRemote=async function(bundle){st.suppressSync=true;appData=validateJsonSave(bundle.data);S.originalSaveData();st.suppressSync=false;st.remoteVersions=S.clone(bundle.versions||S.emptyVersions());st.lastSnapshot=S.canonicalSnapshot();st.lastRemoteRefresh=Date.now();S.clearDirty();st.syncBlocked=null;st.pendingRemoteBundle=null;S.hideSafetyPanel();renderAll();};
   S.refreshFromRemote=async function(force,discardLocal){
-    if(!st.ready||st.syncInFlight)return;if(!force&&Date.now()-st.lastRemoteRefresh<S.config.refreshThrottleMs)return;if((S.isDirty()||st.syncBlocked)&&!discardLocal){S.setSyncStatus('syncing','Unsaved');return;}
-    try{await S.loadMember();if(!st.member||!st.member.active){st.ready=false;S.clearCachedPii();S.renderAuthState();const m=document.getElementById('sharedAuthMessage');if(m)m.innerHTML='<div class="notice warn">This account is no longer authorised for MakLom.</div>';return;}const b=await S.loadRemoteBundle();await S.adoptRemote(b);S.setSyncStatus('ok','Up to date');}
-    catch(error){S.setSyncStatus('bad','Refresh error');S.showSharedNotice(error.message,'bad');console.error(error);}
+    if(st.remoteRefreshPromise)return st.remoteRefreshPromise;
+    if(!st.ready||st.syncInFlight)return;
+    if(!force&&Date.now()-st.lastRemoteRefresh<S.config.refreshThrottleMs)return;
+    if((S.isDirty()||st.syncBlocked)&&!discardLocal){S.setSyncStatus('syncing','Unsaved');return;}
+    st.remoteRefreshPromise=(async function(){
+      try{
+        await S.loadMember();
+        if(!st.member||!st.member.active){
+          st.ready=false;S.clearCachedPii();S.renderAuthState();
+          const m=document.getElementById('sharedAuthMessage');
+          if(m)m.innerHTML='<div class="notice warn">This account is no longer authorised for MakLom.</div>';
+          return;
+        }
+        const b=await S.loadRemoteBundle();
+        await S.adoptRemote(b);
+        S.setSyncStatus('ok','Up to date');
+      }catch(error){
+        if(error&&error.code==='SESSION_EXPIRED'){
+          st.ready=false;st.member=null;S.clearCachedPii();S.renderAuthState();
+          const m=document.getElementById('sharedAuthMessage');
+          if(m)m.innerHTML='<div class="notice warn">Your MakLom session expired. Sign in again.</div>';
+          S.setSyncStatus('bad','Session expired');
+        }else{
+          S.setSyncStatus('bad','Refresh failed');
+          S.showSharedNotice(error.message||'MakLom could not refresh the shared database.','bad');
+        }
+        console.error(error);
+      }finally{
+        st.remoteRefreshPromise=null;
+      }
+    })();
+    return st.remoteRefreshPromise;
   };
   S.uploadLocalDatabase=async function(){if(!S.canWrite())throw new Error('Your account does not have edit access.');if(S.remoteHasData(st.pendingRemoteBundle))throw new Error('The shared database is no longer empty. Reload the server copy instead of running the one-time upload.');st.lastSnapshot=S.emptySnapshot();st.remoteVersions=S.emptyVersions();st.syncBlocked=null;S.markDirty();await S.syncChanges();if(!S.isDirty()){S.showSharedNotice('This browser database has been uploaded to the shared MakLom database.','ok');document.getElementById('migrationPanel').classList.add('hidden');}};
 })();
