@@ -19,8 +19,8 @@ const webAwesomeHead = [
   '<script type="module" src="vendor/webawesome/webawesome.loader.js"></script>',
 ].join('\n');
 const webAwesomeScripts = [
-  '<script src="assets/webawesome-ui.js?v=20260921-1"></script>',
-  '<script src="assets/webawesome-controls.js?v=20260917-2"></script>',
+  '<script src="assets/webawesome-ui.js?v=20260921-2"></script>',
+  '<script src="assets/webawesome-controls.js?v=20260921-1"></script>',
   '<script src="assets/webawesome-overlays.js?v=20260917-2"></script>',
   '<script src="assets/webawesome-dialogs.js?v=20260917-2"></script>',
 ].join('\n');
