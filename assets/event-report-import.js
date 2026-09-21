@@ -162,8 +162,8 @@
     const same=events.filter(function(e){
       return lower(e.name)===lower(event.title)&&clean(e.start_date)===event.start_date&&clean(e.end_date)===event.end_date;
     });
-    const venue=same.find(function(e){return lower(e.venue)===lower(event.venue);});
-    return venue||same[0]||null;
+    if(!event.venue)return same[0]||null;
+    return same.find(function(e){return lower(e.venue)===lower(event.venue);})||null;
   }
   function exactShiftMatch(shifts,eventId,shift){
     return shifts.find(function(s){
