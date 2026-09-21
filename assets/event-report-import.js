@@ -170,6 +170,18 @@
       return s.event_id===eventId&&clean(s.shift_date)===shift.date&&lower(s.name)===lower(shift.name);
     })||null;
   }
+  function volunteerIdentityKey(row){
+    const email=lower(row.email);
+    if(email)return'email:'+email;
+    const p=phone(row.contact_number);
+    if(p)return'phone:'+p;
+    const name=lower(row.volunteer_name);
+    return name?'name:'+name:'';
+  }
+  function uniqueVolunteerMatch(matches,label){
+    if(matches.length>1)throw new Error('Multiple volunteer profiles match '+label+'. Resolve the duplicate profiles before importing this row.');
+    return matches[0]||null;
+  }
   function volunteerMatch(volunteers,row){
     const sourceId=clean(row.volunteer_id);
     if(sourceId){
@@ -178,15 +190,38 @@
     }
     const email=lower(row.email);
     if(email){
-      const matches=volunteers.filter(function(v){return lower(v.email)===email;});
-      if(matches.length===1)return matches[0];
+      const match=uniqueVolunteerMatch(volunteers.filter(function(v){return lower(v.email)===email;}),'email '+email);
+      if(match)return match;
     }
     const p=phone(row.contact_number);
     if(p){
-      const matches=volunteers.filter(function(v){return phone(v.phone)===p;});
-      if(matches.length===1)return matches[0];
+      const match=uniqueVolunteerMatch(volunteers.filter(function(v){return phone(v.phone)===p;}),'phone '+p);
+      if(match)return match;
+    }
+    if(!email&&!p){
+      const name=lower(row.volunteer_name);
+      if(name){
+        const match=uniqueVolunteerMatch(volunteers.filter(function(v){return lower(v.name)===name;}),'name '+clean(row.volunteer_name));
+        if(match)return match;
+      }
     }
     return null;
+  }
+  async function createVolunteerIdentity(volunteers,row){
+    const key=volunteerIdentityKey(row);
+    if(!key)throw new Error('CSV row '+row._rowNumber+' has no usable volunteer identity.');
+    const volunteerId=id('vol_event_report',key);
+    const existingById=volunteers.find(function(v){return v.id===volunteerId;});
+    if(existingById)return existingById;
+    const created=await insertRows('volunteers',[{
+      id:volunteerId,
+      name:clean(row.volunteer_name)||'Unknown volunteer',
+      email:clean(row.email)||null,
+      phone:clean(row.contact_number)||null,
+      notes:'Created from attendance event log import. Update volunteer profile.'
+    }]);
+    volunteers.push(created[0]);
+    return created[0];
   }
   function attendanceIdentity(row){
     return lower(row.email)||phone(row.contact)||lower(row.name);
@@ -211,7 +246,7 @@
 
     try{
       const db=await preflight(),eventMap={},shiftMap={};
-      const counts={eventsCreated:0,eventsReused:0,shiftsCreated:0,shiftsReused:0,attendanceCreated:0,attendanceUpdated:0,attendanceSkipped:0,volunteersMatched:0,volunteersUnmatched:0};
+      const counts={eventsCreated:0,eventsReused:0,shiftsCreated:0,shiftsReused:0,attendanceCreated:0,attendanceUpdated:0,attendanceSkipped:0,volunteerRowsMatched:0,volunteersCreated:0};
 
       for(const incomingEvent of currentAnalysis.events){
         let event=exactEventMatch(db.events,incomingEvent);
@@ -246,8 +281,12 @@
       for(const row of currentAnalysis.rows){
         const event=eventMap[row._eventKey],shift=shiftMap[row._eventKey+'|'+row._shiftKey];
         if(!event||!shift)throw new Error('Could not resolve event/shift for CSV row '+row._rowNumber+'.');
-        const volunteer=volunteerMatch(db.volunteers,row);
-        if(volunteer)counts.volunteersMatched++;else counts.volunteersUnmatched++;
+        let volunteer=volunteerMatch(db.volunteers,row);
+        if(volunteer)counts.volunteerRowsMatched++;
+        else{
+          volunteer=await createVolunteerIdentity(db.volunteers,row);
+          counts.volunteersCreated++;
+        }
 
         const sameIdentity=db.attendance.find(function(existing){
           if(existing.event_id!==event.id||existing.shift_id!==shift.id)return false;
@@ -271,7 +310,7 @@
         ].filter(Boolean).join(' ');
 
         const payload={
-          volunteer_id:volunteer?volunteer.id:null,
+          volunteer_id:volunteer.id,
           name:clean(row.volunteer_name)||'Unknown volunteer',
           email:clean(row.email)||null,
           contact:clean(row.contact_number)||null,
@@ -305,7 +344,7 @@
       const eventsButton=document.querySelector('nav button[data-view="eventsView"]');
       if(eventsButton)eventsButton.click();
       if(status)status.innerHTML='';
-      alert('Event report imported. '+counts.eventsCreated+' event(s) created, '+counts.shiftsCreated+' shift(s) created, '+counts.attendanceCreated+' attendance row(s) added, '+counts.attendanceUpdated+' importer row(s) refreshed, '+counts.attendanceSkipped+' existing attendance row(s) left untouched. '+counts.volunteersMatched+' row(s) matched to volunteer profiles; '+counts.volunteersUnmatched+' were retained without a profile link.');
+      alert('Event report imported. '+counts.eventsCreated+' event(s) created, '+counts.shiftsCreated+' shift(s) created, '+counts.attendanceCreated+' attendance row(s) added, '+counts.attendanceUpdated+' importer row(s) refreshed, '+counts.attendanceSkipped+' existing attendance row(s) left untouched. '+counts.volunteersCreated+' new volunteer profile(s) created; '+counts.volunteerRowsMatched+' row(s) matched to existing or newly created profiles.');
     }catch(error){
       console.error(error);
       if(status)status.innerHTML='<div class="notice bad">Import failed: '+esc(error.message)+'</div>';
