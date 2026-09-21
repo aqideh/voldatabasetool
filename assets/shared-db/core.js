@@ -12,7 +12,7 @@
     versionedTables:['volunteers','attendance_log','reporting_metrics','suspected_duplicates'],
     syncTables:['volunteers','attendance_log','reporting_metrics','suspected_duplicates','merge_log']
   };
-  S.state={session:null,member:null,ready:false,syncTimer:null,syncInFlight:false,syncQueued:false,lastSnapshot:null,remoteVersions:null,lastRemoteRefresh:0,suppressSync:false,syncBlocked:null,pendingRemoteBundle:null,approvedBulkDeleteSignature:''};
+  S.state={session:null,member:null,ready:false,syncTimer:null,syncInFlight:false,syncQueued:false,lastSnapshot:null,remoteVersions:null,lastRemoteRefresh:0,suppressSync:false,syncBlocked:null,pendingRemoteBundle:null,approvedBulkDeleteSignature:'',refreshPromise:null,remoteRefreshPromise:null,lastRefreshError:null};
   S.originalSaveData=saveData;
   S.originalClearLocalData=clearLocalData;
   S.text=function(v){return String(v==null?'':v);};
@@ -43,7 +43,19 @@
     const opts=Object.assign({},options||{});opts.headers=Object.assign({},S.sessionHeaders(),opts.headers||{});
     let response=await fetch(S.config.url+path,opts);
     if(response.status===401&&S.state.session&&S.state.session.refresh_token){
-      if(await S.refreshSession()){opts.headers=Object.assign({},S.sessionHeaders(),options&&options.headers||{});response=await fetch(S.config.url+path,opts);}
+      const refreshed=await S.refreshSession();
+      if(refreshed){
+        opts.headers=Object.assign({},S.sessionHeaders(),options&&options.headers||{});
+        response=await fetch(S.config.url+path,opts);
+      }else if(!S.state.session){
+        const error=new Error('Your MakLom session has expired. Sign in again.');
+        error.code='SESSION_EXPIRED';
+        throw error;
+      }else{
+        const error=new Error(S.state.lastRefreshError||'MakLom could not refresh your session. Check your connection and try again.');
+        error.code='AUTH_REFRESH_FAILED';
+        throw error;
+      }
     }
     return response;
   };
@@ -60,11 +72,33 @@
   };
   S.tokenExpiresSoon=function(session){return !!(session&&session.expires_at&&Number(session.expires_at)-Math.floor(Date.now()/1000)<S.config.refreshEarlySeconds);};
   S.refreshSession=async function(){
+    if(S.state.refreshPromise)return S.state.refreshPromise;
     const session=S.state.session;if(!session||!session.refresh_token)return false;
-    try{
-      const response=await fetch(S.config.url+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:S.config.key,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});
-      if(!response.ok){S.persistSession(null);return false;}const data=await response.json();data.expires_at=Math.floor(Date.now()/1000)+Number(data.expires_in||3600);S.persistSession(data);return true;
-    }catch(error){return false;}
+    const refreshToken=session.refresh_token;
+    S.state.refreshPromise=(async function(){
+      S.state.lastRefreshError=null;
+      try{
+        const response=await fetch(S.config.url+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:S.config.key,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:refreshToken})});
+        const data=await response.json().catch(function(){return{};});
+        if(!response.ok){
+          const message=data.error_description||data.msg||data.message||data.code||('Session refresh failed ('+response.status+').');
+          S.state.lastRefreshError=message;
+          if(response.status===400||response.status===401){
+            if(S.state.session&&S.state.session.refresh_token===refreshToken)S.persistSession(null);
+          }
+          return false;
+        }
+        if(S.state.session&&S.state.session.refresh_token!==refreshToken)return true;
+        data.expires_at=Math.floor(Date.now()/1000)+Number(data.expires_in||3600);
+        S.persistSession(data);
+        return true;
+      }catch(error){
+        S.state.lastRefreshError='Could not reach the authentication service. Check your connection and try again.';
+        return false;
+      }
+    })();
+    try{return await S.state.refreshPromise;}
+    finally{S.state.refreshPromise=null;}
   };
   S.signIn=async function(email,password){
     const response=await fetch(S.config.url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:S.config.key,'Content-Type':'application/json'},body:JSON.stringify({email:email,password:password})});

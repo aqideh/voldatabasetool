@@ -61,3 +61,9 @@ jobs:
           ! grep -q "scope.querySelectorAll('button').forEach(enhanceButton)" assets/webawesome-ui.js
           ! grep -q "scope.querySelectorAll('button').forEach(enhanceButton)" assets/webawesome-controls.js
           ! grep -A6 'const observer=new MutationObserver(function(mutations)' assets/webawesome-ui.js | grep -q 'syncAllFields();'
+          grep -q 'refreshPromise:null' assets/shared-db/core.js
+          grep -q 'if(S.state.refreshPromise)return S.state.refreshPromise' assets/shared-db/core.js
+          grep -q 'if(st.remoteRefreshPromise)return st.remoteRefreshPromise' assets/shared-db/sync.js
+          grep -q 'assets/shared-db/core.js?v=20260921-1' dist/index.html
+          grep -q 'assets/shared-db/sync.js?v=20260921-1' dist/index.html
+          grep -q 'aria-label="About MakLom"' dist/index.html
