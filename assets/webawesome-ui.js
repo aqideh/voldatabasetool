@@ -161,19 +161,28 @@
     observer.observe(source,{attributes:true,attributeFilter:['disabled','placeholder']});
   }
 
+  function selectOptionsSignature(source){
+    return JSON.stringify(Array.from(source.options||[]).map(function(option){
+      return [option.value,option.textContent,!!option.disabled];
+    }));
+  }
+
   function rebuildSelect(source){
     const proxy=document.getElementById(source.dataset.waProxyId||'');
     if(!proxy)return;
-    const options=Array.from(source.options||[]);
-    proxy.replaceChildren();
-    options.forEach(function(option){
-      const item=document.createElement('wa-option');
-      item.value=option.value;
-      item.textContent=option.textContent;
-      item.toggleAttribute('disabled',!!option.disabled);
-      proxy.appendChild(item);
-    });
-    proxy.value=source.value;
+    const signature=selectOptionsSignature(source);
+    if(proxy.dataset.waOptionsSignature!==signature){
+      proxy.replaceChildren();
+      Array.from(source.options||[]).forEach(function(option){
+        const item=document.createElement('wa-option');
+        item.value=option.value;
+        item.textContent=option.textContent;
+        item.toggleAttribute('disabled',!!option.disabled);
+        proxy.appendChild(item);
+      });
+      proxy.dataset.waOptionsSignature=signature;
+    }
+    if(proxy.value!==source.value)proxy.value=source.value;
     proxy.toggleAttribute('disabled',!!source.disabled);
   }
 
@@ -226,7 +235,6 @@
       mutations.forEach(function(mutation){
         mutation.addedNodes.forEach(function(node){if(node.nodeType===1)enhance(node);});
       });
-      syncAllFields();
     });
     observer.observe(document.body,{childList:true,subtree:true});
   }
