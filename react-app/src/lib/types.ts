@@ -18,6 +18,19 @@ export interface VolunteerRow {
   shirt_size: string | null;
   notes: string | null;
   updated_at: string;
+  row_version: number;
+}
+
+export interface VolunteerUpdate {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  gender: string | null;
+  recruited_year: number | null;
+  tags: string[];
+  programmes_registered: string[];
+  shirt_size: string | null;
+  notes: string | null;
 }
 
 export interface VolunteerFilters {

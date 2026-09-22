@@ -178,7 +178,9 @@ export default function App() {
       <AppShell.Main bg="gray.0">
         <Box maw={1500} mx="auto">
           {section === 'Overview' && <DashboardView />}
-          {section === 'Volunteers' && <VolunteersView />}
+          {section === 'Volunteers' && (
+            <VolunteersView canWrite={member.role === 'editor' || member.role === 'admin'} />
+          )}
           {!['Overview', 'Volunteers'].includes(section) && (
             <Paper withBorder radius="lg" p="xl">
               <Title order={2}>{section}</Title>
