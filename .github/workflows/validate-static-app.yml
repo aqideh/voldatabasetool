@@ -74,3 +74,6 @@ jobs:
           grep -q 'assets/shared-db/core.js?v=20260921-1' dist/index.html
           grep -q 'assets/shared-db/sync.js?v=20260921-1' dist/index.html
           grep -q 'aria-label="About MakLom"' dist/index.html
+          grep -q 'class="info-panel hidden"' dist/index.html
+          grep -q "setOpen(false)" assets/info.js
+          ! grep -q "panel.replaceWith(drawer)" assets/webawesome-overlays.js
