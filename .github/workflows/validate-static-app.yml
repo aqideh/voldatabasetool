@@ -55,6 +55,9 @@ jobs:
           grep -q 'assets/webawesome-dialogs.js' dist/index.html
           grep -q 'assets/event-report-import-core.js?v=20260921-1' dist/index.html
           grep -q 'assets/event-report-import.js?v=20260921-1' dist/index.html
+          grep -q "async function createVolunteerIdentity" assets/event-report-import.js
+          grep -q "vol_event_report" assets/event-report-import.js
+          ! grep -q "retained without a profile link" assets/event-report-import.js
           ! grep -q 'assets/webawesome-events.js' dist/index.html
           ! grep -q 'assets/webawesome-event-forms.js' dist/index.html
           ! grep -q 'assets/webawesome-static-workflows.js' dist/index.html
