@@ -9,39 +9,8 @@
   }
 
   function installInfoDrawer(){
-    const tab=document.getElementById('infoTab');
-    const panel=document.getElementById('infoPanel');
-    if(!tab||!panel||panel.tagName==='WA-DRAWER')return;
-
-    const drawer=document.createElement('wa-drawer');
-    drawer.id='infoPanel';
-    drawer.className='maklom-info-drawer';
-    drawer.setAttribute('label','How MakLom works');
-    drawer.setAttribute('placement','end');
-
-    const brand=panel.querySelector('.info-brand');
-    const paragraphs=panel.querySelectorAll('.info-card > p');
-    if(brand)drawer.appendChild(brand);
-    paragraphs.forEach(function(paragraph){drawer.appendChild(paragraph);});
-
-    panel.replaceWith(drawer);
-    tab.setAttribute('aria-controls','infoPanel');
-    tab.setAttribute('aria-expanded','false');
-
-    tab.addEventListener('click',function(){
-      if(drawer.hasAttribute('open'))drawer.removeAttribute('open');
-      else drawer.setAttribute('open','');
-      tab.setAttribute('aria-expanded',drawer.hasAttribute('open')?'true':'false');
-    });
-
-    drawer.addEventListener('wa-after-hide',function(){
-      tab.setAttribute('aria-expanded','false');
-      const proxyId=tab.dataset&&tab.dataset.waProxyId;
-      const focusTarget=proxyId?document.getElementById(proxyId):tab;
-      if(focusTarget&&typeof focusTarget.focus==='function')focusTarget.focus();
-    });
-
-    drawer.addEventListener('wa-show',function(){tab.setAttribute('aria-expanded','true');});
+    // MakLom info uses the native side panel so it behaves consistently
+    // on both GitHub Pages and the Vercel build.
   }
 
   function createFilterFab(){
