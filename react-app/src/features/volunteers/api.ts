@@ -1,5 +1,5 @@
 import { supabase } from '../../lib/supabase';
-import type { VolunteerFilters, VolunteerRow } from '../../lib/types';
+import type { VolunteerFilters, VolunteerRow, VolunteerUpdate } from '../../lib/types';
 
 function safeSearchTerm(value: string) {
   return value.trim().replace(/[,%()]/g, ' ');
@@ -12,7 +12,7 @@ export async function fetchVolunteers(filters: VolunteerFilters) {
   let query = supabase
     .from('volunteers')
     .select(
-      'id,name,email,phone,gender,recruited_year,programmes_registered,tags,shirt_size,notes,updated_at',
+      'id,name,email,phone,gender,recruited_year,programmes_registered,tags,shirt_size,notes,updated_at,row_version',
       { count: 'exact' },
     );
 
@@ -59,4 +59,25 @@ export async function fetchVolunteerFilterOptions() {
     tags: [...tags].sort((a, b) => a.localeCompare(b)),
     years: [...years].sort((a, b) => b - a),
   };
+}
+
+
+export async function updateVolunteer(
+  id: string,
+  expectedVersion: number,
+  update: VolunteerUpdate,
+): Promise<VolunteerRow> {
+  const { data, error } = await supabase
+    .from('volunteers')
+    .update(update)
+    .eq('id', id)
+    .eq('row_version', expectedVersion)
+    .select('id,name,email,phone,gender,recruited_year,programmes_registered,tags,shirt_size,notes,updated_at,row_version')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
+    throw new Error('This volunteer was updated in another session. Reload the record before saving again.');
+  }
+  return data as VolunteerRow;
 }
