@@ -1,9 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
   Badge,
-  Box,
-  Button,
-  Drawer,
   Group,
   Loader,
   NumberInput,
@@ -18,13 +15,19 @@ import {
   Title,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchVolunteerFilterOptions, fetchVolunteers } from './api';
+import { VolunteerDrawer } from './VolunteerDrawer';
 import type { VolunteerFilters, VolunteerRow } from '../../lib/types';
 
 const PAGE_SIZE = 50;
 
-export function VolunteersView() {
+interface Props {
+  canWrite: boolean;
+}
+
+export function VolunteersView({ canWrite }: Props) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebouncedValue(search, 250);
   const [tag, setTag] = useState<string | null>(null);
@@ -58,6 +61,15 @@ export function VolunteersView() {
 
   function resetPage() {
     if (page !== 0) setPage(0);
+  }
+
+  async function handleSaved(updated: VolunteerRow) {
+    setSelected(updated);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['volunteers'] }),
+      queryClient.invalidateQueries({ queryKey: ['volunteer-filter-options'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] }),
+    ]);
   }
 
   return (
@@ -178,29 +190,12 @@ export function VolunteersView() {
         <Pagination total={totalPages} value={page + 1} onChange={(value) => setPage(value - 1)} />
       </Group>
 
-      <Drawer
-        opened={!!selected}
+      <VolunteerDrawer
+        volunteer={selected}
+        canWrite={canWrite}
         onClose={() => setSelected(null)}
-        title={selected?.name || 'Volunteer'}
-        position="right"
-        size="md"
-      >
-        {selected && (
-          <Stack gap="md">
-            <Box><Text size="xs" c="dimmed">Email</Text><Text>{selected.email || '-'}</Text></Box>
-            <Box><Text size="xs" c="dimmed">Phone</Text><Text>{selected.phone || '-'}</Text></Box>
-            <Box><Text size="xs" c="dimmed">Recruited</Text><Text>{selected.recruited_year || '-'}</Text></Box>
-            <Box><Text size="xs" c="dimmed">Gender</Text><Text>{selected.gender || '-'}</Text></Box>
-            <Box>
-              <Text size="xs" c="dimmed">Tags</Text>
-              <Group gap={5}>{selected.tags.map((item) => <Badge key={item} variant="light">{item}</Badge>)}</Group>
-            </Box>
-            <Box><Text size="xs" c="dimmed">Programmes</Text><Text>{selected.programmes_registered.join(', ') || '-'}</Text></Box>
-            <Box><Text size="xs" c="dimmed">Notes</Text><Text style={{ whiteSpace: 'pre-wrap' }}>{selected.notes || '-'}</Text></Box>
-            <Button variant="light" disabled>Editing comes in the next slice</Button>
-          </Stack>
-        )}
-      </Drawer>
+        onSaved={(row) => void handleSaved(row)}
+      />
     </Stack>
   );
 }
