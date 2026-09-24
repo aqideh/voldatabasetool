@@ -1,0 +1,6 @@
+html,body,#root{min-height:100%;margin:0}
+body{background:#f8f9fa}
+.maklom-brand{display:flex;align-items:center;gap:10px}
+.maklom-brand img{width:38px;height:38px;object-fit:contain}
+.maklom-nav-label{font-weight:600}
+@media(max-width:48em){.maklom-desktop-only{display:none}}
