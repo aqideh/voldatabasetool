@@ -23,9 +23,10 @@ import { loadMember, signIn, signOut } from './lib/auth';
 import { supabase } from './lib/supabase';
 import type { AppMember } from './lib/types';
 import { DashboardView } from './features/dashboard/DashboardView';
+import { LeadsView } from './features/leads/LeadsView';
 import { VolunteersView } from './features/volunteers/VolunteersView';
 
-const sections = ['Overview', 'Volunteers', 'Events', 'Attendance', 'Imports'] as const;
+const sections = ['Overview', 'Leads', 'Volunteers', 'Events', 'Attendance', 'Imports'] as const;
 type Section = (typeof sections)[number];
 
 function LoginScreen() {
@@ -53,7 +54,7 @@ function LoginScreen() {
         <Stack gap="md">
           <div>
             <Title order={1}>MakLom</Title>
-            <Text c="dimmed">React + Mantine rebuild</Text>
+            <Text c="dimmed">Volunteer operations database</Text>
           </div>
           <TextInput
             label="Email"
@@ -136,6 +137,8 @@ export default function App() {
     );
   }
 
+  const canWrite = member.role === 'editor' || member.role === 'admin';
+
   return (
     <AppShell
       header={{ height: 64 }}
@@ -178,10 +181,9 @@ export default function App() {
       <AppShell.Main bg="gray.0">
         <Box maw={1500} mx="auto">
           {section === 'Overview' && <DashboardView />}
-          {section === 'Volunteers' && (
-            <VolunteersView canWrite={member.role === 'editor' || member.role === 'admin'} />
-          )}
-          {!['Overview', 'Volunteers'].includes(section) && (
+          {section === 'Leads' && <LeadsView canWrite={canWrite} />}
+          {section === 'Volunteers' && <VolunteersView canWrite={canWrite} />}
+          {!['Overview', 'Leads', 'Volunteers'].includes(section) && (
             <Paper withBorder radius="lg" p="xl">
               <Title order={2}>{section}</Title>
               <Text c="dimmed" mt="sm">
