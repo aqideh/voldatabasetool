@@ -111,7 +111,7 @@ export async function importFormSgLeads(rows: Array<Record<string, string>>) {
       referral_source: find('howdidyouhear', 'referralsource'),
       raw_payload: row,
     };
-  }).filter(Boolean);
+  }).filter((row): row is NonNullable<typeof row> => row !== null);
 
   if (!normalized.length) {
     throw new Error('No rows with a recognisable name field were found.');
