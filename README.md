@@ -51,3 +51,8 @@ npm run build
 ```
 
 Production is deployed automatically from `main` through Vercel.
+
+
+## Volunteer identity
+
+Every MakLom volunteer profile is linked to `core.volunteers`. The canonical internal identity is a UUID and the human-facing identifier is the immutable `KELxxxxx` volunteer code. Legacy MakLom keys such as `vol_event_report_*` and `vol_event_repair_*` are retained only as hidden migration provenance; new volunteer creation uses the canonical match/create workflow and never encodes source information into an ID.
