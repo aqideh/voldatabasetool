@@ -50,4 +50,4 @@ npm run dev
 npm run build
 ```
 
-Production is deployed from `main`.
+Production is deployed automatically from `main` through Vercel.
