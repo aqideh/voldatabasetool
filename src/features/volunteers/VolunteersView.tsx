@@ -88,7 +88,7 @@ export function VolunteersView({ canWrite }: Props) {
         <Group align="flex-end" grow wrap="wrap">
           <TextInput
             label="Search"
-            placeholder="Name, email, phone or notes"
+            placeholder="KEL ID, name, email, phone or notes"
             value={search}
             onChange={(event) => {
               setSearch(event.currentTarget.value);
@@ -152,7 +152,7 @@ export function VolunteersView({ canWrite }: Props) {
                 <Table.Tr key={row.id} onClick={() => setSelected(row)} style={{ cursor: 'pointer' }}>
                   <Table.Td>
                     <Text fw={700}>{row.name}</Text>
-                    <Text size="xs" c="dimmed">{row.id}</Text>
+                    <Text size="xs" c="dimmed">{row.volunteer_code}</Text>
                   </Table.Td>
                   <Table.Td>
                     <Text size="sm">{row.email || '-'}</Text>

@@ -69,7 +69,7 @@ export async function convertVolunteerLead(id: string) {
     p_lead_id: id,
   });
   if (error) throw error;
-  return data as { status: string; lead_id: string; volunteer_id: string };
+  return data as { status: string; lead_id: string; profile_id: string; core_volunteer_id: string; volunteer_code: string };
 }
 
 export async function importFormSgLeads(rows: Array<Record<string, string>>) {

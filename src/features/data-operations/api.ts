@@ -29,7 +29,7 @@ export async function fetchFormImportBatches() {
 
 export async function exportMaklomWorkbook() {
   const [volunteers, attendance, events, shifts, leads] = await Promise.all([
-    supabase.from('volunteers').select('*').order('name'),
+    supabase.from('maklom_volunteer_directory').select('volunteer_code,name,nric,phone,email,gender,address,recruited_year,chat_session,chat_session_date,interests,languages_spoken,programmes_registered,tags,emergency_name,emergency_phone,shirt_size,dietary,notes,updated_at').order('name'),
     supabase.from('attendance_log').select('*').order('event_date', { ascending: false }),
     supabase.from('events').select('*').order('start_date', { ascending: false }),
     supabase.from('event_shifts').select('*').order('shift_date', { ascending: false }),
@@ -133,8 +133,21 @@ export async function importEventReportCsv(file: File) {
       if(!volunteer && digits(row.contact_number)) volunteer=volunteers.find((item)=>digits(item.phone)===digits(row.contact_number));
       if(!volunteer && !row.email && !row.contact_number) volunteer=volunteers.find((item)=>lower(item.name)===lower(row.volunteer_name));
       if(!volunteer){
-        const payload={id:`vol_event_report_${hashString(identity)}`,name:row.volunteer_name.trim()||'Unknown volunteer',email:row.email.trim()||null,phone:row.contact_number.trim()||null,notes:'Created from attendance event report import. Update volunteer profile.'};
-        const {data,error}=await supabase.from('volunteers').insert(payload).select('id,name,email,phone').single();if(error)throw error;volunteer=data;volunteers.push(volunteer);counters.volunteers++;
+        const {data,error}=await supabase.rpc('maklom_match_or_create_volunteer',{
+          p_name:row.volunteer_name.trim()||'Unknown volunteer',
+          p_email:row.email.trim()||null,
+          p_phone:row.contact_number.trim()||null,
+          p_recruited_year:new Date().getFullYear(),
+          p_interests:null,
+          p_tags:['Event report'],
+          p_notes:'Created from attendance event report import. Update volunteer profile.',
+          p_origin:'event_report'
+        });
+        if(error)throw error;
+        const result=data as {status:string;profile_id:string;volunteer_code:string};
+        volunteer={id:result.profile_id,name:row.volunteer_name.trim()||'Unknown volunteer',email:row.email.trim()||null,phone:row.contact_number.trim()||null,volunteer_code:result.volunteer_code};
+        volunteers.push(volunteer);
+        if(result.status==='created')counters.volunteers++;
       }
 
       const attendanceId=`event_report_att_${hashString([lower(row.event_title),row.date.trim(),lower(row.shift),identity].join('|'))}`;

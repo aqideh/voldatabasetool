@@ -36,7 +36,7 @@ function ReconciliationCard({row,signIn,signOut,canWrite,canDelete,onRefresh}:an
       <div><Text size="xs" c="dimmed">Original sign-in</Text><Text size="sm">{safeDateTime(signIn?.submitted_at||row.sign_in_at)}</Text></div>
       <div><Text size="xs" c="dimmed">Original sign-out</Text><Text size="sm">{safeDateTime(signOut?.submitted_at||row.sign_out_at)}</Text></div>
       <div><Text size="xs" c="dimmed">Calculated</Text><Text size="sm">{minutesLabel(row.calculated_duration_minutes)}</Text></div>
-      <div><Text size="xs" c="dimmed">Volunteer match</Text><Text size="sm">{row.volunteer_id||'No database match'}</Text></div>
+      <div><Text size="xs" c="dimmed">Volunteer match</Text><Text size="sm">{row.volunteer_id ? 'Matched to database' : 'No database match'}</Text></div>
     </SimpleGrid>
     {canWrite&&<form onSubmit={(e)=>{e.preventDefault();setSaving(true);const d=new FormData(e.currentTarget);void updateReconciliation(row,{staff_credited_duration_minutes:d.get('credited')===''?null:Number(d.get('credited')),staff_credit_note:String(d.get('note')||'').trim()||null,review_acknowledged:true}).then(()=>{setMessage('Amendment saved.');return onRefresh();}).catch((err)=>setMessage(err.message)).finally(()=>setSaving(false));}}>
       <SimpleGrid cols={{base:1,md:2}}><NumberInput name="credited" label="Staff credited minutes" min={0} defaultValue={row.staff_credited_duration_minutes??''}/><Textarea name="note" label="Adjustment note" defaultValue={row.staff_credit_note||''}/></SimpleGrid>

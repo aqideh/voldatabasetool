@@ -161,16 +161,16 @@ export function LeadsView({ canWrite }: Props) {
       setMessage({
         kind: 'success',
         text: result.status === 'linked_existing'
-          ? `Lead linked to existing volunteer ${result.volunteer_id}.`
+          ? `Lead linked to existing volunteer ${result.volunteer_code}.`
           : result.status === 'already_converted'
-            ? `Lead was already converted to ${result.volunteer_id}.`
-            : `Volunteer ${result.volunteer_id} created.`,
+            ? `Lead was already converted to ${result.volunteer_code}.`
+            : `Volunteer ${result.volunteer_code} created.`,
       });
       await refresh();
       setSelected({
         ...selected,
         status: 'converted',
-        converted_volunteer_id: result.volunteer_id,
+        converted_volunteer_id: result.profile_id,
         converted_at: new Date().toISOString(),
       });
       setEditStatus('converted');
@@ -267,7 +267,7 @@ export function LeadsView({ canWrite }: Props) {
                 <Table.Tr key={lead.id} onClick={() => chooseLead(lead)} style={{ cursor: 'pointer' }}>
                   <Table.Td>
                     <Text fw={700}>{lead.full_name}</Text>
-                    <Text size="xs" c="dimmed">{lead.source === 'formsg' ? 'FormSG' : 'Manual'} · {lead.id}</Text>
+                    <Text size="xs" c="dimmed">{lead.source === 'formsg' ? 'FormSG' : 'Manual'}</Text>
                   </Table.Td>
                   <Table.Td>
                     <Text size="sm">{lead.email || '-'}</Text>
@@ -276,7 +276,7 @@ export function LeadsView({ canWrite }: Props) {
                   <Table.Td><Text size="sm" lineClamp={2}>{lead.interest_area || '-'}</Text></Table.Td>
                   <Table.Td><Badge variant="light">{statusOptions.find((item) => item.value === lead.status)?.label || lead.status}</Badge></Table.Td>
                   <Table.Td>{lead.submitted_at ? new Date(lead.submitted_at).toLocaleDateString('en-SG') : '-'}</Table.Td>
-                  <Table.Td>{lead.converted_volunteer_id || '-'}</Table.Td>
+                  <Table.Td>{lead.converted_volunteer_id ? <Badge color="green" variant="light">Converted</Badge> : '-'}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -331,7 +331,7 @@ export function LeadsView({ canWrite }: Props) {
 
             {selected.converted_volunteer_id && (
               <Alert color="green" variant="light">
-                Converted to volunteer {selected.converted_volunteer_id}.
+                Converted to the volunteer database.
               </Alert>
             )}
 

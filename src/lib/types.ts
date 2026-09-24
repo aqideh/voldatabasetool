@@ -3,13 +3,13 @@ export type AppRole = 'viewer' | 'editor' | 'admin';
 export interface AppMember { user_id: string; role: AppRole; active: boolean; }
 
 export interface VolunteerRow {
-  id:string; name:string; nric:string|null; phone:string|null; email:string|null; gender:string|null;
+  id:string; core_volunteer_id:string; volunteer_code:string; name:string; nric:string|null; phone:string|null; email:string|null; gender:string|null;
   address:string|null; recruited_year:number|null; chat_session:string|null; chat_session_date:string|null;
   interests:string|null; languages_spoken:string|null; programmes_registered:string[]; tags:string[];
   emergency_name:string|null; emergency_phone:string|null; shirt_size:string|null; dietary:string|null;
   notes:string|null; updated_at:string; row_version:number;
 }
-export type VolunteerUpdate = Omit<VolunteerRow,'id'|'updated_at'|'row_version'>;
+export type VolunteerUpdate = Omit<VolunteerRow,'id'|'core_volunteer_id'|'volunteer_code'|'updated_at'|'row_version'>;
 
 export interface VolunteerFilters {
   search:string; tag:string|null; recruitedYear:number|null;
