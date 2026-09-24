@@ -3,23 +3,8 @@ name: Validate React app
 on:
   push:
     branches:
-      - react-cutover
-    paths:
-      - 'src/**'
-      - 'public/**'
-      - 'package.json'
-      - 'index.html'
-      - 'vite.config.ts'
-      - 'tsconfig*.json'
-      - '.github/workflows/validate-react.yml'
+      - main
   pull_request:
-    paths:
-      - 'src/**'
-      - 'public/**'
-      - 'package.json'
-      - 'index.html'
-      - 'vite.config.ts'
-      - 'tsconfig*.json'
 
 jobs:
   validate:
