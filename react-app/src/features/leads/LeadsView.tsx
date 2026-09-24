@@ -40,6 +40,8 @@ const statusOptions: Array<{ value: VolunteerLeadStatus; label: string }> = [
   { value: 'withdrawn', label: 'Withdrawn' },
 ];
 
+const editableStatusOptions = statusOptions.filter((item) => item.value !== 'converted');
+
 function parseCsv(text: string): Array<Record<string, string>> {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -165,11 +167,13 @@ export function LeadsView({ canWrite }: Props) {
             : `Volunteer ${result.volunteer_id} created.`,
       });
       await refresh();
-      const fresh = await fetchVolunteerLeads({ search: selected.id, status: null, page: 0, pageSize: 1 });
-      if (fresh.rows[0]) {
-        setSelected(fresh.rows[0]);
-        setEditStatus(fresh.rows[0].status);
-      }
+      setSelected({
+        ...selected,
+        status: 'converted',
+        converted_volunteer_id: result.volunteer_id,
+        converted_at: new Date().toISOString(),
+      });
+      setEditStatus('converted');
     } catch (error) {
       setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Could not convert lead.' });
     } finally {
@@ -311,7 +315,7 @@ export function LeadsView({ canWrite }: Props) {
 
             <Select
               label="Lead status"
-              data={statusOptions}
+              data={editableStatusOptions}
               value={editStatus}
               onChange={(value) => setEditStatus((value || 'new') as VolunteerLeadStatus)}
               disabled={!canWrite || selected.status === 'converted'}
