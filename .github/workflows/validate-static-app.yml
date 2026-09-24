@@ -34,46 +34,31 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Build static app
         run: npm run build
-      - name: Verify Web Awesome build output
+      - name: Verify native production build
         shell: bash
         run: |
           set -euo pipefail
           test -f dist/index.html
-          test -f dist/assets/webawesome-ui.js
-          test -f dist/assets/webawesome-ui.css
-          test -f dist/assets/webawesome-controls.js
-          test -f dist/assets/webawesome-controls.css
-          test -f dist/assets/webawesome-overlays.js
-          test -f dist/assets/webawesome-overlays.css
-          test -f dist/assets/webawesome-dialogs.js
-          test -f dist/vendor/webawesome/webawesome.loader.js
-          test -f dist/vendor/webawesome/styles/webawesome.css
-          grep -q 'vendor/webawesome/webawesome.loader.js' dist/index.html
-          grep -q 'assets/webawesome-ui.js' dist/index.html
-          grep -q 'assets/webawesome-controls.js' dist/index.html
-          grep -q 'assets/webawesome-overlays.js' dist/index.html
-          grep -q 'assets/webawesome-dialogs.js' dist/index.html
+          test -f dist/assets/volunteer-leads.js
+          test -f dist/assets/volunteer-leads.css
+          grep -q 'data-view="leadsView"' dist/index.html
+          grep -q 'assets/volunteer-leads.js?v=20260924-1' dist/index.html
+          grep -q 'assets/volunteer-leads.css?v=20260924-1' dist/index.html
+          ! grep -q 'vendor/webawesome/webawesome.loader.js' dist/index.html
+          ! grep -q 'assets/webawesome-ui.js' dist/index.html
+          ! grep -q 'assets/webawesome-controls.js' dist/index.html
+          ! grep -q 'assets/webawesome-overlays.js' dist/index.html
+          ! grep -q 'assets/webawesome-dialogs.js' dist/index.html
           grep -q 'assets/event-report-import-core.js?v=20260921-1' dist/index.html
           grep -q 'assets/event-report-import.js?v=20260921-1' dist/index.html
           grep -q "async function createVolunteerIdentity" assets/event-report-import.js
           grep -q "vol_event_report" assets/event-report-import.js
           ! grep -q "retained without a profile link" assets/event-report-import.js
-          ! grep -q 'assets/webawesome-events.js' dist/index.html
-          ! grep -q 'assets/webawesome-event-forms.js' dist/index.html
-          ! grep -q 'assets/webawesome-static-workflows.js' dist/index.html
-          ! grep -q 'assets/webawesome-workflows.js' dist/index.html
-          ! grep -qi 'mantine' dist/index.html
-          grep -q 'assets/webawesome-ui.js?v=20260921-2' dist/index.html
-          grep -q 'assets/webawesome-controls.js?v=20260921-1' dist/index.html
-          ! grep -q "scope.querySelectorAll('button').forEach(enhanceButton)" assets/webawesome-ui.js
-          ! grep -q "scope.querySelectorAll('button').forEach(enhanceButton)" assets/webawesome-controls.js
-          ! grep -A6 'const observer=new MutationObserver(function(mutations)' assets/webawesome-ui.js | grep -q 'syncAllFields();'
           grep -q 'refreshPromise:null' assets/shared-db/core.js
           grep -q 'if(S.state.refreshPromise)return S.state.refreshPromise' assets/shared-db/core.js
           grep -q 'if(st.remoteRefreshPromise)return st.remoteRefreshPromise' assets/shared-db/sync.js
-          grep -q 'assets/shared-db/core.js?v=20260921-1' dist/index.html
+          grep -q 'assets/shared-db/core.js?v=20260924-1' dist/index.html
           grep -q 'assets/shared-db/sync.js?v=20260921-1' dist/index.html
           grep -q 'aria-label="About MakLom"' dist/index.html
           grep -q 'class="info-panel hidden"' dist/index.html
           grep -q "setOpen(false)" assets/info.js
-          ! grep -q "panel.replaceWith(drawer)" assets/webawesome-overlays.js
