@@ -2,8 +2,8 @@
   'use strict';
   const S=window.MaklomSharedDB=window.MaklomSharedDB||{};
   S.config={
-    url:'https://nqthzoakznqgllhfhgpn.supabase.co',
-    key:'sb_publishable_Fh4yoN-Zl5gL_-6SjKCwrw_GNEbcoU0',
+    url:'https://glpdougaxlgaipqlzcbq.supabase.co',
+    key:'sb_publishable_H4hkv5q-5cSz_rlEqligFA_0fUMrzVL',
     sessionKey:'maklom.supabase.session.v1',
     dirtyKey:'maklom.supabase.dirty.v1',
     localDataKey:typeof STORAGE_KEY==='string'?STORAGE_KEY:'volunteerDatabaseTool.v1',
