@@ -1,4 +1,4 @@
-import formsgFactory from "npm:@opengovsg/formsg-sdk@8.1.0";
+import formsgFactory from "https://esm.sh/@opengovsg/formsg-sdk@8.1.0?target=deno&bundle";
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 
 const EXPECTED_FORM_ID = "6ab08df24e9cff0f3ac1af45";
