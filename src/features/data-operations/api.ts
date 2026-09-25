@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { supabase } from '../../lib/supabase';
-import type { DuplicateRow, FormImportBatch } from '../../lib/types';
+import type { DuplicateRow, FormImportBatch, HistoricalAttendanceImportBatch, HistoricalAttendancePreviewRow } from '../../lib/types';
 import { digits, hashString, lower, newId } from '../../lib/utils';
 
 export async function fetchDuplicateCases() {
@@ -169,4 +169,139 @@ export async function importEventReportCsv(file: File) {
     }
   }
   return counters;
+}
+
+
+const HISTORICAL_ALIASES: Record<string,string[]> = {
+  sourceVolunteerIdentifier:['volunteer_id','old_volunteer_id','legacy_volunteer_id','maklom_id','kel_id'],
+  fullName:['name','full_name','volunteer_name','volunteer'],
+  email:['email','email_address'],
+  phone:['phone','mobile','contact','contact_number','mobile_number'],
+  eventName:['event','event_name','activity','activity_name','programme_event'],
+  eventDate:['date','event_date','activity_date'],
+  role:['role','volunteer_role','deployment_role'],
+  hours:['hours','duration_hours','credited_hours','volunteer_hours'],
+  minutes:['minutes','duration_minutes','credited_minutes'],
+  attended:['attended','attendance','attendance_status'],
+};
+
+function normalisedRecord(row:Record<string,unknown>){
+  const out:Record<string,string>={};
+  for(const [key,value] of Object.entries(row))out[String(key).trim().toLowerCase().replace(/[^a-z0-9]+/g,'_')]=String(value??'').trim();
+  return out;
+}
+function pick(row:Record<string,string>,key:string){for(const alias of HISTORICAL_ALIASES[key]||[])if(row[alias])return row[alias];return'';}
+function parseHistoricalDate(value:string){
+  if(!value)return'';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(value))return value;
+  const date=new Date(value);if(Number.isNaN(date.getTime()))return'';
+  return date.toISOString().slice(0,10);
+}
+function parseAttendance(value:string){const v=lower(value);if(!v)return true;return !['no','n','false','0','absent','no-show','no show'].includes(v);}
+function minutesFrom(row:Record<string,string>){
+  const direct=Number(pick(row,'minutes'));if(Number.isFinite(direct)&&direct>=0)return Math.round(direct);
+  const hours=Number(pick(row,'hours'));if(Number.isFinite(hours)&&hours>=0)return Math.round(hours*60);
+  return 0;
+}
+
+export async function previewHistoricalAttendance(file:File):Promise<HistoricalAttendancePreviewRow[]>{
+  const bytes=await file.arrayBuffer();
+  const workbook=XLSX.read(bytes,{type:'array',cellDates:true});
+  const sheet=workbook.Sheets[workbook.SheetNames[0]];
+  const raw=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet,{defval:''});
+  if(!raw.length)throw new Error('The historical attendance file contains no data rows.');
+
+  const [volunteerRes,existingRes]=await Promise.all([
+    supabase.from('volunteers').select('id,core_volunteer_id,legacy_maklom_id,name,email,phone'),
+    supabase.from('historical_attendance_import_rows').select('source_row_hash'),
+  ]);
+  if(volunteerRes.error)throw volunteerRes.error;if(existingRes.error)throw existingRes.error;
+  const volunteers=volunteerRes.data||[];const existingHashes=new Set((existingRes.data||[]).map((r)=>r.source_row_hash));
+
+  return raw.map((source,index)=>{
+    const row=normalisedRecord(source);
+    const sourceVolunteerIdentifier=pick(row,'sourceVolunteerIdentifier')||null;
+    const fullName=pick(row,'fullName');const email=pick(row,'email')||null;const phone=pick(row,'phone')||null;
+    const eventName=pick(row,'eventName');const eventDate=parseHistoricalDate(pick(row,'eventDate'));
+    const volunteerRole=pick(row,'role')||null;const reportedMinutes=minutesFrom(row);const attended=parseAttendance(pick(row,'attended'));
+    const sourceRowHash=hashString([lower(sourceVolunteerIdentifier),lower(fullName),lower(email),digits(phone),lower(eventName),eventDate,reportedMinutes,lower(volunteerRole),attended?'1':'0'].join('|'));
+    const reviewFlags:string[]=[];
+
+    let match=sourceVolunteerIdentifier?volunteers.find((v)=>v.id===sourceVolunteerIdentifier||v.legacy_maklom_id===sourceVolunteerIdentifier||String((v as any).volunteer_code||'')===sourceVolunteerIdentifier):undefined;
+    let reason=match?'Matched legacy/profile identifier':null;
+    if(!match&&email){
+      const matches=volunteers.filter((v)=>lower(v.email)===lower(email));
+      if(matches.length===1){match=matches[0];reason='Matched exact email';}
+      else if(matches.length>1)reviewFlags.push('duplicate_email');
+    }
+    if(!match&&phone&&fullName){
+      const matches=volunteers.filter((v)=>digits(v.phone)===digits(phone)&&lower(v.name)===lower(fullName));
+      if(matches.length===1){match=matches[0];reason='Matched phone + name';}
+      else if(matches.length>1)reviewFlags.push('duplicate_phone_name');
+    }
+
+    let matchStatus:HistoricalAttendancePreviewRow['matchStatus']='matched';
+    if(existingHashes.has(sourceRowHash)){matchStatus='duplicate';reason='Historical row already imported';}
+    else if(!fullName||!eventName||!eventDate){matchStatus='invalid';reason='Name, event and valid date are required';}
+    else if(match){matchStatus='matched';}
+    else if(email||phone){matchStatus='created';reason='Will create a canonical volunteer profile on confirmation';}
+    else {matchStatus='needs_review';reason='No stable identifier available';reviewFlags.push('missing_email_phone');}
+
+    return{sourceRowNumber:index+2,sourceVolunteerIdentifier,fullName,email,phone,eventName,eventDate,volunteerRole,reportedMinutes,attended,rawPayload:source,sourceRowHash,matchStatus,
+      matchedVolunteerId:match?.id||null,matchedCoreVolunteerId:match?.core_volunteer_id||null,matchReason:reason,reviewFlags};
+  });
+}
+
+export async function commitHistoricalAttendance(file:File,rows:HistoricalAttendancePreviewRow[]){
+  const batchId=newId('hist_batch');
+  const importable=rows.filter((r)=>r.matchStatus==='matched'||r.matchStatus==='created');
+  const totals={matched:0,created:0,review:0,duplicate:0,imported:0,minutes:0};
+  const {error:batchError}=await supabase.from('historical_attendance_import_batches').insert({
+    id:batchId,source_filename:file.name,row_count:rows.length,status:'committed'
+  });if(batchError)throw batchError;
+
+  for(const row of rows){
+    let volunteerId=row.matchedVolunteerId,coreId=row.matchedCoreVolunteerId,status=row.matchStatus,reason=row.matchReason;
+    if(status==='created'){
+      const {data,error}=await supabase.rpc('maklom_match_or_create_volunteer',{
+        p_name:row.fullName,p_email:row.email,p_phone:row.phone,
+        p_recruited_year:Number(row.eventDate.slice(0,4))||null,p_interests:null,
+        p_tags:['Historical attendance'],p_notes:'Created from historical attendance import.',p_origin:'historical_import'
+      });if(error)throw error;
+      const result=data as {status:string;profile_id:string;core_volunteer_id:string};
+      volunteerId=result.profile_id;coreId=result.core_volunteer_id;status=result.status==='created'?'created':'matched';reason=result.status==='created'?'Created during historical import':'Matched existing during confirmation';
+    }
+    let attendanceId:string|null=null;
+    if((status==='matched'||status==='created')&&volunteerId){
+      attendanceId=`hist_att_${row.sourceRowHash}`;
+      const {error}=await supabase.from('attendance_log').insert({
+        id:attendanceId,volunteer_id:volunteerId,name:row.fullName,email:row.email,contact:row.phone,
+        attended:row.attended,event_name:row.eventName,event_date:row.eventDate,duration_minutes:row.reportedMinutes,
+        calculated_duration_minutes:row.reportedMinutes,staff_credited_duration_minutes:row.reportedMinutes,
+        staff_credit_note:`Historical attendance import: ${file.name}`,
+        source_kind:'historical_import',historical_import_batch_id:batchId,historical_source_row_hash:row.sourceRowHash,
+        volunteer_role:row.volunteerRole
+      });if(error)throw error;
+      totals.imported++;totals.minutes+=row.reportedMinutes;if(status==='created')totals.created++;else totals.matched++;
+    }else if(status==='duplicate')totals.duplicate++;else totals.review++;
+
+    const {error:rowError}=await supabase.from('historical_attendance_import_rows').insert({
+      batch_id:batchId,source_row_number:row.sourceRowNumber,source_row_hash:row.sourceRowHash,
+      source_volunteer_identifier:row.sourceVolunteerIdentifier,full_name:row.fullName,email:row.email,phone:row.phone,
+      event_name:row.eventName,event_date:row.eventDate||'1900-01-01',volunteer_role:row.volunteerRole,reported_minutes:row.reportedMinutes,
+      attended:row.attended,match_status:status,matched_volunteer_id:volunteerId,matched_core_volunteer_id:coreId,
+      match_reason:reason,review_flags:row.reviewFlags,raw_payload:row.rawPayload,committed_attendance_id:attendanceId
+    });if(rowError)throw rowError;
+  }
+
+  const {error:updateError}=await supabase.from('historical_attendance_import_batches').update({
+    matched_count:totals.matched,created_volunteer_count:totals.created,review_count:totals.review,duplicate_count:totals.duplicate,
+    imported_count:totals.imported,total_minutes:totals.minutes,status:totals.review?'partial':'committed',completed_at:new Date().toISOString()
+  }).eq('id',batchId);if(updateError)throw updateError;
+  return{batchId,...totals,rows:importable.length};
+}
+
+export async function fetchHistoricalAttendanceBatches(){
+  const{data,error}=await supabase.from('historical_attendance_import_batches').select('*').order('created_at',{ascending:false}).limit(100);
+  if(error)throw error;return(data||[]) as HistoricalAttendanceImportBatch[];
 }
