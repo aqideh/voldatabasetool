@@ -79,3 +79,17 @@ export interface HistoricalAttendancePreviewRow {
   matchReason:string|null;
   reviewFlags:string[];
 }
+
+
+export type ContributionStatus='pending'|'approved'|'rejected'|'needs_review';
+export interface ContributionReviewRow {
+  id:string; volunteer_id:string; maklom_volunteer_id:string|null; volunteer_code:string|null; volunteer_name:string|null;
+  volunteer_email:string|null; volunteer_phone:string|null; event_id:string; event_title:string|null; attendance_session_id:string;
+  occurred_at:string; operational_minutes:number; approved_minutes:number|null; status:ContributionStatus; approval_note:string|null;
+  approved_by:string|null; approved_at:string|null; created_at:string; updated_at:string;
+}
+export interface ContributionAuditRow {
+  id:number; contribution_id:string; old_status:ContributionStatus|null; new_status:ContributionStatus;
+  old_approved_minutes:number|null; new_approved_minutes:number|null; changed_by:string|null; changed_at:string;
+}
+export interface ContributionFilters {search:string;status:ContributionStatus|'all';page:number;pageSize:number;}
