@@ -74,10 +74,12 @@ function mapLead(responses: FormField[]) {
     interestArea: findAnswer(
       responses,
       (q) =>
-        q.includes("interested in") ||
         q.includes("interest area") ||
+        q.includes("area of interest") ||
         q.includes("volunteer role") ||
         q.includes("role interest") ||
+        q.includes("which role") ||
+        q.includes("which area") ||
         q.includes("how would you like to contribute"),
     ),
     motivation: findAnswer(
@@ -85,6 +87,8 @@ function mapLead(responses: FormField[]) {
       (q) =>
         q.includes("why would you like to volunteer") ||
         q.includes("why do you want to volunteer") ||
+        q.includes("why are you interested in volunteering") ||
+        q.includes("interested in volunteering") ||
         q.includes("motivation"),
     ),
     skillsExperience: findAnswer(
