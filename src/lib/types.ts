@@ -8,12 +8,13 @@ export interface VolunteerRow {
   interests:string|null; languages_spoken:string|null; programmes_registered:string[]; tags:string[];
   emergency_name:string|null; emergency_phone:string|null; shirt_size:string|null; dietary:string|null;
   notes:string|null; updated_at:string; row_version:number;
+  attendance_rows?:number; total_credited_minutes?:number; last_active?:string|null; first_tag?:string; search_text?:string;
 }
 export type VolunteerUpdate = Omit<VolunteerRow,'id'|'core_volunteer_id'|'volunteer_code'|'updated_at'|'row_version'>;
 
 export interface VolunteerFilters {
-  search:string; tag:string|null; recruitedYear:number|null;
-  sort:'name-asc'|'name-desc'|'newest'|'oldest'; page:number; pageSize:number;
+  search:string; tag:string|null; recruitedYear:number|null; gender:string|null; shirtSize:string|null; activity:'all'|'active'|'inactive';
+  sort:'name-asc'|'name-desc'|'newest'|'oldest'|'hours'|'last-active'|'tag'; page:number; pageSize:number;
 }
 
 export type VolunteerLeadStatus='new'|'reviewing'|'contacted'|'accepted'|'converted'|'not_selected'|'withdrawn';
@@ -50,4 +51,31 @@ export interface AttendanceReconciliation {
   event_name:string;event_date:string;sign_in_at:string|null;sign_out_at:string|null;calculated_duration_minutes:number|null;
   staff_credited_duration_minutes:number|null;staff_credit_note:string|null;match_status:string;match_confidence:number;match_reason:string|null;
   review_flags:string[];included:boolean;review_acknowledged:boolean;row_version:number;
+}
+
+
+export interface HistoricalAttendanceImportBatch {
+  id:string; source_filename:string; row_count:number; matched_count:number; created_volunteer_count:number;
+  review_count:number; duplicate_count:number; imported_count:number; total_minutes:number;
+  status:'committed'|'partial'|'failed'; completed_at:string|null; created_at:string;
+}
+
+export interface HistoricalAttendancePreviewRow {
+  sourceRowNumber:number;
+  sourceVolunteerIdentifier:string|null;
+  fullName:string;
+  email:string|null;
+  phone:string|null;
+  eventName:string;
+  eventDate:string;
+  volunteerRole:string|null;
+  reportedMinutes:number;
+  attended:boolean;
+  rawPayload:Record<string,unknown>;
+  sourceRowHash:string;
+  matchStatus:'matched'|'created'|'needs_review'|'duplicate'|'invalid';
+  matchedVolunteerId:string|null;
+  matchedCoreVolunteerId:string|null;
+  matchReason:string|null;
+  reviewFlags:string[];
 }
