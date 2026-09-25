@@ -11,10 +11,11 @@ import { LeadsView } from './features/leads/LeadsView';
 import { VolunteersView } from './features/volunteers/VolunteersView';
 import { EventsView } from './features/events/EventsView';
 import { AttendanceView } from './features/attendance/AttendanceView';
+import { ContributionReviewView } from './features/contributions/ContributionReviewView';
 import { FormAttendanceView } from './features/form-attendance/FormAttendanceView';
 import { DataOperationsView } from './features/data-operations/DataOperationsView';
 
-const sections=['Overview','Volunteer Leads','Central Database','Events & Shifts','Attendance','Form Attendance','Data Operations'] as const;
+const sections=['Overview','Volunteer Leads','Central Database','Events & Shifts','Attendance','Contribution Review','Form Attendance','Data Operations'] as const;
 type Section=(typeof sections)[number];
 
 function LoginScreen(){
@@ -42,7 +43,7 @@ export default function App(){
       {section==='Volunteer Leads'&&<LeadsView canWrite={canWrite}/>}
       {section==='Central Database'&&<VolunteersView canWrite={canWrite}/>}
       {section==='Events & Shifts'&&<EventsView canWrite={canWrite} canDelete={canDelete}/>}
-      {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}
+      {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}\n      {section==='Contribution Review'&&<ContributionReviewView canWrite={canWrite}/>}
       {section==='Form Attendance'&&<FormAttendanceView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Data Operations'&&<DataOperationsView canWrite={canWrite}/>}
     </Box></AppShell.Main>
