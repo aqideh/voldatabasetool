@@ -44,8 +44,7 @@ export default function App(){
       {section==='Volunteer Leads'&&<LeadsView canWrite={canWrite}/>}
       {section==='Central Database'&&<VolunteersView canWrite={canWrite}/>}
       {section==='Events & Shifts'&&<EventsView canWrite={canWrite} canDelete={canDelete}/>}
-      {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}\n      {section==='Contribution Review'&&<ContributionReviewView canWrite={canWrite}/>}
-      {section==='Form Attendance'&&<FormAttendanceView canWrite={canWrite} canDelete={canDelete}/>}
+      {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}\n      {section==='Contribution Review'&&<ContributionReviewView canWrite={canWrite}/>}\n      {section==='Profile Change Review'&&<ProfileChangeReviewView canWrite={canWrite}/>}\n      {section==='Form Attendance'&&<FormAttendanceView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Data Operations'&&<DataOperationsView canWrite={canWrite}/>}
     </Box></AppShell.Main>
   </AppShell>;
