@@ -93,3 +93,13 @@ export interface ContributionAuditRow {
   old_approved_minutes:number|null; new_approved_minutes:number|null; changed_by:string|null; changed_at:string;
 }
 export interface ContributionFilters {search:string;status:ContributionStatus|'all';page:number;pageSize:number;}
+
+
+export type ProfileChangeStatus='pending'|'approved'|'rejected'|'superseded';
+export interface ProfileChangeReviewRow {
+  id:string; volunteer_id:string; maklom_volunteer_id:string|null; volunteer_code:string|null; volunteer_name:string|null;
+  volunteer_email:string|null; volunteer_phone:string|null; field_name:string; old_value:string|null; new_value:string|null;
+  current_maklom_value:string|null; source:string; status:ProfileChangeStatus; source_changed_at:string;
+  reviewed_by:string|null; reviewed_at:string|null; review_note:string|null;
+}
+export interface ProfileChangeFilters {search:string;status:ProfileChangeStatus|'all';page:number;pageSize:number;}
