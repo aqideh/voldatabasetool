@@ -12,10 +12,11 @@ import { VolunteersView } from './features/volunteers/VolunteersView';
 import { EventsView } from './features/events/EventsView';
 import { AttendanceView } from './features/attendance/AttendanceView';
 import { ContributionReviewView } from './features/contributions/ContributionReviewView';
+import { ProfileChangeReviewView } from './features/profile-changes/ProfileChangeReviewView';
 import { FormAttendanceView } from './features/form-attendance/FormAttendanceView';
 import { DataOperationsView } from './features/data-operations/DataOperationsView';
 
-const sections=['Overview','Volunteer Leads','Central Database','Events & Shifts','Attendance','Contribution Review','Form Attendance','Data Operations'] as const;
+const sections=['Overview','Volunteer Leads','Central Database','Events & Shifts','Attendance','Contribution Review','Profile Change Review','Form Attendance','Data Operations'] as const;
 type Section=(typeof sections)[number];
 
 function LoginScreen(){
