@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Badge, Button, Group, NumberInput, Pagination, Paper, ScrollArea, Select, SimpleGrid, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { fetchAllVolunteerIntelligence, fetchIntelligenceSummary, fetchMonthlyParticipation, fetchRetentionSummary, fetchVolunteerIntelligence } from './api';
+import { fetchAllVolunteerIntelligence, fetchImpactSummary, fetchIntelligenceSummary, fetchMonthlyParticipation, fetchRetentionSummary, fetchVolunteerIntelligence } from './api';
 import type { IntelligenceFilters, VolunteerIntelligenceRow } from '../../lib/types';
 import { minutesLabel } from '../../lib/utils';
 
@@ -24,6 +24,7 @@ export function VolunteerIntelligenceView(){
   const summary=useQuery({queryKey:['intelligence-summary'],queryFn:fetchIntelligenceSummary});
   const retention=useQuery({queryKey:['intelligence-retention'],queryFn:fetchRetentionSummary});
   const monthly=useQuery({queryKey:['intelligence-monthly'],queryFn:fetchMonthlyParticipation});
+  const impact=useQuery({queryKey:['intelligence-impact'],queryFn:fetchImpactSummary});
   const volunteers=useQuery({queryKey:['volunteer-intelligence',filters],queryFn:()=>fetchVolunteerIntelligence(filters),placeholderData:keepPreviousData});
   const totalPages=Math.max(1,Math.ceil((volunteers.data?.count||0)/PAGE_SIZE));
   const s=summary.data;
@@ -53,6 +54,10 @@ export function VolunteerIntelligenceView(){
       <Table.Thead><Table.Tr><Table.Th>Month</Table.Th><Table.Th ta="right">Unique volunteers</Table.Th><Table.Th ta="right">Participations</Table.Th><Table.Th ta="right">2+ events in month</Table.Th><Table.Th ta="right">Historical time</Table.Th><Table.Th ta="right">Approved KELUARGA</Table.Th></Table.Tr></Table.Thead>
       <Table.Tbody>{(monthly.data||[]).map((r)=><Table.Tr key={r.month}><Table.Td>{new Date(r.month+'T00:00:00').toLocaleDateString('en-SG',{month:'short',year:'numeric'})}</Table.Td><Table.Td ta="right">{r.unique_volunteers}</Table.Td><Table.Td ta="right">{r.event_participations}</Table.Td><Table.Td ta="right">{r.repeat_volunteers}</Table.Td><Table.Td ta="right">{minutesLabel(Number(r.historical_credited_minutes))}</Table.Td><Table.Td ta="right">{minutesLabel(Number(r.approved_keluarga_minutes))}</Table.Td></Table.Tr>)}</Table.Tbody>
     </Table></ScrollArea>{!monthly.isLoading&&!monthly.data?.length&&<Text c="dimmed" size="sm" mt="md">No participation has been recorded in this environment yet.</Text>}</Paper>
+    <Paper withBorder radius="lg" p="lg"><Group justify="space-between"><Title order={4}>Recorded impact</Title><Badge variant="light">{(impact.data||[]).length} measures</Badge></Group>
+      {(impact.data||[]).length?<SimpleGrid cols={{base:1,sm:2,lg:3}} mt="md">{(impact.data||[]).slice(0,9).map((r)=><Paper key={r.label+'::'+(r.unit||'')} withBorder radius="md" p="md"><Text size="xs" c="dimmed">{r.label}</Text><Text fz="xl" fw={800}>{Number(r.total).toLocaleString()} {r.unit||''}</Text><Text size="xs" c="dimmed">{r.event_rows} event metric row{r.event_rows===1?'':'s'}</Text></Paper>)}</SimpleGrid>:<Text c="dimmed" size="sm" mt="md">No event impact metrics have been recorded yet. When staff add event impact measures, matching label + unit combinations will aggregate here.</Text>}
+      <Text size="xs" c="dimmed" mt="md">Impact totals are grouped only when both label and unit match; incompatible measures are never combined.</Text>
+    </Paper>
     <Paper withBorder radius="lg" p="md"><Group align="flex-end" grow wrap="wrap">
       <TextInput label="Search volunteers" placeholder="Name, email or phone" value={search} onChange={(e)=>{setSearch(e.currentTarget.value);setPage(0);}}/>
       <Select label="Engagement" value={engagement} data={[{value:'all',label:'All volunteers'},{value:'deployed',label:'Deployed'},{value:'repeat',label:'Repeat engaged'},{value:'active90',label:'Active last 90 days'},{value:'inactive',label:'No attended events'}]} onChange={(v)=>{setEngagement((v||'all') as IntelligenceFilters['engagement']);setPage(0);}}/>
