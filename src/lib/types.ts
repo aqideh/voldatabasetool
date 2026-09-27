@@ -116,3 +116,27 @@ export interface ProfileInboxRow {
 export interface ProfileInboxFilters {
   search:string; status:ProfileInboxStatus|'all'; sourceKind:ProfileInboxSourceKind|'all'; page:number; pageSize:number;
 }
+
+
+export interface IntelligenceSummary {
+  total_volunteers:number; deployed_volunteers:number; repeat_volunteers:number; repeat_engagement_rate:number|null;
+  active_last_90d:number; historical_credited_minutes:number; approved_keluarga_minutes:number;
+  accepted_insights:number; accepted_reviews:number; unresolved_observations:number;
+}
+export interface IntelligenceRetentionRow {
+  cohort_year:number; window_days:number; eligible_volunteers:number; retained_volunteers:number; retention_rate:number|null; as_of_date:string;
+}
+export interface IntelligenceMonthlyRow {
+  month:string; unique_volunteers:number; event_participations:number; repeat_volunteers:number;
+  historical_credited_minutes:number; approved_keluarga_minutes:number;
+}
+export interface VolunteerIntelligenceRow {
+  maklom_volunteer_id:string; core_volunteer_id:string; name:string; email:string|null; phone:string|null; recruited_year:number|null;
+  tags:string[]; programmes_registered:string[]; event_count:number; first_event_date:string|null; last_event_date:string|null;
+  repeat_engaged:boolean; events_last_90d:number; active_last_90d:boolean; historical_credited_minutes:number;
+  approved_keluarga_minutes:number; accepted_insights:number; accepted_reviews:number; accepted_follow_up_reviews:number;
+}
+export interface IntelligenceFilters {
+  search:string; engagement:'all'|'deployed'|'repeat'|'active90'|'inactive'; recruitedYear:number|null;
+  sort:'events'|'last-active'|'historical-hours'|'approved-hours'|'name'; page:number; pageSize:number;
+}
