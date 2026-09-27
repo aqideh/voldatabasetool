@@ -16,8 +16,9 @@ import { ProfileChangeReviewView } from './features/profile-changes/ProfileChang
 import { ProfileInboxView } from './features/profile-inbox/ProfileInboxView';
 import { FormAttendanceView } from './features/form-attendance/FormAttendanceView';
 import { DataOperationsView } from './features/data-operations/DataOperationsView';
+import { VolunteerIntelligenceView } from './features/intelligence/VolunteerIntelligenceView';
 
-const sections=['Overview','Volunteer Leads','Central Database','Events & Shifts','Attendance','Contribution Review','Profile Change Review','Insights & Reviews','Form Attendance','Data Operations'] as const;
+const sections=['Overview','Volunteer Leads','Central Database','Volunteer Intelligence','Events & Shifts','Attendance','Contribution Review','Profile Change Review','Insights & Reviews','Form Attendance','Data Operations'] as const;
 type Section=(typeof sections)[number];
 
 function LoginScreen(){
@@ -44,6 +45,7 @@ export default function App(){
       {section==='Overview'&&<DashboardView/>}
       {section==='Volunteer Leads'&&<LeadsView canWrite={canWrite}/>}
       {section==='Central Database'&&<VolunteersView canWrite={canWrite}/>}
+      {section==='Volunteer Intelligence'&&<VolunteerIntelligenceView/>}
       {section==='Events & Shifts'&&<EventsView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Contribution Review'&&<ContributionReviewView canWrite={canWrite}/>}
