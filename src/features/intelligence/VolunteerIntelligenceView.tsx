@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Badge, Button, Group, Pagination, Paper, Progress, ScrollArea, Select, SimpleGrid, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Badge, Button, Group, NumberInput, Pagination, Paper, ScrollArea, Select, SimpleGrid, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { fetchAllVolunteerIntelligence, fetchIntelligenceSummary, fetchMonthlyParticipation, fetchRetentionSummary, fetchVolunteerIntelligence } from './api';
@@ -9,7 +9,7 @@ import { minutesLabel } from '../../lib/utils';
 const PAGE_SIZE=50;
 function rate(value:number|null){return value==null?'—':`${Number(value).toFixed(1)}%`;}
 function dateLabel(value:string|null){return value?new Date(value+'T00:00:00').toLocaleDateString('en-SG'):'—';}
-function csvCell(value:unknown){const s=String(value??'');return `"${s.replaceAll('"','""')}"`;}
+function csvCell(value:unknown){let s=String(value??'');if(/^[=+\-@]/.test(s.trimStart()))s=`'${s}`;return `"${s.replaceAll('"','""')}"`;}
 function exportCsv(rows:VolunteerIntelligenceRow[]){
   const header=['Name','Email','Phone','Recruited year','Events','First event','Last event','Repeat engaged','Events last 90d','Historical credited minutes','Approved KELUARGA minutes','Accepted insights','Accepted reviews','Follow-up reviews'];
   const body=rows.map((r)=>[r.name,r.email,r.phone,r.recruited_year,r.event_count,r.first_event_date,r.last_event_date,r.repeat_engaged,r.events_last_90d,r.historical_credited_minutes,r.approved_keluarga_minutes,r.accepted_insights,r.accepted_reviews,r.accepted_follow_up_reviews].map(csvCell).join(','));
@@ -56,7 +56,7 @@ export function VolunteerIntelligenceView(){
     <Paper withBorder radius="lg" p="md"><Group align="flex-end" grow wrap="wrap">
       <TextInput label="Search volunteers" placeholder="Name, email or phone" value={search} onChange={(e)=>{setSearch(e.currentTarget.value);setPage(0);}}/>
       <Select label="Engagement" value={engagement} data={[{value:'all',label:'All volunteers'},{value:'deployed',label:'Deployed'},{value:'repeat',label:'Repeat engaged'},{value:'active90',label:'Active last 90 days'},{value:'inactive',label:'No attended events'}]} onChange={(v)=>{setEngagement((v||'all') as IntelligenceFilters['engagement']);setPage(0);}}/>
-      <TextInput label="Recruited year" inputMode="numeric" value={recruitedYear??''} onChange={(e)=>{const v=e.currentTarget.value.trim();setRecruitedYear(v?Number(v):null);setPage(0);}}/>
+      <NumberInput label="Recruited year" placeholder="All years" value={recruitedYear??''} min={1900} max={2100} onChange={(v)=>{setRecruitedYear(typeof v==='number'?v:null);setPage(0);}}/>
       <Select label="Sort" value={sort} data={[{value:'events',label:'Events high-low'},{value:'last-active',label:'Last event newest'},{value:'historical-hours',label:'Historical credited time'},{value:'approved-hours',label:'Approved KELUARGA time'},{value:'name',label:'Name A-Z'}]} onChange={(v)=>setSort((v||'events') as IntelligenceFilters['sort'])}/>
     </Group></Paper>
     <Paper withBorder radius="lg" p={0} style={{overflow:'hidden'}}><ScrollArea><Table striped highlightOnHover verticalSpacing="sm" miw={1250}>
