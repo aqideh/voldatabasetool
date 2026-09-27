@@ -13,10 +13,11 @@ import { EventsView } from './features/events/EventsView';
 import { AttendanceView } from './features/attendance/AttendanceView';
 import { ContributionReviewView } from './features/contributions/ContributionReviewView';
 import { ProfileChangeReviewView } from './features/profile-changes/ProfileChangeReviewView';
+import { ProfileInboxView } from './features/profile-inbox/ProfileInboxView';
 import { FormAttendanceView } from './features/form-attendance/FormAttendanceView';
 import { DataOperationsView } from './features/data-operations/DataOperationsView';
 
-const sections=['Overview','Volunteer Leads','Central Database','Events & Shifts','Attendance','Contribution Review','Profile Change Review','Form Attendance','Data Operations'] as const;
+const sections=['Overview','Volunteer Leads','Central Database','Events & Shifts','Attendance','Contribution Review','Profile Change Review','Insights & Reviews','Form Attendance','Data Operations'] as const;
 type Section=(typeof sections)[number];
 
 function LoginScreen(){
@@ -47,6 +48,7 @@ export default function App(){
       {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Contribution Review'&&<ContributionReviewView canWrite={canWrite}/>}
       {section==='Profile Change Review'&&<ProfileChangeReviewView canWrite={canWrite}/>}
+      {section==='Insights & Reviews'&&<ProfileInboxView canWrite={canWrite}/>}
       {section==='Form Attendance'&&<FormAttendanceView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Data Operations'&&<DataOperationsView canWrite={canWrite}/>}
     </Box></AppShell.Main>
