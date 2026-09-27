@@ -103,3 +103,16 @@ export interface ProfileChangeReviewRow {
   reviewed_by:string|null; reviewed_at:string|null; review_note:string|null;
 }
 export interface ProfileChangeFilters {search:string;status:ProfileChangeStatus|'all';page:number;pageSize:number;}
+
+
+export type ProfileInboxStatus='pending'|'needs_match'|'accepted'|'dismissed'|'source_withdrawn';
+export type ProfileInboxSourceKind='insight'|'review';
+export interface ProfileInboxRow {
+  id:string; volunteer_id:string|null; maklom_volunteer_id:string|null; volunteer_name:string|null; volunteer_email:string|null; volunteer_phone:string|null;
+  source_kind:ProfileInboxSourceKind; source_record_id:string; event_id:string; event_title:string|null; event_reporting_at:string|null; event_venue:string|null;
+  source_person_key:string|null; title:string; payload:Record<string,unknown>; reviewed_title:string|null; reviewed_payload:Record<string,unknown>|null;
+  status:ProfileInboxStatus; reviewed_by:string|null; reviewed_at:string|null; review_note:string|null; created_at:string; updated_at:string;
+}
+export interface ProfileInboxFilters {
+  search:string; status:ProfileInboxStatus|'all'; sourceKind:ProfileInboxSourceKind|'all'; page:number; pageSize:number;
+}
