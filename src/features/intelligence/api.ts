@@ -1,5 +1,5 @@
 import { supabase } from '../../lib/supabase';
-import type { IntelligenceFilters, IntelligenceMonthlyRow, IntelligenceRetentionRow, IntelligenceSummary, VolunteerIntelligenceRow } from '../../lib/types';
+import type { IntelligenceFilters, IntelligenceImpactRow, IntelligenceMonthlyRow, IntelligenceRetentionRow, IntelligenceSummary, VolunteerIntelligenceRow } from '../../lib/types';
 
 function safe(value:string){return value.trim().replace(/[,%()]/g,' ');}
 
@@ -55,4 +55,19 @@ export async function fetchAllVolunteerIntelligence(filters:IntelligenceFilters)
   const{data,error}=await query.order('name').limit(10000);
   if(error)throw error;
   return(data||[]) as VolunteerIntelligenceRow[];
+}
+
+
+export async function fetchImpactSummary(){
+  const{data,error}=await supabase.from('event_impact_metrics').select('label,value,unit');
+  if(error)throw error;
+  const grouped=new Map<string,IntelligenceImpactRow>();
+  for(const row of data||[]){
+    const label=String(row.label||'').trim();if(!label)continue;
+    const unit=row.unit?String(row.unit).trim():null;
+    const key=`${label.toLowerCase()}::${(unit||'').toLowerCase()}`;
+    const current=grouped.get(key)||{label,unit,total:0,event_rows:0};
+    current.total+=Number(row.value||0);current.event_rows+=1;grouped.set(key,current);
+  }
+  return[...grouped.values()].sort((a,b)=>b.event_rows-a.event_rows||a.label.localeCompare(b.label));
 }
