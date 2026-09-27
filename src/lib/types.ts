@@ -140,3 +140,5 @@ export interface IntelligenceFilters {
   search:string; engagement:'all'|'deployed'|'repeat'|'active90'|'inactive'; recruitedYear:number|null;
   sort:'events'|'last-active'|'historical-hours'|'approved-hours'|'name'; page:number; pageSize:number;
 }
+
+export interface IntelligenceImpactRow { label:string; unit:string|null; total:number; event_rows:number; }
