@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Button, Divider, Group, Paper, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { useQuery } from '@tanstack/react-query';
@@ -53,6 +53,14 @@ export function VolunteerResolver({
     queryFn:()=>searchResolutionCandidates(debounced),
     enabled:debounced.trim().length>=2,
   });
+
+  useEffect(()=>{
+    if(!roster.data)return;
+    if(!name)setName(roster.data.volunteer_name||'');
+    if(!email)setEmail(roster.data.email||'');
+    if(!phone)setPhone(roster.data.mobile||'');
+    if(!search)setSearch(roster.data.email||roster.data.mobile||roster.data.volunteer_name||'');
+  },[roster.data]);
 
   const fallbackName=name||roster.data?.volunteer_name||'';
   const fallbackEmail=email||roster.data?.email||'';
