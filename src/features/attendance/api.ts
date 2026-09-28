@@ -6,8 +6,8 @@ function safe(value: string) { return value.trim().replace(/[,%()]/g, ' '); }
 export async function fetchAttendance(filters: AttendanceFilters) {
   const from = filters.page * filters.pageSize;
   const to = from + filters.pageSize - 1;
-  let query = supabase.from('attendance_log').select(
-    'id,volunteer_id,name,email,contact,attended,event_name,event_date,duration_minutes,sign_in_at,sign_out_at,calculated_duration_minutes,staff_credited_duration_minutes,staff_credit_note,event_id,shift_id,shift_label,row_version',
+  let query = supabase.from('maklom_attendance_feed').select(
+    'id,volunteer_id,name,email,contact,attended,event_name,event_date,duration_minutes,sign_in_at,sign_out_at,calculated_duration_minutes,staff_credited_duration_minutes,staff_credit_note,event_id,shift_id,shift_label,row_version,record_source',
     { count: 'exact' },
   );
   const search = safe(filters.search);
@@ -24,12 +24,13 @@ export async function fetchAttendance(filters: AttendanceFilters) {
 }
 
 export async function fetchAttendanceEventNames() {
-  const { data, error } = await supabase.from('attendance_log').select('event_name').order('event_name');
+  const { data, error } = await supabase.from('maklom_attendance_feed').select('event_name').order('event_name');
   if (error) throw error;
   return [...new Set((data || []).map((row) => row.event_name).filter(Boolean))];
 }
 
 export async function updateAttendance(row: AttendanceRow, patch: Partial<AttendanceRow>) {
+  if (row.record_source === 'keluarga') throw new Error('Keluarga attendance is managed in Keluarga MENDAKI.');
   const { data, error } = await supabase.from('attendance_log')
     .update(patch)
     .eq('id', row.id)
@@ -38,10 +39,11 @@ export async function updateAttendance(row: AttendanceRow, patch: Partial<Attend
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('This attendance row changed in another session. Refresh first.');
-  return data as AttendanceRow;
+  return { ...(data as AttendanceRow), record_source: 'maklom' as const };
 }
 
 export async function deleteAttendance(row: AttendanceRow) {
+  if (row.record_source === 'keluarga') throw new Error('Keluarga attendance is managed in Keluarga MENDAKI.');
   const { data, error } = await supabase.from('attendance_log').delete()
     .eq('id', row.id).eq('row_version', row.row_version).select('id').maybeSingle();
   if (error) throw error;
