@@ -5,7 +5,7 @@ import {
 } from '@mantine/core';
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteAttendance, fetchAttendance, fetchAttendanceEventNames, updateAttendance } from './api';
+import { correctKeluargaAttendance, deleteAttendance, fetchAttendance, fetchAttendanceEventNames, updateAttendance } from './api';
 import type { AttendanceFilters, AttendanceRow } from '../../lib/types';
 import { minutesLabel, safeDateTime } from '../../lib/utils';
 
@@ -72,7 +72,7 @@ export function AttendanceView({ canWrite, canDelete }: { canWrite: boolean; can
     </Paper>
     <Group justify="space-between"><Text size="sm" c="dimmed">Page {page+1} of {totalPages}</Text><Pagination total={totalPages} value={page+1} onChange={(value)=>setPage(value-1)} /></Group>
     <Modal opened={opened} onClose={close} title={selected?.name || 'Attendance'} size="lg">
-      {selected && <AttendanceEditor row={selected} canWrite={canWrite && selected.record_source !== 'keluarga'} canDelete={canDelete && selected.record_source !== 'keluarga'} onSaved={(updated) => { setSelected(updated); void refresh(); }} onDeleted={() => { setSelected(null); close(); void refresh(); }} />}
+      {selected && <AttendanceEditor row={selected} canWrite={canWrite} canDelete={canDelete && selected.record_source !== 'keluarga'} onSaved={(updated) => { setSelected(updated); void refresh(); }} onDeleted={() => { setSelected(null); close(); void refresh(); }} />}
     </Modal>
   </Stack>;
 }
@@ -89,10 +89,34 @@ function toIso(value: string) { return value ? new Date(`${value}:00+08:00`).toI
 function AttendanceEditor({ row, canWrite, canDelete, onSaved, onDeleted }: { row: AttendanceRow; canWrite:boolean; canDelete:boolean; onSaved:(r:AttendanceRow)=>void; onDeleted:()=>void }) {
   const [message,setMessage]=useState<string|null>(null);
   const [saving,setSaving]=useState(false);
+  const isKeluarga = row.record_source === 'keluarga';
+
   async function save(form: HTMLFormElement) {
     setSaving(true); setMessage(null);
     const data=new FormData(form);
     try {
+      if (isKeluarga) {
+        const reason=String(data.get('correction_reason')||'').trim();
+        if (reason.length < 5) throw new Error('Enter a correction reason of at least 5 characters.');
+        const checkedInAt=toIso(String(data.get('sign_in_at')||''));
+        if (!checkedInAt) throw new Error('Sign-in time is required.');
+        const checkedOutAt=toIso(String(data.get('sign_out_at')||''));
+        const creditAction=String(data.get('credit_action')||'unchanged') as 'unchanged'|'approve'|'needs_review'|'reject';
+        const approvedMinutes=data.get('credited_minutes')===''?null:Number(data.get('credited_minutes'));
+        await correctKeluargaAttendance(row,{
+          checkedInAt,
+          checkedOutAt,
+          reason,
+          creditAction,
+          approvedMinutes,
+          approvalNote:String(data.get('staff_credit_note')||'').trim()||null,
+        });
+        setMessage('Keluarga attendance corrected and audit history recorded.');
+        await new Promise((resolve)=>setTimeout(resolve,0));
+        onSaved(row);
+        return;
+      }
+
       const updated=await updateAttendance(row,{
         attended:data.get('attended')==='on',
         event_name:String(data.get('event_name')||'').trim(),
@@ -107,22 +131,52 @@ function AttendanceEditor({ row, canWrite, canDelete, onSaved, onDeleted }: { ro
     } catch(error){setMessage(error instanceof Error?error.message:'Could not update attendance.');}
     finally{setSaving(false);}
   }
-  const isKeluarga = row.record_source === 'keluarga';
+
+  const currentCreditAction = row.contribution_status === 'approved'
+    ? 'approve'
+    : row.contribution_status === 'needs_review'
+      ? 'needs_review'
+      : row.contribution_status === 'rejected'
+        ? 'reject'
+        : 'unchanged';
+
   return <Stack>
-    {isKeluarga && <Alert variant="light">This attendance record comes from Keluarga MENDAKI and is read-only in MakLom.</Alert>}
+    {isKeluarga && <Alert variant="light">This is a canonical Keluarga attendance record. MakLom corrections write back to the same record and are audit-logged.</Alert>}
     {message&&<Alert variant="light">{message}</Alert>}
     <form onSubmit={(e)=>{e.preventDefault();void save(e.currentTarget);}}>
-      <Checkbox name="attended" label="Attended" defaultChecked={row.attended} disabled={!canWrite} />
+      {!isKeluarga && <Checkbox name="attended" label="Attended" defaultChecked={row.attended} disabled={!canWrite} />}
       <SimpleGrid cols={{base:1,md:2}} mt="sm">
-        <TextInput name="event_name" label="Event" defaultValue={row.event_name} disabled={!canWrite}/>
-        <TextInput name="event_date" type="date" label="Event date" defaultValue={row.event_date} disabled={!canWrite}/>
-        <TextInput name="shift_label" label="Shift" defaultValue={row.shift_label||''} disabled={!canWrite}/>
-        <NumberInput name="credited_minutes" label="Staff credited minutes" defaultValue={row.staff_credited_duration_minutes ?? ''} min={0} disabled={!canWrite}/>
+        <TextInput name="event_name" label="Event" defaultValue={row.event_name} disabled={isKeluarga||!canWrite}/>
+        <TextInput name="event_date" type="date" label="Event date" defaultValue={row.event_date} disabled={isKeluarga||!canWrite}/>
+        <TextInput name="shift_label" label="Shift" defaultValue={row.shift_label||''} disabled={isKeluarga||!canWrite}/>
+        <NumberInput name="credited_minutes" label={isKeluarga ? "Approved contribution minutes" : "Staff credited minutes"} defaultValue={row.staff_credited_duration_minutes ?? row.calculated_duration_minutes ?? ''} min={0} disabled={!canWrite}/>
         <TextInput name="sign_in_at" type="datetime-local" label="Sign in" defaultValue={localInput(row.sign_in_at)} disabled={!canWrite}/>
         <TextInput name="sign_out_at" type="datetime-local" label="Sign out" defaultValue={localInput(row.sign_out_at)} disabled={!canWrite}/>
       </SimpleGrid>
-      <Textarea name="staff_credit_note" label="Staff credit note" mt="sm" defaultValue={row.staff_credit_note||''} disabled={!canWrite}/>
-      {canWrite&&<Group justify="flex-end" mt="md"><Button type="submit" loading={saving}>Save attendance</Button></Group>}
+      {isKeluarga && <Select
+        name="credit_action"
+        label="Contribution review"
+        mt="sm"
+        defaultValue={currentCreditAction}
+        data={[
+          {value:'unchanged',label:'Leave contribution review unchanged'},
+          {value:'approve',label:'Approve credited minutes'},
+          {value:'needs_review',label:'Flag contribution for review'},
+          {value:'reject',label:'Reject contribution credit'},
+        ]}
+        disabled={!canWrite}
+      />}
+      <Textarea name="staff_credit_note" label={isKeluarga ? "Contribution note" : "Staff credit note"} mt="sm" defaultValue={row.staff_credit_note||''} disabled={!canWrite}/>
+      {isKeluarga && <Textarea
+        name="correction_reason"
+        label="Correction reason"
+        description="Required. This reason is stored in the immutable attendance audit trail."
+        minRows={2}
+        mt="sm"
+        required
+        disabled={!canWrite}
+      />}
+      {canWrite&&<Group justify="flex-end" mt="md"><Button type="submit" loading={saving}>{isKeluarga?'Save correction':'Save attendance'}</Button></Group>}
     </form>
     {canDelete&&<Group justify="flex-end"><Button color="red" variant="light" onClick={()=>{if(confirm('Delete this attendance row?'))void deleteAttendance(row).then(onDeleted)}}>Delete row</Button></Group>}
   </Stack>;
