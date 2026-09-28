@@ -53,7 +53,13 @@ export function AttendanceView({ canWrite, canDelete }: { canWrite: boolean; can
         <Table striped highlightOnHover verticalSpacing="sm" miw={1000}>
           <Table.Thead><Table.Tr><Table.Th>Volunteer</Table.Th><Table.Th>Event</Table.Th><Table.Th>Date</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Status</Table.Th><Table.Th>Time</Table.Th><Table.Th>Credited</Table.Th></Table.Tr></Table.Thead>
           <Table.Tbody>{(rows.data?.rows || []).map((row) => <Table.Tr key={row.id} onClick={() => { setSelected(row); open(); }} style={{cursor:'pointer'}}>
-            <Table.Td><Text fw={700}>{row.name}</Text><Text size="xs" c="dimmed">{row.email || row.contact || '-'}</Text></Table.Td>
+            <Table.Td>
+              <Group gap="xs">
+                <Text fw={700}>{row.name}</Text>
+                {row.record_source === 'keluarga' && <Badge size="xs" variant="light">Keluarga</Badge>}
+              </Group>
+              <Text size="xs" c="dimmed">{row.email || row.contact || '-'}</Text>
+            </Table.Td>
             <Table.Td>{row.event_name}</Table.Td><Table.Td>{row.event_date}</Table.Td><Table.Td>{row.shift_label || '-'}</Table.Td>
             <Table.Td><Badge color={row.attended ? 'green' : 'gray'} variant="light">{row.attended ? 'Attended' : 'Not attended'}</Badge></Table.Td>
             <Table.Td><Text size="sm">{safeDateTime(row.sign_in_at)}</Text><Text size="xs" c="dimmed">to {safeDateTime(row.sign_out_at)}</Text></Table.Td>
@@ -61,11 +67,12 @@ export function AttendanceView({ canWrite, canDelete }: { canWrite: boolean; can
           </Table.Tr>)}</Table.Tbody>
         </Table>
       </ScrollArea>
-      {!rows.isLoading && !rows.data?.rows.length && <Text c="dimmed" ta="center" p="xl">No attendance rows match these filters.</Text>}
+      {rows.isError && <Alert color="red" m="md">Attendance could not be loaded. {rows.error instanceof Error ? rows.error.message : 'Please refresh and try again.'}</Alert>}
+      {!rows.isLoading && !rows.isError && !rows.data?.rows.length && <Text c="dimmed" ta="center" p="xl">No attendance rows match these filters.</Text>}
     </Paper>
     <Group justify="space-between"><Text size="sm" c="dimmed">Page {page+1} of {totalPages}</Text><Pagination total={totalPages} value={page+1} onChange={(value)=>setPage(value-1)} /></Group>
     <Modal opened={opened} onClose={close} title={selected?.name || 'Attendance'} size="lg">
-      {selected && <AttendanceEditor row={selected} canWrite={canWrite} canDelete={canDelete} onSaved={(updated) => { setSelected(updated); void refresh(); }} onDeleted={() => { setSelected(null); close(); void refresh(); }} />}
+      {selected && <AttendanceEditor row={selected} canWrite={canWrite && selected.record_source !== 'keluarga'} canDelete={canDelete && selected.record_source !== 'keluarga'} onSaved={(updated) => { setSelected(updated); void refresh(); }} onDeleted={() => { setSelected(null); close(); void refresh(); }} />}
     </Modal>
   </Stack>;
 }
@@ -100,7 +107,9 @@ function AttendanceEditor({ row, canWrite, canDelete, onSaved, onDeleted }: { ro
     } catch(error){setMessage(error instanceof Error?error.message:'Could not update attendance.');}
     finally{setSaving(false);}
   }
+  const isKeluarga = row.record_source === 'keluarga';
   return <Stack>
+    {isKeluarga && <Alert variant="light">This attendance record comes from Keluarga MENDAKI and is read-only in MakLom.</Alert>}
     {message&&<Alert variant="light">{message}</Alert>}
     <form onSubmit={(e)=>{e.preventDefault();void save(e.currentTarget);}}>
       <Checkbox name="attended" label="Attended" defaultChecked={row.attended} disabled={!canWrite} />

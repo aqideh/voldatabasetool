@@ -18,7 +18,7 @@ function statusColor(status:string){return status==='accepted'?'green':status===
 
 export function ProfileInboxView({canWrite}:{canWrite:boolean}){
   const[search,setSearch]=useState('');const[debounced]=useDebouncedValue(search,250);
-  const[status,setStatus]=useState<ProfileInboxFilters['status']>('pending');const[sourceKind,setSourceKind]=useState<ProfileInboxFilters['sourceKind']>('all');const[page,setPage]=useState(0);
+  const[status,setStatus]=useState<ProfileInboxFilters['status']>('all');const[sourceKind,setSourceKind]=useState<ProfileInboxFilters['sourceKind']>('all');const[page,setPage]=useState(0);
   const[selected,setSelected]=useState<ProfileInboxRow|null>(null);const[opened,{open,close}]=useDisclosure(false);
   const filters=useMemo<ProfileInboxFilters>(()=>({search:debounced,status,sourceKind,page,pageSize:PAGE_SIZE}),[debounced,status,sourceKind,page]);
   const rows=useQuery({queryKey:['profile-inbox',filters],queryFn:()=>fetchProfileInbox(filters),placeholderData:keepPreviousData});
@@ -30,6 +30,7 @@ export function ProfileInboxView({canWrite}:{canWrite:boolean}){
       <Select label="Status" value={status} data={[{value:'pending',label:'Pending'},{value:'needs_match',label:'Needs volunteer match'},{value:'accepted',label:'Accepted'},{value:'dismissed',label:'Dismissed'},{value:'source_withdrawn',label:'Source withdrawn'},{value:'all',label:'All'}]} onChange={(v)=>{setStatus((v||'pending') as ProfileInboxFilters['status']);setPage(0);}}/>
       <Select label="Source" value={sourceKind} data={[{value:'all',label:'Insights & reviews'},{value:'insight',label:'Insights only'},{value:'review',label:'Reviews only'}]} onChange={(v)=>{setSourceKind((v||'all') as ProfileInboxFilters['sourceKind']);setPage(0);}}/>
     </Group></Paper>
+    {rows.isError&&<Alert color="red">Insights & reviews could not be loaded. {rows.error instanceof Error?rows.error.message:'Please refresh and try again.'}</Alert>}
     <Paper withBorder radius="lg" p={0} style={{overflow:'hidden'}}><ScrollArea><Table striped highlightOnHover verticalSpacing="sm" miw={1100}>
       <Table.Thead><Table.Tr><Table.Th>Volunteer</Table.Th><Table.Th>Event</Table.Th><Table.Th>Source</Table.Th><Table.Th>Observation</Table.Th><Table.Th>Received</Table.Th><Table.Th>Status</Table.Th></Table.Tr></Table.Thead>
       <Table.Tbody>{(rows.data?.rows||[]).map((row)=><Table.Tr key={row.id} onClick={()=>{setSelected(row);open();}} style={{cursor:'pointer'}}>
@@ -38,7 +39,7 @@ export function ProfileInboxView({canWrite}:{canWrite:boolean}){
         <Table.Td><Badge variant="light">{row.source_kind}</Badge></Table.Td><Table.Td maw={420}><Text lineClamp={2}>{row.reviewed_title||row.title}</Text></Table.Td>
         <Table.Td>{safeDateTime(row.created_at)}</Table.Td><Table.Td><Badge color={statusColor(row.status)} variant="light">{row.status.replaceAll('_',' ')}</Badge></Table.Td>
       </Table.Tr>)}</Table.Tbody>
-    </Table></ScrollArea>{!rows.isLoading&&!rows.data?.rows.length&&<Text c="dimmed" ta="center" p="xl">No records match this view.</Text>}</Paper>
+    </Table></ScrollArea>{!rows.isLoading&&!rows.isError&&!rows.data?.rows.length&&<Text c="dimmed" ta="center" p="xl">No records match this view.</Text>}</Paper>
     <Group justify="space-between"><Text size="sm" c="dimmed">Page {page+1} of {totalPages}</Text><Pagination total={totalPages} value={page+1} onChange={(v)=>setPage(v-1)}/></Group>
     <Modal opened={opened} onClose={close} title={selected?.volunteer_name||'Insight / review'} size="xl">{selected&&<InboxEditor row={selected} canWrite={canWrite} onSaved={()=>{close();void rows.refetch();}}/>}</Modal>
   </Stack>;
