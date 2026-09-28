@@ -36,11 +36,17 @@ export interface EventShiftRow {
   source?:'maklom'|'keluarga';keluarga_timeslot_id?:string|null;
 }
 export interface EventImpactMetricRow {id:string;event_id:string;label:string;value:number;unit:string|null;row_version:number;}
+export interface EventObservationRow {
+  id:string;event_id:string;volunteer_id:string|null;volunteer_name:string|null;source_kind:'insight'|'review';title:string;
+  payload:Record<string,unknown>;status:ProfileInboxStatus;created_at:string;
+}
 
 export interface AttendanceRow {
   id:string;volunteer_id:string|null;name:string;email:string|null;contact:string|null;attended:boolean;event_name:string;
   event_date:string;duration_minutes:number;sign_in_at:string|null;sign_out_at:string|null;calculated_duration_minutes:number|null;
   staff_credited_duration_minutes:number|null;staff_credit_note:string|null;event_id:string|null;shift_id:string|null;shift_label:string|null;row_version:number;
+  source?:'maklom'|'keluarga';core_volunteer_id?:string|null;identity_status?:'linked'|'unmatched';
+  contribution_status?:ContributionStatus|null;contribution_approved_minutes?:number|null;
 }
 export interface AttendanceFilters {search:string;eventName:string|null;attended:'all'|'yes'|'no';page:number;pageSize:number;}
 
@@ -117,7 +123,7 @@ export interface ProfileInboxRow {
   status:ProfileInboxStatus; reviewed_by:string|null; reviewed_at:string|null; review_note:string|null; created_at:string; updated_at:string;
 }
 export interface ProfileInboxFilters {
-  search:string; status:ProfileInboxStatus|'all'; sourceKind:ProfileInboxSourceKind|'all'; page:number; pageSize:number;
+  search:string; status:ProfileInboxStatus|'open'|'all'; sourceKind:ProfileInboxSourceKind|'all'; page:number; pageSize:number;
 }
 
 export interface IntelligenceSummary {
