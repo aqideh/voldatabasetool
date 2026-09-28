@@ -35,6 +35,17 @@ export async function fetchAttendanceResolutionRosterId(attendanceId:string){
   return data.origin_roster_id as string;
 }
 
+export async function fetchResolutionRosterContext(rosterId:string){
+  const{data,error}=await supabase
+    .from('phaseone_roster')
+    .select('id,volunteer_name,email,mobile')
+    .eq('id',rosterId)
+    .maybeSingle();
+  if(error)throw error;
+  if(!data)throw new Error('Roster identity could not be loaded.');
+  return data as {id:string;volunteer_name:string;email:string|null;mobile:string|null};
+}
+
 export async function fetchInboxResolutionRosterId(sourceKind:'insight'|'review',sourceRecordId:string){
   const table=sourceKind==='review'?'phaseone_volunteer_reviews':'phaseone_volunteer_insights';
   const{data,error}=await supabase.from(table).select('roster_id').eq('id',sourceRecordId).maybeSingle();
