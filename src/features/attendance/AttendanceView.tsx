@@ -8,6 +8,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { correctKeluargaAttendance, deleteAttendance, fetchAttendance, fetchAttendanceEventNames, updateAttendance } from './api';
 import type { AttendanceFilters, AttendanceRow } from '../../lib/types';
 import { minutesLabel, safeDateTime } from '../../lib/utils';
+import { VolunteerResolver } from '../volunteer-resolution/VolunteerResolver';
 
 const PAGE_SIZE = 75;
 
@@ -57,6 +58,7 @@ export function AttendanceView({ canWrite, canDelete }: { canWrite: boolean; can
               <Group gap="xs">
                 <Text fw={700}>{row.name}</Text>
                 {row.record_source === 'keluarga' && <Badge size="xs" variant="light">Keluarga</Badge>}
+                {row.record_source === 'keluarga' && !row.volunteer_id && <Badge size="xs" color="orange" variant="light">Unmatched</Badge>}
               </Group>
               <Text size="xs" c="dimmed">{row.email || row.contact || '-'}</Text>
             </Table.Td>
@@ -72,7 +74,7 @@ export function AttendanceView({ canWrite, canDelete }: { canWrite: boolean; can
     </Paper>
     <Group justify="space-between"><Text size="sm" c="dimmed">Page {page+1} of {totalPages}</Text><Pagination total={totalPages} value={page+1} onChange={(value)=>setPage(value-1)} /></Group>
     <Modal opened={opened} onClose={close} title={selected?.name || 'Attendance'} size="lg">
-      {selected && <AttendanceEditor row={selected} canWrite={canWrite} canDelete={canDelete && selected.record_source !== 'keluarga'} onSaved={(updated) => { setSelected(updated); void refresh(); }} onDeleted={() => { setSelected(null); close(); void refresh(); }} />}
+      {selected && <AttendanceEditor row={selected} canWrite={canWrite} canDelete={canDelete && selected.record_source !== 'keluarga'} onSaved={(updated) => { setSelected(updated); void refresh(); }} onResolved={() => { setSelected(null); close(); void refresh(); }} onDeleted={() => { setSelected(null); close(); void refresh(); }} />}
     </Modal>
   </Stack>;
 }
@@ -86,7 +88,7 @@ function localInput(value: string | null) {
 }
 function toIso(value: string) { return value ? new Date(`${value}:00+08:00`).toISOString() : null; }
 
-function AttendanceEditor({ row, canWrite, canDelete, onSaved, onDeleted }: { row: AttendanceRow; canWrite:boolean; canDelete:boolean; onSaved:(r:AttendanceRow)=>void; onDeleted:()=>void }) {
+function AttendanceEditor({ row, canWrite, canDelete, onSaved, onResolved, onDeleted }: { row: AttendanceRow; canWrite:boolean; canDelete:boolean; onSaved:(r:AttendanceRow)=>void; onResolved:()=>void; onDeleted:()=>void }) {
   const [message,setMessage]=useState<string|null>(null);
   const [saving,setSaving]=useState(false);
   const isKeluarga = row.record_source === 'keluarga';
@@ -142,6 +144,13 @@ function AttendanceEditor({ row, canWrite, canDelete, onSaved, onDeleted }: { ro
 
   return <Stack>
     {isKeluarga && <Alert variant="light">This is a canonical Keluarga attendance record. MakLom corrections write back to the same record and are audit-logged.</Alert>}
+    {isKeluarga && !row.volunteer_id && canWrite && <VolunteerResolver
+      source={{kind:'attendance',attendanceId:row.id}}
+      initialName={row.name}
+      initialEmail={row.email}
+      initialPhone={row.contact}
+      onResolved={onResolved}
+    />}
     {message&&<Alert variant="light">{message}</Alert>}
     <form onSubmit={(e)=>{e.preventDefault();void save(e.currentTarget);}}>
       {!isKeluarga && <Checkbox name="attended" label="Attended" defaultChecked={row.attended} disabled={!canWrite} />}

@@ -5,6 +5,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { fetchProfileInbox, fetchVolunteerInboxHistory, reviewProfileInbox } from './api';
 import type { ProfileInboxFilters, ProfileInboxRow } from '../../lib/types';
 import { safeDateTime } from '../../lib/utils';
+import { VolunteerResolver } from '../volunteer-resolution/VolunteerResolver';
 
 const PAGE_SIZE=75;
 function sourceSummary(row:ProfileInboxRow){
@@ -49,10 +50,27 @@ function InboxEditor({row,canWrite,onSaved}:{row:ProfileInboxRow;canWrite:boolea
   const qc=useQueryClient();const[title,setTitle]=useState(row.reviewed_title||row.title);const[summary,setSummary]=useState(String(row.reviewed_payload?.summary||sourceSummary(row)));const[note,setNote]=useState(row.review_note||'');const[saving,setSaving]=useState(false);const[message,setMessage]=useState<string|null>(null);
   const history=useQuery({queryKey:['profile-inbox-history',row.volunteer_id],queryFn:()=>fetchVolunteerInboxHistory(row.volunteer_id as string),enabled:Boolean(row.volunteer_id)});
   async function act(status:'accepted'|'dismissed'){setSaving(true);setMessage(null);try{await reviewProfileInbox(row,{status,title,summary,note:note.trim()||null});await qc.invalidateQueries({queryKey:['profile-inbox-history',row.volunteer_id]});onSaved();}catch(error){setMessage(error instanceof Error?error.message:'Could not review record.');}finally{setSaving(false);}}
+  function resolved(){
+    void Promise.all([
+      qc.invalidateQueries({queryKey:['profile-inbox']}),
+      qc.invalidateQueries({queryKey:['attendance']}),
+      qc.invalidateQueries({queryKey:['contribution-reviews']}),
+      qc.invalidateQueries({queryKey:['volunteers']}),
+      qc.invalidateQueries({queryKey:['dashboard-summary']}),
+    ]);
+    onSaved();
+  }
   const editable=row.status==='pending'||row.status==='needs_match';
   return <Stack>
     {message&&<Alert color="red">{message}</Alert>}
-    {row.status==='needs_match'&&<Alert color="orange">This source record is not linked to a canonical volunteer yet. It can be dismissed, but it must be matched before acceptance.</Alert>}
+    {row.status==='needs_match'&&<Alert color="orange">This source record is not linked to a canonical volunteer yet. Resolve the volunteer before accepting it.</Alert>}
+    {row.status==='needs_match'&&canWrite&&<VolunteerResolver
+      source={{kind:'inbox',sourceKind:row.source_kind,sourceRecordId:row.source_record_id}}
+      initialName={row.volunteer_name}
+      initialEmail={row.volunteer_email}
+      initialPhone={row.volunteer_phone}
+      onResolved={resolved}
+    />}
     <Paper withBorder radius="md" p="md"><Group justify="space-between"><div><Text fw={700}>{row.event_title||'Event context unavailable'}</Text><Text size="sm" c="dimmed">{row.event_reporting_at?safeDateTime(row.event_reporting_at):''}{row.event_venue?` · ${row.event_venue}`:''}</Text></div><Badge variant="light">{row.source_kind}</Badge></Group><Divider my="sm"/><Text size="xs" c="dimmed">Original source</Text><Text fw={600}>{row.title}</Text><Text size="sm" mt="xs">{sourceSummary(row)||'No additional source detail.'}</Text></Paper>
     <TextInput label="Reviewed title" value={title} onChange={(e)=>setTitle(e.currentTarget.value)} disabled={!canWrite||!editable}/>
     <Textarea label="Reviewed interpretation" description="Staff-edited longitudinal interpretation. The original event source remains unchanged." minRows={4} value={summary} onChange={(e)=>setSummary(e.currentTarget.value)} disabled={!canWrite||!editable}/>
