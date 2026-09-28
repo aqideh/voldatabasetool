@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { AppShell, Badge, Box, Burger, Button, Center, Group, Loader, NavLink, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -32,10 +32,62 @@ function LoginScreen(){
   </Stack></Paper></Center>;
 }
 
+function LoadingScreen({label}:{label:string}){
+  return <Center mih="100vh" bg="gray.0" p="md"><Paper withBorder radius="xl" p="xl" w="100%" maw={420}><Stack align="center" gap="md">
+    <div className="maklom-brand"><img src="/maklom-logo.svg" alt=""/><div><Title order={2}>MakLom</Title><Text c="dimmed">Volunteer operations database</Text></div></div>
+    <Loader/>
+    <Text c="dimmed" size="sm">{label}</Text>
+  </Stack></Paper></Center>;
+}
+
 export default function App(){
-  const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[section,setSection]=useState<Section>('Overview');const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();
-  useEffect(()=>{let active=true;void supabase.auth.getSession().then(async({data})=>{if(!active)return;setSession(data.session);if(data.session)setMember(await loadMember(data.session));setInitialising(false);}).catch(()=>setInitialising(false));const{data:listener}=supabase.auth.onAuthStateChange((_event,next)=>{setSession(next);if(!next){setMember(null);qc.clear();return;}setTimeout(()=>{void loadMember(next).then(setMember).catch(()=>setMember(null));},0);});return()=>{active=false;listener.subscription.unsubscribe();};},[qc]);
-  if(initialising)return <Center mih="100vh"><Loader/></Center>;if(!session)return <LoginScreen/>;
+  const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[memberLoading,setMemberLoading]=useState(false);const[memberError,setMemberError]=useState('');const[section,setSection]=useState<Section>('Overview');const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();const memberRequest=useRef(0);
+
+  const loadCurrentMember=useCallback(async(current:Session)=>{
+    const request=++memberRequest.current;
+    setMember(null);setMemberLoading(true);setMemberError('');
+    try{
+      const nextMember=await loadMember(current);
+      if(request!==memberRequest.current)return;
+      setMember(nextMember);
+    }catch(err){
+      if(request!==memberRequest.current)return;
+      setMemberError(err instanceof Error?err.message:'MakLom access could not be loaded.');
+    }finally{
+      if(request===memberRequest.current)setMemberLoading(false);
+    }
+  },[]);
+
+  useEffect(()=>{
+    let active=true;
+    void supabase.auth.getSession().then(({data})=>{
+      if(!active)return;
+      const next=data.session;
+      setSession(next);
+      setInitialising(false);
+      if(next)void loadCurrentMember(next);
+      else{setMember(null);setMemberLoading(false);setMemberError('');}
+    }).catch((err)=>{
+      if(!active)return;
+      setInitialising(false);setMember(null);setMemberLoading(false);setMemberError(err instanceof Error?err.message:'MakLom session could not be loaded.');
+    });
+    const{data:listener}=supabase.auth.onAuthStateChange((_event,next)=>{
+      if(!active)return;
+      setSession(next);
+      if(!next){memberRequest.current++;setMember(null);setMemberLoading(false);setMemberError('');qc.clear();return;}
+      setTimeout(()=>{if(active)void loadCurrentMember(next);},0);
+    });
+    return()=>{active=false;memberRequest.current++;listener.subscription.unsubscribe();};
+  },[qc,loadCurrentMember]);
+
+  if(initialising)return <LoadingScreen label="Starting MakLom…"/>;
+  if(!session)return <LoginScreen/>;
+  if(memberLoading)return <LoadingScreen label="Checking your MakLom access…"/>;
+  if(memberError)return <Center mih="100vh" bg="gray.0" p="md"><Paper withBorder radius="xl" p="xl" w="100%" maw={520}><Stack>
+    <div className="maklom-brand"><img src="/maklom-logo.svg" alt=""/><div><Title order={2}>MakLom could not load</Title><Text c="dimmed">Your sign-in succeeded, but your access profile could not be retrieved.</Text></div></div>
+    <Text c="red" size="sm">{memberError}</Text>
+    <Group><Button onClick={()=>void loadCurrentMember(session)}>Try again</Button><Button variant="subtle" onClick={()=>void signOut()}>Sign out</Button></Group>
+  </Stack></Paper></Center>;
   if(!member?.active)return <Center mih="100vh" p="md"><Paper withBorder radius="xl" p="xl" maw={520}><Stack><Title order={2}>Access not authorised</Title><Text c="dimmed">This account is signed in but is not an active MakLom member.</Text><Button variant="light" onClick={()=>void signOut()}>Sign out</Button></Stack></Paper></Center>;
   const canWrite=member.role==='editor'||member.role==='admin',canDelete=member.role==='admin';
   return <AppShell header={{height:64}} navbar={{width:245,breakpoint:'sm',collapsed:{mobile:!opened}}} padding="lg">
