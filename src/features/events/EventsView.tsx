@@ -90,7 +90,13 @@ export function EventsView({ canWrite, canDelete }: Props) {
         <Table.Thead><Table.Tr><Table.Th>Event</Table.Th><Table.Th>Dates</Table.Th><Table.Th>Programme</Table.Th><Table.Th>Venue</Table.Th><Table.Th>Shifts</Table.Th></Table.Tr></Table.Thead>
         <Table.Tbody>
           {(query.data?.events || []).map((event) => <Table.Tr key={event.id} onClick={() => { setSelectedId(event.id); open(); }} style={{ cursor: 'pointer' }}>
-            <Table.Td><Text fw={700}>{event.name}</Text><Text size="xs" c="dimmed">{event.status}</Text></Table.Td>
+            <Table.Td>
+              <Group gap="xs">
+                <Text fw={700}>{event.name}</Text>
+                {event.source === 'keluarga' && <Badge size="xs" variant="light">Keluarga</Badge>}
+              </Group>
+              <Text size="xs" c="dimmed">{event.status}</Text>
+            </Table.Td>
             <Table.Td>{event.start_date}{event.end_date !== event.start_date ? ` – ${event.end_date}` : ''}</Table.Td>
             <Table.Td>{event.programme || '-'}</Table.Td>
             <Table.Td>{event.venue || '-'}</Table.Td>
@@ -106,8 +112,8 @@ export function EventsView({ canWrite, canDelete }: Props) {
         event={selected}
         shifts={shifts}
         metrics={metrics}
-        canWrite={canWrite}
-        canDelete={canDelete}
+        canWrite={canWrite && selected.source !== 'keluarga'}
+        canDelete={canDelete && selected.source !== 'keluarga'}
         onRefresh={refresh}
         onDeleted={() => { setSelectedId(null); close(); void refresh(); }}
       />}
@@ -138,7 +144,10 @@ function EventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, o
     finally { setSaving(false); }
   }
 
+  const isKeluarga = event.source === 'keluarga';
+
   return <Stack>
+    {isKeluarga && <Alert variant="light">This event is owned by Keluarga MENDAKI and is read-only in MakLom.</Alert>}
     {status && <Alert variant="light">{status}</Alert>}
     <form onSubmit={(e) => { e.preventDefault(); void save(e.currentTarget); }}>
       <SimpleGrid cols={{ base: 1, md: 2 }}>
@@ -182,7 +191,7 @@ function EventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, o
       </Stack>
     </Paper>
 
-    <Paper withBorder p="md">
+    {!isKeluarga && <Paper withBorder p="md">
       <Title order={4}>Impact metrics</Title>
       <Stack gap="xs" mt="sm">
         {metrics.map((metric: any) => <Group key={metric.id} justify="space-between">
@@ -202,7 +211,7 @@ function EventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, o
           <Group justify="flex-end" mt="sm"><Button size="xs" type="submit">Add metric</Button></Group>
         </form>}
       </Stack>
-    </Paper>
+    </Paper>}
 
     {canDelete && <Group justify="flex-end"><Button color="red" variant="light" onClick={() => {
       if (confirm(`Delete ${event.name}? Related shifts and metrics will be removed.`)) void deleteEvent(event).then(onDeleted);

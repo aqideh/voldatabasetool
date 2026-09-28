@@ -26,8 +26,15 @@ export interface VolunteerLead {
 }
 export interface LeadFilters {search:string;status:VolunteerLeadStatus|null;page:number;pageSize:number;}
 
-export interface EventRow {id:string;name:string;start_date:string;end_date:string;programme:string|null;venue:string|null;notes:string|null;status:'active'|'archived';updated_at:string;row_version:number;}
-export interface EventShiftRow {id:string;event_id:string;name:string;shift_date:string;start_time:string|null;end_time:string|null;notes:string|null;row_version:number;}
+export interface EventRow {
+  id:string;name:string;start_date:string;end_date:string;programme:string|null;venue:string|null;notes:string|null;
+  status:'active'|'archived';updated_at:string;row_version:number;
+  source?:'maklom'|'keluarga';keluarga_event_id?:string|null;
+}
+export interface EventShiftRow {
+  id:string;event_id:string;name:string;shift_date:string;start_time:string|null;end_time:string|null;notes:string|null;row_version:number;
+  source?:'maklom'|'keluarga';keluarga_timeslot_id?:string|null;
+}
 export interface EventImpactMetricRow {id:string;event_id:string;label:string;value:number;unit:string|null;row_version:number;}
 
 export interface AttendanceRow {
@@ -52,7 +59,6 @@ export interface AttendanceReconciliation {
   staff_credited_duration_minutes:number|null;staff_credit_note:string|null;match_status:string;match_confidence:number;match_reason:string|null;
   review_flags:string[];included:boolean;review_acknowledged:boolean;row_version:number;
 }
-
 
 export interface HistoricalAttendanceImportBatch {
   id:string; source_filename:string; row_count:number; matched_count:number; created_volunteer_count:number;
@@ -80,7 +86,6 @@ export interface HistoricalAttendancePreviewRow {
   reviewFlags:string[];
 }
 
-
 export type ContributionStatus='pending'|'approved'|'rejected'|'needs_review';
 export interface ContributionReviewRow {
   id:string; volunteer_id:string; maklom_volunteer_id:string|null; volunteer_code:string|null; volunteer_name:string|null;
@@ -94,7 +99,6 @@ export interface ContributionAuditRow {
 }
 export interface ContributionFilters {search:string;status:ContributionStatus|'all';page:number;pageSize:number;}
 
-
 export type ProfileChangeStatus='pending'|'approved'|'rejected'|'superseded';
 export interface ProfileChangeReviewRow {
   id:string; volunteer_id:string; maklom_volunteer_id:string|null; volunteer_code:string|null; volunteer_name:string|null;
@@ -103,7 +107,6 @@ export interface ProfileChangeReviewRow {
   reviewed_by:string|null; reviewed_at:string|null; review_note:string|null;
 }
 export interface ProfileChangeFilters {search:string;status:ProfileChangeStatus|'all';page:number;pageSize:number;}
-
 
 export type ProfileInboxStatus='pending'|'needs_match'|'accepted'|'dismissed'|'source_withdrawn';
 export type ProfileInboxSourceKind='insight'|'review';
@@ -116,7 +119,6 @@ export interface ProfileInboxRow {
 export interface ProfileInboxFilters {
   search:string; status:ProfileInboxStatus|'all'; sourceKind:ProfileInboxSourceKind|'all'; page:number; pageSize:number;
 }
-
 
 export interface IntelligenceSummary {
   total_volunteers:number; deployed_volunteers:number; repeat_volunteers:number; repeat_engagement_rate:number|null;
