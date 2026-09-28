@@ -7,7 +7,7 @@ export async function fetchAttendance(filters: AttendanceFilters) {
   const from = filters.page * filters.pageSize;
   const to = from + filters.pageSize - 1;
   let query = supabase.from('maklom_attendance_feed').select(
-    'id,volunteer_id,name,email,contact,attended,event_name,event_date,duration_minutes,sign_in_at,sign_out_at,calculated_duration_minutes,staff_credited_duration_minutes,staff_credit_note,event_id,shift_id,shift_label,row_version,record_source',
+    'id,volunteer_id,name,email,contact,attended,event_name,event_date,duration_minutes,sign_in_at,sign_out_at,calculated_duration_minutes,staff_credited_duration_minutes,staff_credit_note,event_id,shift_id,shift_label,row_version,record_source,contribution_status',
     { count: 'exact' },
   );
   const search = safe(filters.search);
@@ -30,7 +30,7 @@ export async function fetchAttendanceEventNames() {
 }
 
 export async function updateAttendance(row: AttendanceRow, patch: Partial<AttendanceRow>) {
-  if (row.record_source === 'keluarga') throw new Error('Keluarga attendance is managed in Keluarga MENDAKI.');
+  if (row.record_source === 'keluarga') throw new Error('Use the Keluarga attendance correction flow for canonical attendance.');
   const { data, error } = await supabase.from('attendance_log')
     .update(patch)
     .eq('id', row.id)
@@ -48,4 +48,30 @@ export async function deleteAttendance(row: AttendanceRow) {
     .eq('id', row.id).eq('row_version', row.row_version).select('id').maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('This attendance row changed in another session. Refresh first.');
+}
+
+
+export async function correctKeluargaAttendance(
+  row: AttendanceRow,
+  input: {
+    checkedInAt: string;
+    checkedOutAt: string | null;
+    reason: string;
+    creditAction: 'unchanged' | 'approve' | 'needs_review' | 'reject';
+    approvedMinutes: number | null;
+    approvalNote: string | null;
+  },
+) {
+  if (row.record_source !== 'keluarga') throw new Error('This is not a Keluarga attendance record.');
+  const sessionId = row.id.startsWith('keluarga:') ? row.id.slice('keluarga:'.length) : row.id;
+  const { error } = await supabase.rpc('maklom_correct_keluarga_attendance', {
+    p_session_id: sessionId,
+    p_checked_in_at: input.checkedInAt,
+    p_checked_out_at: input.checkedOutAt,
+    p_reason: input.reason,
+    p_credit_action: input.creditAction,
+    p_approved_minutes: input.creditAction === 'approve' ? input.approvedMinutes : null,
+    p_approval_note: input.approvalNote,
+  });
+  if (error) throw error;
 }
