@@ -15,25 +15,18 @@ export async function signOut() {
 }
 
 export async function loadMember(session: Session): Promise<AppMember | null> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MEMBER_LOOKUP_TIMEOUT_MS);
+  const lookup = supabase
+    .from('app_members')
+    .select('user_id,role,active')
+    .eq('user_id', session.user.id)
+    .maybeSingle();
 
-  try {
-    const { data, error } = await supabase
-      .from('app_members')
-      .select('user_id,role,active')
-      .eq('user_id', session.user.id)
-      .maybeSingle()
-      .abortSignal(controller.signal);
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('MakLom access check timed out. Please try again.')), MEMBER_LOOKUP_TIMEOUT_MS);
+  });
 
-    if (error) throw error;
-    return data as AppMember | null;
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error('MakLom access check timed out. Please try again.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+  const { data, error } = await Promise.race([lookup, timeout]);
+
+  if (error) throw error;
+  return data as AppMember | null;
 }
