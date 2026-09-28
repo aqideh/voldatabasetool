@@ -41,7 +41,7 @@ export interface AttendanceRow {
   id:string;volunteer_id:string|null;name:string;email:string|null;contact:string|null;attended:boolean;event_name:string;
   event_date:string;duration_minutes:number;sign_in_at:string|null;sign_out_at:string|null;calculated_duration_minutes:number|null;
   staff_credited_duration_minutes:number|null;staff_credit_note:string|null;event_id:string|null;shift_id:string|null;shift_label:string|null;row_version:number;
-  record_source?:'maklom'|'keluarga';
+  record_source?:'maklom'|'keluarga';contribution_status?:'pending'|'approved'|'rejected'|'needs_review'|null;
 }
 export interface AttendanceFilters {search:string;eventName:string|null;attended:'all'|'yes'|'no';page:number;pageSize:number;}
 
