@@ -68,6 +68,9 @@ export function EventsView({ canWrite, canDelete }: Props) {
     </Group>
 
     {message && <Alert color="red" variant="light">{message}</Alert>}
+    {query.isError && <Alert color="red" variant="light">
+      Events could not be loaded. {query.error instanceof Error ? query.error.message : 'Please refresh and try again.'}
+    </Alert>}
 
     {canWrite && <Paper withBorder radius="lg" p="md">
       <form onSubmit={(event) => { event.preventDefault(); void addEvent(event.currentTarget); }}>
@@ -104,7 +107,7 @@ export function EventsView({ canWrite, canDelete }: Props) {
           </Table.Tr>)}
         </Table.Tbody>
       </Table>
-      {!query.isLoading && !query.data?.events.length && <Text c="dimmed" ta="center" p="xl">No events found.</Text>}
+      {!query.isLoading && !query.isError && !query.data?.events.length && <Text c="dimmed" ta="center" p="xl">No events found.</Text>}
     </Paper>
 
     <Modal opened={opened} onClose={close} title={selected?.name || 'Event'} size="xl">
