@@ -16,10 +16,11 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
   const[search,setSearch]=useState('');const[debouncedSearch]=useDebouncedValue(search,250);
   const[tag,setTag]=useState<string|null>(null);const[year,setYear]=useState<number|null>(null);
   const[gender,setGender]=useState<string|null>(null);const[shirtSize,setShirtSize]=useState<string|null>(null);
+  const[planningArea,setPlanningArea]=useState<string|null>(null);const[electoralDivision,setElectoralDivision]=useState<string|null>(null);
   const[activity,setActivity]=useState<VolunteerFilters['activity']>('all');
   const[sort,setSort]=useState<VolunteerFilters['sort']>('name-asc');
   const[page,setPage]=useState(0);const[selected,setSelected]=useState<VolunteerRow|null>(null);
-  const filters=useMemo<VolunteerFilters>(()=>({search:debouncedSearch,tag,recruitedYear:year,gender,shirtSize,activity,sort,page,pageSize:PAGE_SIZE}),[debouncedSearch,tag,year,gender,shirtSize,activity,sort,page]);
+  const filters=useMemo<VolunteerFilters>(()=>({search:debouncedSearch,tag,recruitedYear:year,gender,shirtSize,planningArea,electoralDivision,activity,sort,page,pageSize:PAGE_SIZE}),[debouncedSearch,tag,year,gender,shirtSize,planningArea,electoralDivision,activity,sort,page]);
   const options=useQuery({queryKey:['volunteer-filter-options'],queryFn:fetchVolunteerFilterOptions,staleTime:5*60_000});
   const volunteers=useQuery({queryKey:['volunteers',filters],queryFn:()=>fetchVolunteers(filters),placeholderData:keepPreviousData});
   const totalPages=Math.max(1,Math.ceil((volunteers.data?.count||0)/PAGE_SIZE));
