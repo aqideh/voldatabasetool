@@ -29,6 +29,32 @@ export async function fetchVolunteers(filters:VolunteerFilters){
   const{data,error,count}=await query.range(from,to);if(error)throw error;return{rows:(data||[]) as VolunteerRow[],count:count||0};
 }
 
+export async function fetchVolunteerExportRows(filters:VolunteerFilters){
+  let query=supabase.from('maklom_volunteer_search_directory').select(SELECT);
+  const search=safeSearchTerm(filters.search);
+  if(search)query=query.ilike('search_text',`%${search}%`);
+  if(filters.tag)query=query.contains('tags',[filters.tag]);
+  if(filters.recruitedYear)query=query.eq('recruited_year',filters.recruitedYear);
+  if(filters.gender)query=query.eq('gender',filters.gender);
+  if(filters.shirtSize)query=query.eq('shirt_size',filters.shirtSize);
+  if(filters.planningArea)query=query.eq('planning_area',filters.planningArea);
+  if(filters.electoralDivision)query=query.eq('electoral_division',filters.electoralDivision);
+  if(filters.activity==='active')query=query.gt('attendance_rows',0);
+  if(filters.activity==='inactive')query=query.eq('attendance_rows',0);
+
+  if(filters.sort==='name-desc')query=query.order('name',{ascending:false});
+  else if(filters.sort==='newest')query=query.order('updated_at',{ascending:false});
+  else if(filters.sort==='oldest')query=query.order('updated_at',{ascending:true});
+  else if(filters.sort==='hours')query=query.order('total_credited_minutes',{ascending:false}).order('name');
+  else if(filters.sort==='last-active')query=query.order('last_active',{ascending:false,nullsFirst:false}).order('name');
+  else if(filters.sort==='tag')query=query.order('first_tag',{ascending:true}).order('name');
+  else query=query.order('name',{ascending:true});
+
+  const{data,error}=await query.range(0,9999);
+  if(error)throw error;
+  return(data||[]) as VolunteerRow[];
+}
+
 export async function fetchVolunteerFilterOptions(){
   const{data,error}=await supabase.from('maklom_volunteer_search_directory').select('tags,recruited_year,gender,shirt_size,planning_area,electoral_division');if(error)throw error;
   const tags=new Set<string>(),years=new Set<number>(),genders=new Set<string>(),shirtSizes=new Set<string>(),planningAreas=new Set<string>(),electoralDivisions=new Set<string>();
