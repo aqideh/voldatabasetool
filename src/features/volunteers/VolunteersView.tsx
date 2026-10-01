@@ -9,6 +9,7 @@ import { fetchVolunteerExportRows, fetchVolunteerFilterOptions, fetchVolunteers 
 import { VolunteerDrawer } from './VolunteerDrawer';
 import { createEmptyVolunteerQuery } from './search-types';
 import type { VolunteerQueryNode, VolunteerSearchFilters, VolunteerSearchSort } from './search-types';
+import type { VolunteerSearchRow } from './search-row';
 import type { VolunteerRow } from '../../lib/types';
 import { minutesLabel } from '../../lib/utils';
 
@@ -45,6 +46,7 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
     placeholderData:keepPreviousData,
   });
   const totalPages=Math.max(1,Math.ceil((volunteers.data?.count||0)/PAGE_SIZE));
+  const resultRows=(volunteers.data?.rows||[]) as VolunteerSearchRow[];
 
   function resetPage(){if(page!==0)setPage(0);}
   function clearFilters(){
@@ -165,7 +167,7 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
             <Table.Th>Attended</Table.Th><Table.Th>Registered</Table.Th><Table.Th>Hours</Table.Th><Table.Th>Last active</Table.Th>
           </Table.Tr></Table.Thead>
           <Table.Tbody>
-            {(volunteers.data?.rows||[]).map((row)=><Table.Tr key={row.id} onClick={()=>setSelected(row)} style={{cursor:'pointer'}}>
+            {resultRows.map((row)=><Table.Tr key={row.id} onClick={()=>setSelected(row)} style={{cursor:'pointer'}}>
               <Table.Td><Text fw={700}>{row.name}</Text><Text size="xs" c="dimmed">{row.volunteer_code}</Text></Table.Td>
               <Table.Td><Text size="sm">{row.email||'-'}</Text><Text size="xs" c="dimmed">{row.phone||'-'}</Text></Table.Td>
               <Table.Td><Text size="sm">{row.neighbourhood||row.planning_area||'-'}</Text>{row.neighbourhood&&row.planning_area&&row.neighbourhood!==row.planning_area?<Text size="xs" c="dimmed">{row.planning_area}</Text>:null}</Table.Td>
@@ -183,7 +185,7 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
         </Table>
       </ScrollArea>
       {volunteers.isLoading&&<Group justify="center" p="xl"><Loader size="sm"/></Group>}
-      {!volunteers.isLoading&&!volunteers.data?.rows.length&&<Text c="dimmed" ta="center" p="xl">No volunteers match this query.</Text>}
+      {!volunteers.isLoading&&!resultRows.length&&<Text c="dimmed" ta="center" p="xl">No volunteers match this query.</Text>}
     </Paper>
 
     <Group justify="space-between">
