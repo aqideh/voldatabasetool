@@ -49,6 +49,17 @@ export function VolunteerDrawer({volunteer,canWrite,canDelete,onClose,onSaved,on
       <TextInput label="Emergency contact phone" value={form.emergency_phone||''} onChange={(e)=>set('emergency_phone',e.currentTarget.value)} disabled={disabled}/>
     </SimpleGrid>
     <Textarea label="Address" autosize minRows={2} value={form.address||''} onChange={(e)=>set('address',e.currentTarget.value)} disabled={disabled}/>
+    <Paper withBorder radius="md" p="md">
+      <Stack gap={6}>
+        <Text fw={700} size="sm">Verified home area</Text>
+        <SimpleGrid cols={{base:1,md:3}}>
+          <div><Text size="xs" c="dimmed">Neighbourhood</Text><Text size="sm">{volunteer.neighbourhood||'-'}</Text></div>
+          <div><Text size="xs" c="dimmed">Planning area</Text><Text size="sm">{volunteer.planning_area||'-'}</Text></div>
+          <div><Text size="xs" c="dimmed">GRC / SMC</Text><Text size="sm">{volunteer.electoral_division||'-'}</Text></div>
+        </SimpleGrid>
+        <Text size="xs" c="dimmed">Derived from the volunteer's verified Keluarga home location and read-only in MakLom.</Text>
+      </Stack>
+    </Paper>
     <Textarea label="Interests / skills" autosize minRows={2} value={form.interests||''} onChange={(e)=>set('interests',e.currentTarget.value)} disabled={disabled}/>
     <TagsInput label="Programmes" value={form.programmes_registered||[]} onChange={(v)=>set('programmes_registered',v)} disabled={disabled}/>
     <TagsInput label="Tags" value={form.tags||[]} onChange={(v)=>set('tags',v)} disabled={disabled}/>
