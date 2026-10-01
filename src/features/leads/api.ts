@@ -12,7 +12,7 @@ export async function fetchVolunteerLeads(filters: LeadFilters) {
   let query = supabase
     .from('volunteer_leads')
     .select(
-      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
+      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,raw_payload,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
       { count: 'exact' },
     );
 
@@ -53,7 +53,7 @@ export async function updateVolunteerLead(
     .eq('id', id)
     .eq('row_version', expectedVersion)
     .select(
-      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
+      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,raw_payload,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
     )
     .maybeSingle();
 
