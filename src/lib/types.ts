@@ -4,16 +4,17 @@ export interface AppMember { user_id: string; role: AppRole; active: boolean; }
 
 export interface VolunteerRow {
   id:string; core_volunteer_id:string; volunteer_code:string; name:string; nric:string|null; phone:string|null; email:string|null; gender:string|null;
-  address:string|null; recruited_year:number|null; chat_session:string|null; chat_session_date:string|null;
+  address:string|null; neighbourhood:string|null; planning_area:string|null; electoral_division:string|null;
+  recruited_year:number|null; chat_session:string|null; chat_session_date:string|null;
   interests:string|null; languages_spoken:string|null; programmes_registered:string[]; tags:string[];
   emergency_name:string|null; emergency_phone:string|null; shirt_size:string|null; dietary:string|null;
   notes:string|null; updated_at:string; row_version:number;
   attendance_rows?:number; total_credited_minutes?:number; last_active?:string|null; first_tag?:string; search_text?:string;
 }
-export type VolunteerUpdate = Omit<VolunteerRow,'id'|'core_volunteer_id'|'volunteer_code'|'updated_at'|'row_version'>;
+export type VolunteerUpdate = Omit<VolunteerRow,'id'|'core_volunteer_id'|'volunteer_code'|'neighbourhood'|'planning_area'|'electoral_division'|'updated_at'|'row_version'|'attendance_rows'|'total_credited_minutes'|'last_active'|'first_tag'|'search_text'>;
 
 export interface VolunteerFilters {
-  search:string; tag:string|null; recruitedYear:number|null; gender:string|null; shirtSize:string|null; activity:'all'|'active'|'inactive';
+  search:string; tag:string|null; recruitedYear:number|null; gender:string|null; shirtSize:string|null; planningArea:string|null; electoralDivision:string|null; activity:'all'|'active'|'inactive';
   sort:'name-asc'|'name-desc'|'newest'|'oldest'|'hours'|'last-active'|'tag'; page:number; pageSize:number;
 }
 

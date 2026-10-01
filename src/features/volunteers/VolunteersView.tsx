@@ -1,29 +1,47 @@
 import { useMemo, useState } from 'react';
 import {
-  Badge, Group, Loader, NumberInput, Pagination, Paper, ScrollArea, Select, Stack, Table, Text, TextInput, Title,
+  Badge, Button, Group, Loader, NumberInput, Pagination, Paper, ScrollArea, Select, Stack, Table, Text, TextInput, Title,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchVolunteerFilterOptions, fetchVolunteers } from './api';
+import { fetchVolunteerExportRows, fetchVolunteerFilterOptions, fetchVolunteers } from './api';
 import { VolunteerDrawer } from './VolunteerDrawer';
 import type { VolunteerFilters, VolunteerRow } from '../../lib/types';
 import { minutesLabel } from '../../lib/utils';
 
 const PAGE_SIZE=50;
+function csvCell(value:unknown){const text=value==null?'':String(value);return `"${text.replaceAll('"','""')}"`;}
 
 export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:boolean}){
   const qc=useQueryClient();
   const[search,setSearch]=useState('');const[debouncedSearch]=useDebouncedValue(search,250);
   const[tag,setTag]=useState<string|null>(null);const[year,setYear]=useState<number|null>(null);
   const[gender,setGender]=useState<string|null>(null);const[shirtSize,setShirtSize]=useState<string|null>(null);
+  const[planningArea,setPlanningArea]=useState<string|null>(null);const[electoralDivision,setElectoralDivision]=useState<string|null>(null);
   const[activity,setActivity]=useState<VolunteerFilters['activity']>('all');
   const[sort,setSort]=useState<VolunteerFilters['sort']>('name-asc');
-  const[page,setPage]=useState(0);const[selected,setSelected]=useState<VolunteerRow|null>(null);
-  const filters=useMemo<VolunteerFilters>(()=>({search:debouncedSearch,tag,recruitedYear:year,gender,shirtSize,activity,sort,page,pageSize:PAGE_SIZE}),[debouncedSearch,tag,year,gender,shirtSize,activity,sort,page]);
+  const[page,setPage]=useState(0);const[selected,setSelected]=useState<VolunteerRow|null>(null);const[exporting,setExporting]=useState(false);
+  const filters=useMemo<VolunteerFilters>(()=>({search:debouncedSearch,tag,recruitedYear:year,gender,shirtSize,planningArea,electoralDivision,activity,sort,page,pageSize:PAGE_SIZE}),[debouncedSearch,tag,year,gender,shirtSize,planningArea,electoralDivision,activity,sort,page]);
   const options=useQuery({queryKey:['volunteer-filter-options'],queryFn:fetchVolunteerFilterOptions,staleTime:5*60_000});
   const volunteers=useQuery({queryKey:['volunteers',filters],queryFn:()=>fetchVolunteers(filters),placeholderData:keepPreviousData});
   const totalPages=Math.max(1,Math.ceil((volunteers.data?.count||0)/PAGE_SIZE));
   function resetPage(){if(page!==0)setPage(0);}
+  async function exportCsv(){
+    setExporting(true);
+    try{
+      const rows=await fetchVolunteerExportRows(filters);
+      const header=['KEL ID','Name','Email','Phone','Neighbourhood','Planning area','GRC / SMC','Gender','Recruited year','Tags','Programmes','Total hours','Last active'];
+      const lines=[header,...rows.map((row)=>[
+        row.volunteer_code,row.name,row.email,row.phone,row.neighbourhood,row.planning_area,row.electoral_division,row.gender,row.recruited_year,
+        (row.tags||[]).join('; '),(row.programmes_registered||[]).join('; '),((row.total_credited_minutes||0)/60).toFixed(2),row.last_active
+      ])].map((row)=>row.map(csvCell).join(','));
+      const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const anchor=document.createElement('a');
+      anchor.href=url;anchor.download='maklom-volunteers.csv';anchor.click();
+      URL.revokeObjectURL(url);
+    }finally{setExporting(false);}
+  }
   async function handleSaved(updated:VolunteerRow){setSelected(updated);await Promise.all([
     qc.invalidateQueries({queryKey:['volunteers']}),qc.invalidateQueries({queryKey:['volunteer-filter-options']}),qc.invalidateQueries({queryKey:['dashboard-summary']})
   ]);}
@@ -34,14 +52,19 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
   return <Stack gap="md">
     <Group justify="space-between" align="flex-end">
       <div><Title order={2}>Central Database</Title><Text c="dimmed" size="sm">Search the full volunteer database with the filters and activity signals from the previous MakLom dashboard.</Text></div>
-      <Badge size="lg" variant="light">{(volunteers.data?.count||0).toLocaleString()} matches</Badge>
+      <Group gap="sm">
+        <Button variant="default" loading={exporting} onClick={()=>void exportCsv()}>Export filtered CSV</Button>
+        <Badge size="lg" variant="light">{(volunteers.data?.count||0).toLocaleString()} matches</Badge>
+      </Group>
     </Group>
     <Paper withBorder radius="lg" p="md">
       <Group align="flex-end" grow wrap="wrap">
-        <TextInput label="Search" placeholder="KEL ID, name, phone, email, address, programme, notes or tags" value={search} onChange={(e)=>{setSearch(e.currentTarget.value);resetPage();}}/>
+        <TextInput label="Search" placeholder="KEL ID, name, phone, email, area, GRC/SMC, programme, notes or tags" value={search} onChange={(e)=>{setSearch(e.currentTarget.value);resetPage();}}/>
         <Select label="Tag" placeholder="All tags" clearable searchable data={options.data?.tags||[]} value={tag} onChange={(v)=>{setTag(v);resetPage();}}/>
         <Select label="Gender" placeholder="All genders" clearable data={options.data?.genders||[]} value={gender} onChange={(v)=>{setGender(v);resetPage();}}/>
         <Select label="T-shirt" placeholder="All sizes" clearable data={options.data?.shirtSizes||[]} value={shirtSize} onChange={(v)=>{setShirtSize(v);resetPage();}}/>
+        <Select label="Planning area" placeholder="All planning areas" clearable searchable data={options.data?.planningAreas||[]} value={planningArea} onChange={(v)=>{setPlanningArea(v);resetPage();}}/>
+        <Select label="GRC / SMC" placeholder="All divisions" clearable searchable data={options.data?.electoralDivisions||[]} value={electoralDivision} onChange={(v)=>{setElectoralDivision(v);resetPage();}}/>
         <Select label="Activity" value={activity} data={[{value:'all',label:'All volunteers'},{value:'active',label:'Has attendance'},{value:'inactive',label:'No attendance'}]} onChange={(v)=>{setActivity((v||'all') as VolunteerFilters['activity']);resetPage();}}/>
         <NumberInput label="Recruited year" placeholder="All years" value={year??''} min={1900} max={2100} onChange={(v)=>{setYear(typeof v==='number'?v:null);resetPage();}}/>
         <Select label="Sort" value={sort} data={[
@@ -56,13 +79,15 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
       <ScrollArea>
         <Table striped highlightOnHover verticalSpacing="sm" horizontalSpacing="md" miw={1200}>
           <Table.Thead><Table.Tr>
-            <Table.Th>Name</Table.Th><Table.Th>Contact</Table.Th><Table.Th>Gender</Table.Th><Table.Th>Recruited</Table.Th>
+            <Table.Th>Name</Table.Th><Table.Th>Contact</Table.Th><Table.Th>Area</Table.Th><Table.Th>GRC / SMC</Table.Th><Table.Th>Gender</Table.Th><Table.Th>Recruited</Table.Th>
             <Table.Th>Tags</Table.Th><Table.Th>Programmes</Table.Th><Table.Th>Hours</Table.Th><Table.Th>Last active</Table.Th>
           </Table.Tr></Table.Thead>
           <Table.Tbody>
             {(volunteers.data?.rows||[]).map((row)=><Table.Tr key={row.id} onClick={()=>setSelected(row)} style={{cursor:'pointer'}}>
               <Table.Td><Text fw={700}>{row.name}</Text><Text size="xs" c="dimmed">{row.volunteer_code}</Text></Table.Td>
               <Table.Td><Text size="sm">{row.email||'-'}</Text><Text size="xs" c="dimmed">{row.phone||'-'}</Text></Table.Td>
+              <Table.Td><Text size="sm">{row.neighbourhood||row.planning_area||'-'}</Text>{row.neighbourhood&&row.planning_area&&row.neighbourhood!==row.planning_area?<Text size="xs" c="dimmed">{row.planning_area}</Text>:null}</Table.Td>
+              <Table.Td>{row.electoral_division||'-'}</Table.Td>
               <Table.Td>{row.gender||'-'}</Table.Td><Table.Td>{row.recruited_year||'-'}</Table.Td>
               <Table.Td><Group gap={4} wrap="wrap">{(row.tags||[]).slice(0,4).map((item)=><Badge key={item} variant="light" size="sm">{item}</Badge>)}</Group></Table.Td>
               <Table.Td><Text size="sm" lineClamp={2}>{(row.programmes_registered||[]).join(', ')||'-'}</Text></Table.Td>
