@@ -59,13 +59,15 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
       <ScrollArea>
         <Table striped highlightOnHover verticalSpacing="sm" horizontalSpacing="md" miw={1200}>
           <Table.Thead><Table.Tr>
-            <Table.Th>Name</Table.Th><Table.Th>Contact</Table.Th><Table.Th>Gender</Table.Th><Table.Th>Recruited</Table.Th>
+            <Table.Th>Name</Table.Th><Table.Th>Contact</Table.Th><Table.Th>Area</Table.Th><Table.Th>GRC / SMC</Table.Th><Table.Th>Gender</Table.Th><Table.Th>Recruited</Table.Th>
             <Table.Th>Tags</Table.Th><Table.Th>Programmes</Table.Th><Table.Th>Hours</Table.Th><Table.Th>Last active</Table.Th>
           </Table.Tr></Table.Thead>
           <Table.Tbody>
             {(volunteers.data?.rows||[]).map((row)=><Table.Tr key={row.id} onClick={()=>setSelected(row)} style={{cursor:'pointer'}}>
               <Table.Td><Text fw={700}>{row.name}</Text><Text size="xs" c="dimmed">{row.volunteer_code}</Text></Table.Td>
               <Table.Td><Text size="sm">{row.email||'-'}</Text><Text size="xs" c="dimmed">{row.phone||'-'}</Text></Table.Td>
+              <Table.Td><Text size="sm">{row.neighbourhood||row.planning_area||'-'}</Text>{row.neighbourhood&&row.planning_area&&row.neighbourhood!==row.planning_area?<Text size="xs" c="dimmed">{row.planning_area}</Text>:null}</Table.Td>
+              <Table.Td>{row.electoral_division||'-'}</Table.Td>
               <Table.Td>{row.gender||'-'}</Table.Td><Table.Td>{row.recruited_year||'-'}</Table.Td>
               <Table.Td><Group gap={4} wrap="wrap">{(row.tags||[]).slice(0,4).map((item)=><Badge key={item} variant="light" size="sm">{item}</Badge>)}</Group></Table.Td>
               <Table.Td><Text size="sm" lineClamp={2}>{(row.programmes_registered||[]).join(', ')||'-'}</Text></Table.Td>
