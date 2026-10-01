@@ -21,6 +21,7 @@ const FIELDS:FieldDefinition[]=[
   {value:'nric',label:'NRIC / FIN',kind:'text'},
   {value:'phone',label:'Phone',kind:'text'},
   {value:'email',label:'Email',kind:'text'},
+  {value:'age',label:'Age (years)',kind:'number'},
   {value:'gender',label:'Gender',kind:'enum',optionKey:'genders'},
   {value:'address',label:'Address',kind:'text'},
   {value:'neighbourhood',label:'Neighbourhood',kind:'text'},
@@ -138,6 +139,7 @@ function ConditionEditor({
   }
 
   return <Paper withBorder radius="md" p="sm">
+    {condition.field==='age'?<Text size="xs" c="dimmed" mb="xs">Age today from date of birth where available; otherwise the latest age recorded by staff. Between includes both ages. Unknown ages do not match numeric conditions.</Text>:null}
     <Group align="flex-end" wrap="wrap">
       <Select label="Field" searchable data={FIELDS} value={condition.field} onChange={changeField} style={{minWidth:190,flex:1}}/>
       <Select label="Condition" data={operators} value={condition.operator} onChange={(value)=>onChange({...condition,operator:value||operators[0].value,value:value==='between'?['','']:defaultValue(field.kind)})} style={{minWidth:180,flex:1}}/>

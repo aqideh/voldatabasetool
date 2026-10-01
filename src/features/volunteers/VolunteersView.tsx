@@ -59,9 +59,9 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
     setExporting(true);
     try{
       const rows=await fetchVolunteerExportRows({...filters,page:0});
-      const header=['KEL ID','Name','Email','Phone','Neighbourhood','Planning area','GRC / SMC','Gender','Recruited year','Tags','Programmes','Events attended','Events registered','Total hours','First participation','Last active'];
+      const header=['KEL ID','Name','Email','Phone','Neighbourhood','Planning area','GRC / SMC','Gender','Age','Age source','Recruited year','Tags','Programmes','Events attended','Events registered','Total hours','First participation','Last active'];
       const lines=[header,...rows.map((row)=>[
-        row.volunteer_code,row.name,row.email,row.phone,row.neighbourhood,row.planning_area,row.electoral_division,row.gender,row.recruited_year,
+        row.volunteer_code,row.name,row.email,row.phone,row.neighbourhood,row.planning_area,row.electoral_division,row.gender,row.age,row.age_source==='date_of_birth'?'Calculated from date of birth':row.age_source==='staff_recorded'?'Staff recorded':'',row.recruited_year,
         (row.tags||[]).join('; '),(row.programmes_registered||[]).join('; '),row.attended_event_count||0,row.registered_event_count||0,
         ((row.total_credited_minutes||0)/60).toFixed(2),row.first_event_date,row.last_active,
       ])].map((row)=>row.map(csvCell).join(','));
@@ -161,7 +161,7 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
         <Table striped highlightOnHover verticalSpacing="sm" horizontalSpacing="md" miw={1300}>
           <Table.Thead><Table.Tr>
             <Table.Th>Name</Table.Th><Table.Th>Contact</Table.Th><Table.Th>Area</Table.Th><Table.Th>GRC / SMC</Table.Th>
-            <Table.Th>Gender</Table.Th><Table.Th>Recruited</Table.Th><Table.Th>Tags</Table.Th><Table.Th>Programmes</Table.Th>
+            <Table.Th>Gender</Table.Th><Table.Th>Age</Table.Th><Table.Th>Recruited</Table.Th><Table.Th>Tags</Table.Th><Table.Th>Programmes</Table.Th>
             <Table.Th>Attended</Table.Th><Table.Th>Registered</Table.Th><Table.Th>Hours</Table.Th><Table.Th>Last active</Table.Th>
           </Table.Tr></Table.Thead>
           <Table.Tbody>
@@ -171,6 +171,7 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
               <Table.Td><Text size="sm">{row.neighbourhood||row.planning_area||'-'}</Text>{row.neighbourhood&&row.planning_area&&row.neighbourhood!==row.planning_area?<Text size="xs" c="dimmed">{row.planning_area}</Text>:null}</Table.Td>
               <Table.Td>{row.electoral_division||'-'}</Table.Td>
               <Table.Td>{row.gender||'-'}</Table.Td>
+              <Table.Td><Text size="sm">{row.age??'-'}</Text>{row.age!=null&&row.age_source==='staff_recorded'?<Text size="xs" c="dimmed">Staff recorded</Text>:null}</Table.Td>
               <Table.Td>{row.recruited_year||'-'}</Table.Td>
               <Table.Td><Group gap={4} wrap="wrap">{(row.tags||[]).slice(0,4).map((item)=><Badge key={item} variant="light" size="sm">{item}</Badge>)}</Group></Table.Td>
               <Table.Td><Text size="sm" lineClamp={2}>{(row.programmes_registered||[]).join(', ')||'-'}</Text></Table.Td>
