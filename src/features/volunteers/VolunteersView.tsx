@@ -11,7 +11,7 @@ import { minutesLabel } from '../../lib/utils';
 
 const PAGE_SIZE=50;
 
-export function VolunteersView({canWrite}:{canWrite:boolean}){
+export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:boolean}){
   const qc=useQueryClient();
   const[search,setSearch]=useState('');const[debouncedSearch]=useDebouncedValue(search,250);
   const[tag,setTag]=useState<string|null>(null);const[year,setYear]=useState<number|null>(null);
@@ -26,6 +26,9 @@ export function VolunteersView({canWrite}:{canWrite:boolean}){
   function resetPage(){if(page!==0)setPage(0);}
   async function handleSaved(updated:VolunteerRow){setSelected(updated);await Promise.all([
     qc.invalidateQueries({queryKey:['volunteers']}),qc.invalidateQueries({queryKey:['volunteer-filter-options']}),qc.invalidateQueries({queryKey:['dashboard-summary']})
+  ]);}
+  async function handleDeleted(){setSelected(null);await Promise.all([
+    qc.invalidateQueries({queryKey:['volunteers']}),qc.invalidateQueries({queryKey:['volunteer-filter-options']}),qc.invalidateQueries({queryKey:['dashboard-summary']}),qc.invalidateQueries({queryKey:['volunteer-intelligence']})
   ]);}
 
   return <Stack gap="md">
@@ -73,6 +76,6 @@ export function VolunteersView({canWrite}:{canWrite:boolean}){
       {!volunteers.isLoading&&!volunteers.data?.rows.length&&<Text c="dimmed" ta="center" p="xl">No volunteers match these filters.</Text>}
     </Paper>
     <Group justify="space-between"><Text size="sm" c="dimmed">Page {page+1} of {totalPages}</Text><Pagination total={totalPages} value={page+1} onChange={(v)=>setPage(v-1)}/></Group>
-    <VolunteerDrawer volunteer={selected} canWrite={canWrite} onClose={()=>setSelected(null)} onSaved={(row)=>void handleSaved(row)}/>
+    <VolunteerDrawer volunteer={selected} canWrite={canWrite} canDelete={canDelete} onClose={()=>setSelected(null)} onSaved={(row)=>void handleSaved(row)} onDeleted={()=>void handleDeleted()}/>
   </Stack>;
 }
