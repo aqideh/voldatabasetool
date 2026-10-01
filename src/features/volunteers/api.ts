@@ -5,13 +5,14 @@ import type {
   VolunteerSearchOptions,
   VolunteerSearchResult,
 } from './search-types';
+import type { VolunteerSearchRow } from './search-row';
 
 const REFRESH_SELECT='id,core_volunteer_id,volunteer_code,name,nric,email,phone,gender,address,neighbourhood,planning_area,electoral_division,recruited_year,chat_session,chat_session_date,interests,languages_spoken,programmes_registered,tags,emergency_name,emergency_phone,shirt_size,dietary,notes,updated_at,row_version,attendance_rows,total_credited_minutes,last_active,first_tag';
 
 function normalizeSearchPayload(data:unknown):VolunteerSearchResult {
   const result=(data??{}) as Partial<VolunteerSearchResult>;
   return {
-    rows:Array.isArray(result.rows)?result.rows as VolunteerRow[]:[],
+    rows:Array.isArray(result.rows)?result.rows as VolunteerSearchRow[]:[],
     count:typeof result.count==='number'?result.count:0,
     page:typeof result.page==='number'?result.page:0,
     pageSize:typeof result.pageSize==='number'?result.pageSize:50,
@@ -31,7 +32,7 @@ export async function fetchVolunteers(filters:VolunteerSearchFilters):Promise<Vo
 }
 
 export async function fetchVolunteerExportRows(filters:VolunteerSearchFilters){
-  const rows:VolunteerRow[]=[];
+  const rows:VolunteerSearchRow[]=[];
   let page=0;
   const pageSize=500;
   while(page<20){
