@@ -39,10 +39,12 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
     </Group>
     <Paper withBorder radius="lg" p="md">
       <Group align="flex-end" grow wrap="wrap">
-        <TextInput label="Search" placeholder="KEL ID, name, phone, email, address, programme, notes or tags" value={search} onChange={(e)=>{setSearch(e.currentTarget.value);resetPage();}}/>
+        <TextInput label="Search" placeholder="KEL ID, name, phone, email, area, GRC/SMC, programme, notes or tags" value={search} onChange={(e)=>{setSearch(e.currentTarget.value);resetPage();}}/>
         <Select label="Tag" placeholder="All tags" clearable searchable data={options.data?.tags||[]} value={tag} onChange={(v)=>{setTag(v);resetPage();}}/>
         <Select label="Gender" placeholder="All genders" clearable data={options.data?.genders||[]} value={gender} onChange={(v)=>{setGender(v);resetPage();}}/>
         <Select label="T-shirt" placeholder="All sizes" clearable data={options.data?.shirtSizes||[]} value={shirtSize} onChange={(v)=>{setShirtSize(v);resetPage();}}/>
+        <Select label="Planning area" placeholder="All planning areas" clearable searchable data={options.data?.planningAreas||[]} value={planningArea} onChange={(v)=>{setPlanningArea(v);resetPage();}}/>
+        <Select label="GRC / SMC" placeholder="All divisions" clearable searchable data={options.data?.electoralDivisions||[]} value={electoralDivision} onChange={(v)=>{setElectoralDivision(v);resetPage();}}/>
         <Select label="Activity" value={activity} data={[{value:'all',label:'All volunteers'},{value:'active',label:'Has attendance'},{value:'inactive',label:'No attendance'}]} onChange={(v)=>{setActivity((v||'all') as VolunteerFilters['activity']);resetPage();}}/>
         <NumberInput label="Recruited year" placeholder="All years" value={year??''} min={1900} max={2100} onChange={(v)=>{setYear(typeof v==='number'?v:null);resetPage();}}/>
         <Select label="Sort" value={sort} data={[
