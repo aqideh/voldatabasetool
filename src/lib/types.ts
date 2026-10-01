@@ -11,10 +11,10 @@ export interface VolunteerRow {
   notes:string|null; updated_at:string; row_version:number;
   attendance_rows?:number; total_credited_minutes?:number; last_active?:string|null; first_tag?:string; search_text?:string;
 }
-export type VolunteerUpdate = Omit<VolunteerRow,'id'|'core_volunteer_id'|'volunteer_code'|'updated_at'|'row_version'>;
+export type VolunteerUpdate = Omit<VolunteerRow,'id'|'core_volunteer_id'|'volunteer_code'|'neighbourhood'|'planning_area'|'electoral_division'|'updated_at'|'row_version'|'attendance_rows'|'total_credited_minutes'|'last_active'|'first_tag'|'search_text'>;
 
 export interface VolunteerFilters {
-  search:string; tag:string|null; recruitedYear:number|null; gender:string|null; shirtSize:string|null; activity:'all'|'active'|'inactive';
+  search:string; tag:string|null; recruitedYear:number|null; gender:string|null; shirtSize:string|null; planningArea:string|null; electoralDivision:string|null; activity:'all'|'active'|'inactive';
   sort:'name-asc'|'name-desc'|'newest'|'oldest'|'hours'|'last-active'|'tag'; page:number; pageSize:number;
 }
 
