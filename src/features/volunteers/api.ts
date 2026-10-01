@@ -46,3 +46,53 @@ export async function updateVolunteer(id:string,expectedVersion:number,update:Vo
   if(refreshed.error)throw refreshed.error;if(!refreshed.data)throw new Error('Volunteer profile could not be reloaded.');
   return refreshed.data as VolunteerRow;
 }
+
+
+export interface VolunteerRemovalPreflight {
+  eligible:boolean;
+  blockers:string[];
+  volunteerId:string;
+  volunteerCode:string;
+  displayName:string;
+  hasAccount:boolean;
+  hasProfilePhoto:boolean;
+  registrationCount:number;
+  rosterCount:number;
+  recruitmentApplicationCount:number;
+}
+
+export interface VolunteerRemovalResult {
+  removed:true;
+  volunteerCode:string;
+  registrationCount:number;
+  rosterCount:number;
+}
+
+const KELUARGA_ADMIN_API='https://keluarga.mendaki.org.sg/api/maklom/admin-volunteer';
+
+async function callVolunteerAdminApi<T>(payload:Record<string,unknown>):Promise<T>{
+  const sessionResult=await supabase.auth.getSession();
+  const token=sessionResult.data.session?.access_token;
+  if(!token)throw new Error('Your MakLom session has expired. Sign in again.');
+
+  const response=await fetch(KELUARGA_ADMIN_API,{
+    method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+    body:JSON.stringify(payload),
+  });
+  const body=await response.json().catch(()=>({}));
+  if(!response.ok){
+    const message=typeof body.error==='string'?body.error:'Volunteer admin action failed.';
+    const blockers=Array.isArray(body.blockers)?body.blockers.filter((item:unknown)=>typeof item==='string'):[];
+    throw new Error(blockers.length?`${message} ${blockers.join(' ')}`:message);
+  }
+  return body as T;
+}
+
+export function inspectVolunteerRemoval(coreVolunteerId:string):Promise<VolunteerRemovalPreflight>{
+  return callVolunteerAdminApi<VolunteerRemovalPreflight>({action:'inspect',coreVolunteerId});
+}
+
+export function removeTestVolunteer(coreVolunteerId:string,confirmation:string):Promise<VolunteerRemovalResult>{
+  return callVolunteerAdminApi<VolunteerRemovalResult>({action:'remove-test-record',coreVolunteerId,confirmation});
+}

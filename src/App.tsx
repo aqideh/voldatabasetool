@@ -96,7 +96,7 @@ export default function App(){
     <AppShell.Main bg="gray.0"><Box maw={1600} mx="auto">
       {section==='Overview'&&<DashboardView/>}
       {section==='Volunteer Leads'&&<LeadsView canWrite={canWrite}/>}
-      {section==='Central Database'&&<VolunteersView canWrite={canWrite}/>}
+      {section==='Central Database'&&<VolunteersView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Volunteer Intelligence'&&<VolunteerIntelligenceView/>}
       {section==='Events & Shifts'&&<EventsView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}
