@@ -20,7 +20,7 @@ function normalizeSearchPayload(data:unknown):VolunteerSearchResult {
 }
 
 export async function fetchVolunteers(filters:VolunteerSearchFilters):Promise<VolunteerSearchResult>{
-  const{data,error}=await supabase.rpc('maklom_search_volunteers',{
+  const{data,error}=await (supabase as any).rpc('maklom_search_volunteers',{
     p_query:filters.query,
     p_search:filters.search.trim(),
     p_sort:filters.sort,
@@ -45,7 +45,7 @@ export async function fetchVolunteerExportRows(filters:VolunteerSearchFilters){
 }
 
 export async function fetchVolunteerFilterOptions():Promise<VolunteerSearchOptions>{
-  const{data,error}=await supabase.rpc('maklom_volunteer_search_options');
+  const{data,error}=await (supabase as any).rpc('maklom_volunteer_search_options');
   if(error)throw error;
   const result=(data??{}) as Partial<VolunteerSearchOptions>&{error?:string};
   if(result.error)throw new Error(result.error);
