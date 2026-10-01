@@ -10,6 +10,7 @@ import type { VolunteerFilters, VolunteerRow } from '../../lib/types';
 import { minutesLabel } from '../../lib/utils';
 
 const PAGE_SIZE=50;
+function csvCell(value:unknown){const text=value==null?'':String(value);return `"${text.replaceAll('"','""')}"`;}
 
 export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:boolean}){
   const qc=useQueryClient();
@@ -19,7 +20,7 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
   const[planningArea,setPlanningArea]=useState<string|null>(null);const[electoralDivision,setElectoralDivision]=useState<string|null>(null);
   const[activity,setActivity]=useState<VolunteerFilters['activity']>('all');
   const[sort,setSort]=useState<VolunteerFilters['sort']>('name-asc');
-  const[page,setPage]=useState(0);const[selected,setSelected]=useState<VolunteerRow|null>(null);
+  const[page,setPage]=useState(0);const[selected,setSelected]=useState<VolunteerRow|null>(null);const[exporting,setExporting]=useState(false);
   const filters=useMemo<VolunteerFilters>(()=>({search:debouncedSearch,tag,recruitedYear:year,gender,shirtSize,planningArea,electoralDivision,activity,sort,page,pageSize:PAGE_SIZE}),[debouncedSearch,tag,year,gender,shirtSize,planningArea,electoralDivision,activity,sort,page]);
   const options=useQuery({queryKey:['volunteer-filter-options'],queryFn:fetchVolunteerFilterOptions,staleTime:5*60_000});
   const volunteers=useQuery({queryKey:['volunteers',filters],queryFn:()=>fetchVolunteers(filters),placeholderData:keepPreviousData});
