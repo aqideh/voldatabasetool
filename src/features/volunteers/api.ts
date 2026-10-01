@@ -1,7 +1,7 @@
 import { supabase } from '../../lib/supabase';
 import type { VolunteerFilters, VolunteerRow, VolunteerUpdate } from '../../lib/types';
 
-const SELECT='id,core_volunteer_id,volunteer_code,name,nric,email,phone,gender,address,recruited_year,chat_session,chat_session_date,interests,languages_spoken,programmes_registered,tags,emergency_name,emergency_phone,shirt_size,dietary,notes,updated_at,row_version,attendance_rows,total_credited_minutes,last_active,first_tag';
+const SELECT='id,core_volunteer_id,volunteer_code,name,nric,email,phone,gender,address,neighbourhood,planning_area,electoral_division,recruited_year,chat_session,chat_session_date,interests,languages_spoken,programmes_registered,tags,emergency_name,emergency_phone,shirt_size,dietary,notes,updated_at,row_version,attendance_rows,total_credited_minutes,last_active,first_tag';
 function safeSearchTerm(value:string){return value.trim().replace(/[,%()]/g,' ');}
 
 export async function fetchVolunteers(filters:VolunteerFilters){
@@ -13,6 +13,8 @@ export async function fetchVolunteers(filters:VolunteerFilters){
   if(filters.recruitedYear)query=query.eq('recruited_year',filters.recruitedYear);
   if(filters.gender)query=query.eq('gender',filters.gender);
   if(filters.shirtSize)query=query.eq('shirt_size',filters.shirtSize);
+  if(filters.planningArea)query=query.eq('planning_area',filters.planningArea);
+  if(filters.electoralDivision)query=query.eq('electoral_division',filters.electoralDivision);
   if(filters.activity==='active')query=query.gt('attendance_rows',0);
   if(filters.activity==='inactive')query=query.eq('attendance_rows',0);
 
@@ -28,15 +30,17 @@ export async function fetchVolunteers(filters:VolunteerFilters){
 }
 
 export async function fetchVolunteerFilterOptions(){
-  const{data,error}=await supabase.from('maklom_volunteer_search_directory').select('tags,recruited_year,gender,shirt_size');if(error)throw error;
-  const tags=new Set<string>(),years=new Set<number>(),genders=new Set<string>(),shirtSizes=new Set<string>();
+  const{data,error}=await supabase.from('maklom_volunteer_search_directory').select('tags,recruited_year,gender,shirt_size,planning_area,electoral_division');if(error)throw error;
+  const tags=new Set<string>(),years=new Set<number>(),genders=new Set<string>(),shirtSizes=new Set<string>(),planningAreas=new Set<string>(),electoralDivisions=new Set<string>();
   for(const row of data||[]){
     for(const tag of row.tags||[])if(tag)tags.add(tag);
     if(row.recruited_year)years.add(row.recruited_year);
     if(row.gender)genders.add(row.gender);
     if(row.shirt_size)shirtSizes.add(row.shirt_size);
+    if(row.planning_area)planningAreas.add(row.planning_area);
+    if(row.electoral_division)electoralDivisions.add(row.electoral_division);
   }
-  return{tags:[...tags].sort((a,b)=>a.localeCompare(b)),years:[...years].sort((a,b)=>b-a),genders:[...genders].sort(),shirtSizes:[...shirtSizes].sort()};
+  return{tags:[...tags].sort((a,b)=>a.localeCompare(b)),years:[...years].sort((a,b)=>b-a),genders:[...genders].sort(),shirtSizes:[...shirtSizes].sort(),planningAreas:[...planningAreas].sort(),electoralDivisions:[...electoralDivisions].sort()};
 }
 
 export async function updateVolunteer(id:string,expectedVersion:number,update:VolunteerUpdate):Promise<VolunteerRow>{
