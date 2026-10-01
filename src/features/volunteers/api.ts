@@ -1,82 +1,75 @@
 import { supabase } from '../../lib/supabase';
-import type { VolunteerFilters, VolunteerRow, VolunteerUpdate } from '../../lib/types';
+import type { VolunteerRow, VolunteerUpdate } from '../../lib/types';
+import type {
+  VolunteerSearchFilters,
+  VolunteerSearchOptions,
+  VolunteerSearchResult,
+} from './search-types';
+import type { VolunteerSearchRow } from './search-row';
 
-const SELECT='id,core_volunteer_id,volunteer_code,name,nric,email,phone,gender,address,neighbourhood,planning_area,electoral_division,recruited_year,chat_session,chat_session_date,interests,languages_spoken,programmes_registered,tags,emergency_name,emergency_phone,shirt_size,dietary,notes,updated_at,row_version,attendance_rows,total_credited_minutes,last_active,first_tag';
-function safeSearchTerm(value:string){return value.trim().replace(/[,%()]/g,' ');}
+const REFRESH_SELECT='id,core_volunteer_id,volunteer_code,name,nric,email,phone,gender,address,neighbourhood,planning_area,electoral_division,recruited_year,chat_session,chat_session_date,interests,languages_spoken,programmes_registered,tags,emergency_name,emergency_phone,shirt_size,dietary,notes,updated_at,row_version,attendance_rows,total_credited_minutes,last_active,first_tag';
 
-export async function fetchVolunteers(filters:VolunteerFilters){
-  const from=filters.page*filters.pageSize,to=from+filters.pageSize-1;
-  let query=supabase.from('maklom_volunteer_search_directory').select(SELECT,{count:'exact'});
-  const search=safeSearchTerm(filters.search);
-  if(search) query=query.ilike('search_text',`%${search}%`);
-  if(filters.tag)query=query.contains('tags',[filters.tag]);
-  if(filters.recruitedYear)query=query.eq('recruited_year',filters.recruitedYear);
-  if(filters.gender)query=query.eq('gender',filters.gender);
-  if(filters.shirtSize)query=query.eq('shirt_size',filters.shirtSize);
-  if(filters.planningArea)query=query.eq('planning_area',filters.planningArea);
-  if(filters.electoralDivision)query=query.eq('electoral_division',filters.electoralDivision);
-  if(filters.activity==='active')query=query.gt('attendance_rows',0);
-  if(filters.activity==='inactive')query=query.eq('attendance_rows',0);
-
-  if(filters.sort==='name-desc')query=query.order('name',{ascending:false});
-  else if(filters.sort==='newest')query=query.order('updated_at',{ascending:false});
-  else if(filters.sort==='oldest')query=query.order('updated_at',{ascending:true});
-  else if(filters.sort==='hours')query=query.order('total_credited_minutes',{ascending:false}).order('name');
-  else if(filters.sort==='last-active')query=query.order('last_active',{ascending:false,nullsFirst:false}).order('name');
-  else if(filters.sort==='tag')query=query.order('first_tag',{ascending:true}).order('name');
-  else query=query.order('name',{ascending:true});
-
-  const{data,error,count}=await query.range(from,to);if(error)throw error;return{rows:(data||[]) as VolunteerRow[],count:count||0};
+function normalizeSearchPayload(data:unknown):VolunteerSearchResult {
+  const result=(data??{}) as Partial<VolunteerSearchResult>;
+  return {
+    rows:Array.isArray(result.rows)?result.rows as VolunteerSearchRow[]:[],
+    count:typeof result.count==='number'?result.count:0,
+    page:typeof result.page==='number'?result.page:0,
+    pageSize:typeof result.pageSize==='number'?result.pageSize:50,
+  };
 }
 
-export async function fetchVolunteerExportRows(filters:VolunteerFilters){
-  let query=supabase.from('maklom_volunteer_search_directory').select(SELECT);
-  const search=safeSearchTerm(filters.search);
-  if(search)query=query.ilike('search_text',`%${search}%`);
-  if(filters.tag)query=query.contains('tags',[filters.tag]);
-  if(filters.recruitedYear)query=query.eq('recruited_year',filters.recruitedYear);
-  if(filters.gender)query=query.eq('gender',filters.gender);
-  if(filters.shirtSize)query=query.eq('shirt_size',filters.shirtSize);
-  if(filters.planningArea)query=query.eq('planning_area',filters.planningArea);
-  if(filters.electoralDivision)query=query.eq('electoral_division',filters.electoralDivision);
-  if(filters.activity==='active')query=query.gt('attendance_rows',0);
-  if(filters.activity==='inactive')query=query.eq('attendance_rows',0);
-
-  if(filters.sort==='name-desc')query=query.order('name',{ascending:false});
-  else if(filters.sort==='newest')query=query.order('updated_at',{ascending:false});
-  else if(filters.sort==='oldest')query=query.order('updated_at',{ascending:true});
-  else if(filters.sort==='hours')query=query.order('total_credited_minutes',{ascending:false}).order('name');
-  else if(filters.sort==='last-active')query=query.order('last_active',{ascending:false,nullsFirst:false}).order('name');
-  else if(filters.sort==='tag')query=query.order('first_tag',{ascending:true}).order('name');
-  else query=query.order('name',{ascending:true});
-
-  const{data,error}=await query.range(0,9999);
+export async function fetchVolunteers(filters:VolunteerSearchFilters):Promise<VolunteerSearchResult>{
+  const{data,error}=await (supabase as any).rpc('maklom_search_volunteers',{
+    p_query:filters.query,
+    p_search:filters.search.trim(),
+    p_sort:filters.sort,
+    p_page:filters.page,
+    p_page_size:filters.pageSize,
+  });
   if(error)throw error;
-  return(data||[]) as VolunteerRow[];
+  return normalizeSearchPayload(data);
 }
 
-export async function fetchVolunteerFilterOptions(){
-  const{data,error}=await supabase.from('maklom_volunteer_search_directory').select('tags,recruited_year,gender,shirt_size,planning_area,electoral_division');if(error)throw error;
-  const tags=new Set<string>(),years=new Set<number>(),genders=new Set<string>(),shirtSizes=new Set<string>(),planningAreas=new Set<string>(),electoralDivisions=new Set<string>();
-  for(const row of data||[]){
-    for(const tag of row.tags||[])if(tag)tags.add(tag);
-    if(row.recruited_year)years.add(row.recruited_year);
-    if(row.gender)genders.add(row.gender);
-    if(row.shirt_size)shirtSizes.add(row.shirt_size);
-    if(row.planning_area)planningAreas.add(row.planning_area);
-    if(row.electoral_division)electoralDivisions.add(row.electoral_division);
+export async function fetchVolunteerExportRows(filters:VolunteerSearchFilters){
+  const rows:VolunteerSearchRow[]=[];
+  let page=0;
+  const pageSize=500;
+  while(page<20){
+    const result=await fetchVolunteers({...filters,page,pageSize});
+    rows.push(...result.rows);
+    if(rows.length>=result.count||result.rows.length<pageSize)break;
+    page+=1;
   }
-  return{tags:[...tags].sort((a,b)=>a.localeCompare(b)),years:[...years].sort((a,b)=>b-a),genders:[...genders].sort(),shirtSizes:[...shirtSizes].sort(),planningAreas:[...planningAreas].sort(),electoralDivisions:[...electoralDivisions].sort()};
+  return rows;
+}
+
+export async function fetchVolunteerFilterOptions():Promise<VolunteerSearchOptions>{
+  const{data,error}=await (supabase as any).rpc('maklom_volunteer_search_options');
+  if(error)throw error;
+  const result=(data??{}) as Partial<VolunteerSearchOptions>&{error?:string};
+  if(result.error)throw new Error(result.error);
+  const list=(value:unknown)=>Array.isArray(value)?value.filter((item):item is string=>typeof item==='string'):[];
+  return{
+    tags:list(result.tags),
+    programmes:list(result.programmes),
+    genders:list(result.genders),
+    shirtSizes:list(result.shirtSizes),
+    planningAreas:list(result.planningAreas),
+    electoralDivisions:list(result.electoralDivisions),
+    events:list(result.events),
+  };
 }
 
 export async function updateVolunteer(id:string,expectedVersion:number,update:VolunteerUpdate):Promise<VolunteerRow>{
   const{data,error}=await supabase.from('volunteers').update(update).eq('id',id).eq('row_version',expectedVersion).select('id').maybeSingle();
-  if(error)throw error;if(!data)throw new Error('This volunteer was updated in another session. Reload before saving again.');
-  const refreshed=await supabase.from('maklom_volunteer_search_directory').select(SELECT).eq('id',id).maybeSingle();
-  if(refreshed.error)throw refreshed.error;if(!refreshed.data)throw new Error('Volunteer profile could not be reloaded.');
+  if(error)throw error;
+  if(!data)throw new Error('This volunteer was updated in another session. Reload before saving again.');
+  const refreshed=await supabase.from('maklom_volunteer_search_directory').select(REFRESH_SELECT).eq('id',id).maybeSingle();
+  if(refreshed.error)throw refreshed.error;
+  if(!refreshed.data)throw new Error('Volunteer profile could not be reloaded.');
   return refreshed.data as VolunteerRow;
 }
-
 
 export interface VolunteerRemovalPreflight {
   eligible:boolean;
