@@ -24,7 +24,11 @@ FormSG submission -> signed webhook -> server-side decryption -> field mapping -
 
 A FormSG submission creates a lead with status `new`. It does not create a canonical volunteer. Staff review the lead in MakLom and explicitly accept/convert it.
 
-The webhook stores mapped operational lead fields and minimal source metadata. It deliberately does not retain the complete decrypted FormSG response in `raw_payload`.
+The webhook stores mapped operational lead fields for searching, review and conversion, and also retains the complete ordered set of submitted FormSG question/answer responses in `raw_payload.responses`.
+
+FormSG logic branching is handled from the payload itself: only fields sent for the respondent's active branch are stored and shown in MakLom. MakLom does not invent empty fields for branches the respondent did not see. This keeps the lead view aligned when the FormSG form changes without requiring every question to be hard-coded into the application.
+
+The full response payload remains protected by MakLom membership and the `volunteer_leads` row-level security policies. Technical encryption secrets are never stored in the lead record.
 
 ## FormSG setup
 

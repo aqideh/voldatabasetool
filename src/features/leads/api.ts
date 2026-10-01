@@ -12,7 +12,7 @@ export async function fetchVolunteerLeads(filters: LeadFilters) {
   let query = supabase
     .from('volunteer_leads')
     .select(
-      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
+      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,raw_payload,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
       { count: 'exact' },
     );
 
@@ -53,7 +53,7 @@ export async function updateVolunteerLead(
     .eq('id', id)
     .eq('row_version', expectedVersion)
     .select(
-      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
+      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,raw_payload,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
     )
     .maybeSingle();
 
@@ -109,7 +109,13 @@ export async function importFormSgLeads(rows: Array<Record<string, string>>) {
       skills_experience: find('skillsexperience', 'skills', 'experience'),
       availability_notes: find('availability'),
       referral_source: find('howdidyouhear', 'referralsource'),
-      raw_payload: row,
+      raw_payload: {
+        schemaVersion: 2,
+        importSource: 'csv',
+        responses: Object.entries(row)
+          .filter(([, answer]) => answer.trim())
+          .map(([question, answer]) => ({ question, answer })),
+      },
     };
   }).filter((row): row is NonNullable<typeof row> => row !== null);
 

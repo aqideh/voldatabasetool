@@ -30,6 +30,77 @@ import type { LeadFilters, VolunteerLead, VolunteerLeadStatus } from '../../lib/
 
 const PAGE_SIZE = 50;
 
+type LeadResponse = {
+  key: string;
+  question: string;
+  answer: string;
+  fieldType: string | null;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function displayFormValue(value: unknown): string | null {
+  if (typeof value === 'string') return value.trim() || null;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    const values = value.map(displayFormValue).filter((item): item is string => Boolean(item));
+    return values.length ? values.join(', ') : null;
+  }
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function extractLeadResponses(rawPayload: Record<string, unknown>): LeadResponse[] {
+  const responses = rawPayload.responses;
+  if (Array.isArray(responses)) {
+    return responses.flatMap((entry, index) => {
+      const field = asRecord(entry);
+      if (!field) return [];
+      const answer =
+        displayFormValue(field.answer) ||
+        displayFormValue(field.answerArray) ||
+        displayFormValue(field.value);
+      if (!answer) return [];
+      return [{
+        key: displayFormValue(field._id) || `response-${index}`,
+        question: displayFormValue(field.question) || `Question ${index + 1}`,
+        answer,
+        fieldType: displayFormValue(field.fieldType),
+      }];
+    });
+  }
+
+  const metadataKeys = new Set([
+    'schemaVersion',
+    'formId',
+    'submissionId',
+    'created',
+    'verifiedContentPresent',
+    'importSource',
+  ]);
+  return Object.entries(rawPayload).flatMap(([question, value], index) => {
+    if (metadataKeys.has(question)) return [];
+    const answer = displayFormValue(value);
+    if (!answer) return [];
+    return [{
+      key: `legacy-${index}-${question}`,
+      question,
+      answer,
+      fieldType: null,
+    }];
+  });
+}
+
 const statusOptions: Array<{ value: VolunteerLeadStatus; label: string }> = [
   { value: 'new', label: 'New' },
   { value: 'reviewing', label: 'Reviewing' },
@@ -293,7 +364,7 @@ export function LeadsView({ canWrite }: Props) {
         <Pagination total={totalPages} value={page + 1} onChange={(value) => setPage(value - 1)} />
       </Group>
 
-      <Modal opened={opened} onClose={close} title={selected?.full_name || 'Volunteer lead'} size="lg">
+      <Modal opened={opened} onClose={close} title={selected?.full_name || 'Volunteer lead'} size="xl">
         {selected && (
           <Stack>
             {message && (
@@ -312,6 +383,42 @@ export function LeadsView({ canWrite }: Props) {
             {selected.skills_experience && <Text size="sm"><b>Skills / experience:</b> {selected.skills_experience}</Text>}
             {selected.availability_notes && <Text size="sm"><b>Availability:</b> {selected.availability_notes}</Text>}
             {selected.referral_source && <Text size="sm"><b>Referral source:</b> {selected.referral_source}</Text>}
+
+            {extractLeadResponses(selected.raw_payload || {}).length > 0 && (
+              <Stack gap="xs">
+                <div>
+                  <Text fw={700} size="sm">FormSG responses</Text>
+                  <Text size="xs" c="dimmed">
+                    These are the questions and answers received for this submission. FormSG logic branches only send fields that were active for the respondent.
+                  </Text>
+                </div>
+                <Paper withBorder radius="md" p={0} style={{ overflow: 'hidden' }}>
+                  <ScrollArea.Autosize mah={420}>
+                    <Table verticalSpacing="sm" horizontalSpacing="md" miw={640}>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Question</Table.Th>
+                          <Table.Th>Response</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {extractLeadResponses(selected.raw_payload || {}).map((response) => (
+                          <Table.Tr key={response.key}>
+                            <Table.Td style={{ width: '44%', verticalAlign: 'top' }}>
+                              <Text size="sm" fw={600}>{response.question}</Text>
+                              {response.fieldType && <Text size="xs" c="dimmed">{response.fieldType}</Text>}
+                            </Table.Td>
+                            <Table.Td style={{ verticalAlign: 'top' }}>
+                              <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{response.answer}</Text>
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </ScrollArea.Autosize>
+                </Paper>
+              </Stack>
+            )}
 
             <Select
               label="Lead status"

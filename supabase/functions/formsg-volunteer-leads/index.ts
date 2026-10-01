@@ -212,10 +212,12 @@ Deno.serve(async (req: Request) => {
         availability_notes: lead.availabilityNotes,
         referral_source: lead.referralSource,
         raw_payload: {
+          schemaVersion: 2,
           formId,
           submissionId,
           created: submittedAt,
           verifiedContentPresent: Boolean(decrypted.verified),
+          responses,
         },
       },
       {
