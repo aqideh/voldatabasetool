@@ -109,7 +109,13 @@ export async function importFormSgLeads(rows: Array<Record<string, string>>) {
       skills_experience: find('skillsexperience', 'skills', 'experience'),
       availability_notes: find('availability'),
       referral_source: find('howdidyouhear', 'referralsource'),
-      raw_payload: row,
+      raw_payload: {
+        schemaVersion: 2,
+        importSource: 'csv',
+        responses: Object.entries(row)
+          .filter(([, answer]) => answer.trim())
+          .map(([question, answer]) => ({ question, answer })),
+      },
     };
   }).filter((row): row is NonNullable<typeof row> => row !== null);
 
