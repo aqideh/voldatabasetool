@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Badge, Button, Collapse, Group, Loader, Pagination, Paper, ScrollArea, Select, Stack, Table, Text, TextInput, Title,
+  Badge, Button, Group, Loader, Pagination, Paper, ScrollArea, Select, Stack, Table, Text, TextInput, Title,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -144,8 +144,7 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
           {volunteers.isFetching&&!volunteers.isLoading?<Text size="xs" c="dimmed">Updating results…</Text>:null}
         </Group>
 
-        <Collapse in={filtersOpen}>
-          <Stack gap="xs" mt="xs">
+        {filtersOpen?<Stack gap="xs" mt="xs">
             <Text fw={700}>Advanced query</Text>
             <Text size="sm" c="dimmed">Combine conditions with ALL (AND) or ANY (OR). Groups can be nested for precise database searches.</Text>
             <AdvancedVolunteerQueryBuilder
@@ -153,8 +152,7 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
               options={options.data||{tags:[],programmes:[],genders:[],shirtSizes:[],planningAreas:[],electoralDivisions:[],events:[]}}
               onChange={(next)=>{setQuery(next);resetPage();}}
             />
-          </Stack>
-        </Collapse>
+          </Stack>:null}
       </Stack>
     </Paper>
 
