@@ -59,6 +59,8 @@ export interface VolunteerRemovalPreflight {
   registrationCount:number;
   rosterCount:number;
   recruitmentApplicationCount:number;
+  pointEntryCount:number;
+  badgeCount:number;
 }
 
 export interface VolunteerRemovalResult {
@@ -66,6 +68,8 @@ export interface VolunteerRemovalResult {
   volunteerCode:string;
   registrationCount:number;
   rosterCount:number;
+  removedPointEntries:number;
+  removedBadges:number;
 }
 
 const KELUARGA_ADMIN_API='https://keluarga.mendaki.org.sg/api/maklom/admin-volunteer';
