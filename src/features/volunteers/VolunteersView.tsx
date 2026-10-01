@@ -52,7 +52,10 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
   return <Stack gap="md">
     <Group justify="space-between" align="flex-end">
       <div><Title order={2}>Central Database</Title><Text c="dimmed" size="sm">Search the full volunteer database with the filters and activity signals from the previous MakLom dashboard.</Text></div>
-      <Badge size="lg" variant="light">{(volunteers.data?.count||0).toLocaleString()} matches</Badge>
+      <Group gap="sm">
+        <Button variant="default" loading={exporting} onClick={()=>void exportCsv()}>Export filtered CSV</Button>
+        <Badge size="lg" variant="light">{(volunteers.data?.count||0).toLocaleString()} matches</Badge>
+      </Group>
     </Group>
     <Paper withBorder radius="lg" p="md">
       <Group align="flex-end" grow wrap="wrap">
