@@ -77,7 +77,7 @@ export function VolunteerDrawer({volunteer,canWrite,canDelete,onClose,onSaved,on
           </Alert>}
           {removal?.eligible&&<Alert color="red" title="Permanent test record removal">
             <Stack gap="sm">
-              <Text size="sm">This will remove {removal.registrationCount} registration{removal.registrationCount===1?'':'s'}, {removal.rosterCount} roster row{removal.rosterCount===1?'':'s'} and {removal.recruitmentApplicationCount} recruitment application{removal.recruitmentApplicationCount===1?'':'s'}. {removal.hasAccount?'The linked sign-in account will also be removed.':''}</Text>
+              <Text size="sm">This will remove {removal.registrationCount} registration{removal.registrationCount===1?'':'s'}, {removal.rosterCount} roster row{removal.rosterCount===1?'':'s'}, {removal.recruitmentApplicationCount} recruitment application{removal.recruitmentApplicationCount===1?'':'s'}, {removal.pointEntryCount} point entr{removal.pointEntryCount===1?'y':'ies'} and {removal.badgeCount} badge record{removal.badgeCount===1?'':'s'}. {removal.hasAccount?'The linked sign-in account will also be removed.':''}</Text>
               <TextInput label={`Type ${removal.volunteerCode} to confirm`} value={confirmation} onChange={(event)=>setConfirmation(event.currentTarget.value)} disabled={removing}/>
               <Group justify="flex-end">
                 <Button variant="default" onClick={()=>{setRemoval(null);setConfirmation('');}} disabled={removing}>Cancel</Button>
