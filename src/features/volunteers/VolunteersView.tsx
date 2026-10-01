@@ -26,6 +26,22 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
   const volunteers=useQuery({queryKey:['volunteers',filters],queryFn:()=>fetchVolunteers(filters),placeholderData:keepPreviousData});
   const totalPages=Math.max(1,Math.ceil((volunteers.data?.count||0)/PAGE_SIZE));
   function resetPage(){if(page!==0)setPage(0);}
+  async function exportCsv(){
+    setExporting(true);
+    try{
+      const rows=await fetchVolunteerExportRows(filters);
+      const header=['KEL ID','Name','Email','Phone','Neighbourhood','Planning area','GRC / SMC','Gender','Recruited year','Tags','Programmes','Total hours','Last active'];
+      const lines=[header,...rows.map((row)=>[
+        row.volunteer_code,row.name,row.email,row.phone,row.neighbourhood,row.planning_area,row.electoral_division,row.gender,row.recruited_year,
+        (row.tags||[]).join('; '),(row.programmes_registered||[]).join('; '),((row.total_credited_minutes||0)/60).toFixed(2),row.last_active
+      ])].map((row)=>row.map(csvCell).join(','));
+      const blob=new Blob([lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const anchor=document.createElement('a');
+      anchor.href=url;anchor.download='maklom-volunteers.csv';anchor.click();
+      URL.revokeObjectURL(url);
+    }finally{setExporting(false);}
+  }
   async function handleSaved(updated:VolunteerRow){setSelected(updated);await Promise.all([
     qc.invalidateQueries({queryKey:['volunteers']}),qc.invalidateQueries({queryKey:['volunteer-filter-options']}),qc.invalidateQueries({queryKey:['dashboard-summary']})
   ]);}
