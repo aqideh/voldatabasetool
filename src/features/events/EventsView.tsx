@@ -333,7 +333,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
         <Group gap="xs">
           <Badge variant="light">{people.data?.roster.length||0} rostered</Badge>
           <Badge variant="light" color="green">{people.data?.attendance.length||0} attendance</Badge>
-          <Badge variant="light" color={pending.length?'orange':'gray'}>{pending.length} review required</Badge>
+          <Badge variant="light" color={reviewRequiredCount?'orange':'gray'}>{reviewRequiredCount} review required</Badge>
         </Group>
       </Group>
     </Paper>
