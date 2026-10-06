@@ -78,11 +78,9 @@ function statusBadge(status:ContributionSheetRowStatus){
 function sortRows(rows:ContributionSheetRow[],sortKey:SortKey,direction:SortDirection){
   const factor=direction==='asc'?1:-1;
   return [...rows].sort((a,b)=>{
-    if(sortKey==='status'){
-      const rank=statusRank(a.status)-statusRank(b.status);
-      return rank!==0?rank:a.volunteer_name.localeCompare(b.volunteer_name);
-    }
-    if(sortKey==='name')return factor*a.volunteer_name.localeCompare(b.volunteer_name);
+    const rank=statusRank(a.status)-statusRank(b.status);
+    if(rank!==0)return rank;
+    if(sortKey==='status'||sortKey==='name')return factor*a.volunteer_name.localeCompare(b.volunteer_name);
     if(sortKey==='sign-in')return factor*((a.sign_in_at||'').localeCompare(b.sign_in_at||''));
     if(sortKey==='sign-out')return factor*((a.sign_out_at||'').localeCompare(b.sign_out_at||''));
     return factor*((a.operational_minutes||0)-(b.operational_minutes||0));
