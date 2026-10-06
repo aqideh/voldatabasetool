@@ -16,13 +16,14 @@ import {
   fetchEventAudit,
   fetchEventPeople,
   fetchEventsBundle,
-  preRegisterStagedIdentity,
+  fetchStagedIdentityCandidates,
+  resolveStagedIdentity,
   reviewStagedAttendance,
   setRosterOperationalOverride,
   updateEvent,
 } from './api';
 import type { AttendanceRow, EventRow, HistoricalAttendanceImportRow } from '../../lib/types';
-import type { EventRosterDetailRow } from './api';
+import type { EventRosterDetailRow, StagedIdentityCandidate } from './api';
 
 interface Props { canWrite: boolean; canDelete: boolean; }
 
@@ -180,6 +181,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
   const [busy,setBusy]=useState(false);
   const [overrideRow,setOverrideRow]=useState<EventRosterDetailRow|null>(null);
   const [attendanceRow,setAttendanceRow]=useState<AttendanceRow|null>(null);
+  const [identityRow,setIdentityRow]=useState<HistoricalAttendanceImportRow|null>(null);
 
   const people=useQuery({
     queryKey:['event-people',event.id],
@@ -251,17 +253,6 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
     }finally{setBusy(false);}
   }
 
-  async function preRegister(row:HistoricalAttendanceImportRow) {
-    setBusy(true);setMessage(null);
-    try{
-      await preRegisterStagedIdentity(row.id,row.row_version);
-      setMessage({kind:'success',text:'Created a pending identity record. No volunteer profile was created.'});
-      await reload();
-    }catch(error){
-      setMessage({kind:'error',text:error instanceof Error?error.message:'Could not pre-register this identity.'});
-    }finally{setBusy(false);}
-  }
-
   return <Stack gap="md">
     {message&&<Alert color={message.kind==='error'?'red':'green'}>{message.text}</Alert>}
 
@@ -304,7 +295,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
                 <Badge size="xs" color={row.matched_core_volunteer_id?'green':'orange'} variant="light">
                   {row.matched_core_volunteer_id?'Volunteer matched':'Volunteer unresolved'}
                 </Badge>
-                {row.pending_identity_id&&<Badge size="xs" variant="light">Pending identity</Badge>}
+                {row.pending_identity_id&&<Badge size="xs" variant="light">Identity review started</Badge>}
               </Group>
               <Text size="xs" c="dimmed">{row.email||row.phone||'No email/mobile'} · source row {row.source_row_number}</Text>
               <Text size="sm" mt={4}>{row.event_name}</Text>
@@ -315,7 +306,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
               </Text>
             </div>
             {canWrite&&<Group gap="xs" wrap="nowrap">
-              {!row.matched_core_volunteer_id&&!row.pending_identity_id&&<Button size="xs" variant="light" disabled={busy} onClick={()=>void preRegister(row)}>Pre-register identity</Button>}
+              {!row.matched_core_volunteer_id&&<Button size="xs" variant="light" disabled={busy} onClick={()=>setIdentityRow(row)}>Resolve volunteer</Button>}
               {row.matched_core_volunteer_id&&row.source_sign_in_at&&<Button size="xs" disabled={busy} onClick={()=>void review(row,'accept',null)}>Accept</Button>}
               <Button size="xs" color="red" variant="light" disabled={busy} onClick={()=>void review(row,'reject',null)}>Reject</Button>
             </Group>}
@@ -403,6 +394,17 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
       </Stack>
     </Paper>
 
+    <Modal opened={Boolean(identityRow)} onClose={()=>setIdentityRow(null)} title={identityRow?'Resolve volunteer · '+identityRow.full_name:'Resolve volunteer'} size="lg">
+      {identityRow&&<StagedIdentityResolver
+        row={identityRow}
+        onResolved={async(result)=>{
+          setIdentityRow(null);
+          setMessage({kind:'success',text:result.created?'New volunteer created and linked.':'Existing volunteer linked.'});
+          await reload();
+        }}
+      />}
+    </Modal>
+
     <Modal opened={Boolean(overrideRow)} onClose={()=>setOverrideRow(null)} title={overrideRow?'Operational override · '+overrideRow.volunteer_name:'Operational override'} size="lg">
       {overrideRow&&<RosterOverrideEditor row={overrideRow} onSaved={async()=>{setOverrideRow(null);await reload();}}/>}
     </Modal>
@@ -410,6 +412,125 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
     <Modal opened={Boolean(attendanceRow)} onClose={()=>setAttendanceRow(null)} title={attendanceRow?'Correct attendance · '+attendanceRow.name:'Correct attendance'} size="lg">
       {attendanceRow&&<AttendanceCorrectionEditor row={attendanceRow} onSaved={async()=>{setAttendanceRow(null);await reload();}}/>}
     </Modal>
+  </Stack>;
+}
+
+function StagedIdentityResolver({
+  row,
+  onResolved,
+}:{
+  row:HistoricalAttendanceImportRow;
+  onResolved:(result:{created:boolean})=>Promise<void>;
+}) {
+  const [mode,setMode]=useState<'existing'|'create'>('existing');
+  const [search,setSearch]=useState(row.email||row.phone||row.full_name);
+  const [selected,setSelected]=useState<StagedIdentityCandidate|null>(null);
+  const [name,setName]=useState(row.full_name);
+  const [email,setEmail]=useState(row.email||'');
+  const [phone,setPhone]=useState(row.phone||'');
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+
+  const candidates=useQuery({
+    queryKey:['staged-identity-candidates',row.id,search],
+    queryFn:()=>fetchStagedIdentityCandidates(row.id,search.trim()||null),
+    enabled:mode==='existing',
+  });
+
+  async function linkExisting() {
+    if(!selected){setError('Select an existing volunteer first.');return;}
+    setBusy(true);setError(null);
+    try{
+      const result=await resolveStagedIdentity({
+        rowId:row.id,
+        expectedVersion:row.row_version,
+        existingCoreVolunteerId:selected.core_volunteer_id,
+        createNew:false,
+        name:null,
+        email:null,
+        phone:null,
+      });
+      await onResolved({created:result.created});
+    }catch(e){
+      setError(e instanceof Error?e.message:'Could not link this volunteer.');
+    }finally{setBusy(false);}
+  }
+
+  async function createVolunteer() {
+    if(!name.trim()){setError('Volunteer name is required.');return;}
+    if(!email.trim()&&!phone.trim()){setError('Email or mobile number is required.');return;}
+    setBusy(true);setError(null);
+    try{
+      const result=await resolveStagedIdentity({
+        rowId:row.id,
+        expectedVersion:row.row_version,
+        existingCoreVolunteerId:null,
+        createNew:true,
+        name:name.trim(),
+        email:email.trim()||null,
+        phone:phone.trim()||null,
+      });
+      await onResolved({created:result.created});
+    }catch(e){
+      setError(e instanceof Error?e.message:'Could not create this volunteer.');
+    }finally{setBusy(false);}
+  }
+
+  return <Stack>
+    <Alert variant="light">
+      Resolve this staged attendance row to one canonical volunteer. Creating a new volunteer is blocked if the email or mobile already exists.
+    </Alert>
+    {error&&<Alert color="red">{error}</Alert>}
+
+    <Group gap="xs">
+      <Button size="xs" variant={mode==='existing'?'filled':'light'} onClick={()=>{setMode('existing');setError(null);}}>Match existing volunteer</Button>
+      <Button size="xs" variant={mode==='create'?'filled':'light'} onClick={()=>{setMode('create');setError(null);}}>Create new volunteer</Button>
+    </Group>
+
+    {mode==='existing'?<Stack gap="sm">
+      <TextInput
+        label="Search volunteers"
+        description="Search by name, email or mobile."
+        value={search}
+        onChange={(e)=>{setSearch(e.currentTarget.value);setSelected(null);}}
+      />
+      {candidates.isError&&<Alert color="red">{candidates.error instanceof Error?candidates.error.message:'Volunteer search failed.'}</Alert>}
+      <ScrollArea h={300}>
+        <Stack gap="xs">
+          {(candidates.data||[]).map((candidate)=><Paper
+            key={candidate.core_volunteer_id}
+            withBorder
+            p="sm"
+            radius="md"
+            onClick={()=>setSelected(candidate)}
+            style={{
+              cursor:'pointer',
+              outline:selected?.core_volunteer_id===candidate.core_volunteer_id?'2px solid var(--mantine-color-blue-6)':'none',
+            }}
+          >
+            <Group justify="space-between" align="flex-start">
+              <div>
+                <Text fw={700}>{candidate.name}</Text>
+                <Text size="xs" c="dimmed">{candidate.volunteer_code||'No volunteer code'} · {candidate.email||candidate.phone||'No contact'}</Text>
+              </div>
+              {candidate.score>=100&&<Badge size="xs" color="green" variant="light">Strong match</Badge>}
+            </Group>
+          </Paper>)}
+          {!candidates.isLoading&&!candidates.data?.length&&<Text size="sm" c="dimmed">No matching volunteers found. Try another search or create a new volunteer.</Text>}
+        </Stack>
+      </ScrollArea>
+      <Group justify="flex-end">
+        <Button loading={busy} disabled={!selected} onClick={()=>void linkExisting()}>Link selected volunteer</Button>
+      </Group>
+    </Stack>:<Stack gap="sm">
+      <Alert color="orange" variant="light">Create a new volunteer only after confirming this person does not already exist in MakLom.</Alert>
+      <TextInput label="Full name" value={name} onChange={(e)=>setName(e.currentTarget.value)} required/>
+      <TextInput label="Email" value={email} onChange={(e)=>setEmail(e.currentTarget.value)}/>
+      <TextInput label="Mobile" value={phone} onChange={(e)=>setPhone(e.currentTarget.value)}/>
+      <Group justify="flex-end">
+        <Button loading={busy} onClick={()=>void createVolunteer()}>Create volunteer & link</Button>
+      </Group>
+    </Stack>}
   </Stack>;
 }
 
