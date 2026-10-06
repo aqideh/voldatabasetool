@@ -6,6 +6,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  addExistingVolunteerToEventRoster,
   correctEventAttendance,
   createEvent,
   createMetric,
@@ -209,12 +210,39 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
   async function review(row:HistoricalAttendanceImportRow,decision:'accept'|'reject',timeslotId?:string|null) {
     setBusy(true);setMessage(null);
     try{
+      let resolvedTimeslotId=timeslotId??null;
+
+      if(decision==='accept'&&row.matched_core_volunteer_id){
+        const rosterMatches=(people.data?.roster||[]).filter((item)=>item.volunteer_id===row.matched_core_volunteer_id);
+
+        if(rosterMatches.length===1){
+          resolvedTimeslotId=rosterMatches[0].timeslot_id;
+        }else if(rosterMatches.length===0){
+          const shiftMatches=shifts.filter((shift:any)=>shift.shift_date===row.event_date&&shift.keluarga_timeslot_id);
+          if(shiftMatches.length!==1){
+            throw new Error('Choose the specific event shift before accepting this attendance row.');
+          }
+          const inferredTimeslotId=shiftMatches[0].keluarga_timeslot_id;
+          if(!inferredTimeslotId){
+            throw new Error('The event shift could not be resolved.');
+          }
+          resolvedTimeslotId=inferredTimeslotId;
+          await addExistingVolunteerToEventRoster({
+            eventId,
+            timeslotId:inferredTimeslotId,
+            volunteerId:row.matched_core_volunteer_id,
+          });
+        }else{
+          throw new Error('This volunteer has multiple roster assignments. Choose the specific event shift before accepting this attendance row.');
+        }
+      }
+
       await reviewStagedAttendance({
         rowId:row.id,
         expectedVersion:row.row_version,
         decision,
         keluargaEventId:eventId,
-        keluargaTimeslotId:timeslotId??null,
+        keluargaTimeslotId:resolvedTimeslotId,
         targetCoreVolunteerId:row.matched_core_volunteer_id,
         reasonNote:decision==='accept'?'Reviewed in MakLom event workspace':'Rejected in MakLom event workspace',
       });
@@ -312,11 +340,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
             </div>
             {canWrite&&<Group gap="xs" wrap="nowrap">
               {!row.matched_core_volunteer_id&&!row.pending_identity_id&&<Button size="xs" variant="light" disabled={busy} onClick={()=>void preRegister(row)}>Pre-register identity</Button>}
-              {row.matched_core_volunteer_id&&row.source_sign_in_at&&<Button size="xs" disabled={busy} onClick={()=>{
-                const rosterMatches=(people.data?.roster||[]).filter((item)=>item.volunteer_id===row.matched_core_volunteer_id);
-                if(rosterMatches.length===1)void review(row,'accept',rosterMatches[0].timeslot_id);
-                else setMessage({kind:'error',text:'Choose a specific shift in Historical Attendance before accepting this row.'});
-              }}>Accept</Button>}
+              {row.matched_core_volunteer_id&&row.source_sign_in_at&&<Button size="xs" disabled={busy} onClick={()=>void review(row,'accept',null)}>Accept</Button>}
               <Button size="xs" color="red" variant="light" disabled={busy} onClick={()=>void review(row,'reject',null)}>Reject</Button>
             </Group>}
           </Group>
