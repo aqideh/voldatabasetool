@@ -63,29 +63,35 @@ export interface AttendanceReconciliation {
 }
 
 export interface HistoricalAttendanceImportBatch {
-  id:string; source_filename:string; row_count:number; matched_count:number; created_volunteer_count:number;
+  id:string; source_filename:string; source_file_hash:string|null; row_count:number; matched_count:number; created_volunteer_count:number;
   review_count:number; duplicate_count:number; imported_count:number; total_minutes:number;
-  status:'committed'|'partial'|'failed'; completed_at:string|null; created_at:string;
+  status:'reviewing'|'committed'|'partial'|'failed'; completed_at:string|null; created_at:string; row_version:number;
 }
 
-export interface HistoricalAttendancePreviewRow {
-  sourceRowNumber:number;
-  sourceVolunteerIdentifier:string|null;
-  fullName:string;
-  email:string|null;
-  phone:string|null;
-  eventName:string;
-  eventDate:string;
-  volunteerRole:string|null;
-  reportedMinutes:number;
-  attended:boolean;
-  rawPayload:Record<string,unknown>;
-  sourceRowHash:string;
-  matchStatus:'matched'|'created'|'needs_review'|'duplicate'|'invalid';
-  matchedVolunteerId:string|null;
-  matchedCoreVolunteerId:string|null;
-  matchReason:string|null;
-  reviewFlags:string[];
+export type HistoricalAttendanceMatchStatus='matched'|'created'|'needs_review'|'duplicate'|'invalid';
+export type HistoricalAttendanceDecision='pending'|'approved'|'rejected';
+
+export interface HistoricalAttendanceImportRow {
+  id:string; batch_id:string; source_row_number:number; source_row_hash:string; source_volunteer_identifier:string|null;
+  full_name:string; email:string|null; phone:string|null; event_name:string; event_date:string; volunteer_role:string|null;
+  reported_minutes:number; attended:boolean; match_status:HistoricalAttendanceMatchStatus; matched_volunteer_id:string|null;
+  matched_core_volunteer_id:string|null; match_reason:string|null; review_flags:string[]; raw_payload:Record<string,unknown>;
+  committed_attendance_id:string|null; source_sign_in_at:string|null; source_feedback_at:string|null; matched_event_id:string|null;
+  matched_shift_id:string|null; feedback_payload:Record<string,unknown>; shirt_quantity:number; shirt_size:string|null;
+  decision:HistoricalAttendanceDecision; decision_note:string|null; reviewed_at:string|null; reviewed_by:string|null;
+  duplicate_of_attendance_id:string|null; row_version:number;
+}
+
+export interface HistoricalAttendanceContextEvent {
+  id:string; name:string; start_date:string; end_date:string; venue:string|null;
+}
+
+export interface HistoricalAttendanceContextShift {
+  id:string; event_id:string; name:string; shift_date:string; start_time:string|null; end_time:string|null;
+}
+
+export interface HistoricalAttendanceContextVolunteer {
+  id:string; core_volunteer_id:string; name:string; email:string|null; phone:string|null;
 }
 
 export type ContributionStatus='pending'|'approved'|'rejected'|'needs_review';
