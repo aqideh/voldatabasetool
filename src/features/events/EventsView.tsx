@@ -395,7 +395,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
             </Group>}
           </Group>
         </Paper>)}
-        {!people.isLoading&&!pending.length&&<Text c="dimmed" size="sm">No staged attendance needs review for this event.</Text>}
+        {!people.isLoading&&!reviewRequiredCount&&<Text c="dimmed" size="sm">No staged attendance needs review for this event.</Text>}
       </Stack>
     </Paper>
 
