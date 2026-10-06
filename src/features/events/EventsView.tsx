@@ -5,10 +5,52 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createEvent, createMetric, createShift, deleteEvent, deleteMetric, deleteShift, fetchEventPeople, fetchEventsBundle, updateEvent } from './api';
-import type { EventRow } from '../../lib/types';
+import {
+  correctEventAttendance,
+  createEvent,
+  createMetric,
+  createShift,
+  deleteEvent,
+  deleteMetric,
+  deleteShift,
+  fetchEventAudit,
+  fetchEventPeople,
+  fetchEventsBundle,
+  preRegisterStagedIdentity,
+  reviewStagedAttendance,
+  setRosterOperationalOverride,
+  updateEvent,
+} from './api';
+import type { AttendanceRow, EventRow, HistoricalAttendanceImportRow } from '../../lib/types';
+import type { EventRosterDetailRow } from './api';
 
 interface Props { canWrite: boolean; canDelete: boolean; }
+
+const REASON_OPTIONS=[
+  {value:'system_outage',label:'System outage'},
+  {value:'walk_in_adjustment',label:'Walk-in adjustment'},
+  {value:'staff_correction',label:'Staff correction'},
+  {value:'historical_import',label:'Historical import'},
+  {value:'volunteer_request',label:'Volunteer request'},
+  {value:'event_logistics',label:'Event logistics'},
+  {value:'other',label:'Other'},
+];
+
+function sgDateTime(value:string|null|undefined) {
+  if(!value)return '—';
+  return new Date(value).toLocaleString('en-SG',{timeZone:'Asia/Singapore'});
+}
+
+function dateTimeLocalValue(value:string|null|undefined) {
+  if(!value)return '';
+  const shifted=new Date(new Date(value).getTime()+8*60*60*1000).toISOString();
+  return shifted.slice(0,16);
+}
+
+function fromSingaporeLocal(value:string) {
+  if(!value)return null;
+  return value+':00+08:00';
+}
 
 export function EventsView({ canWrite, canDelete }: Props) {
   const qc = useQueryClient();
@@ -25,7 +67,10 @@ export function EventsView({ canWrite, canDelete }: Props) {
   async function refresh() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['events-bundle'] }),
+      qc.invalidateQueries({ queryKey: ['event-people'] }),
+      qc.invalidateQueries({ queryKey: ['event-audit'] }),
       qc.invalidateQueries({ queryKey: ['attendance'] }),
+      qc.invalidateQueries({ queryKey: ['historical-attendance'] }),
       qc.invalidateQueries({ queryKey: ['dashboard-summary'] }),
     ]);
   }
@@ -62,7 +107,7 @@ export function EventsView({ canWrite, canDelete }: Props) {
     <Group justify="space-between" align="flex-end">
       <div>
         <Title order={2}>Events & Shifts</Title>
-        <Text c="dimmed" size="sm">Structured events, deployment shifts and event impact metrics.</Text>
+        <Text c="dimmed" size="sm">Staff event workspaces across Keluarga operations and MakLom history.</Text>
       </div>
       <Badge size="lg" variant="light">{query.data?.events.length || 0} events</Badge>
     </Group>
@@ -76,14 +121,17 @@ export function EventsView({ canWrite, canDelete }: Props) {
       <form onSubmit={(event) => { event.preventDefault(); void addEvent(event.currentTarget); }}>
         <Stack gap="sm">
           <SimpleGrid cols={{ base: 1, md: 3 }}>
-            <TextInput name="name" label="Event name" required />
+            <TextInput name="name" label="Historical / MakLom event name" required />
             <TextInput name="start" label="Start date" type="date" required />
             <TextInput name="end" label="End date" type="date" />
             <TextInput name="programme" label="Programme / category" />
             <TextInput name="venue" label="Venue" />
             <TextInput name="notes" label="Notes" />
           </SimpleGrid>
-          <Group justify="flex-end"><Button type="submit" loading={creating}>Create event</Button></Group>
+          <Group justify="space-between">
+            <Text size="xs" c="dimmed">Use this only for standalone historical MakLom events. Keluarga operational events are created in Keluarga.</Text>
+            <Button type="submit" loading={creating}>Create MakLom event</Button>
+          </Group>
         </Stack>
       </form>
     </Paper>}
@@ -100,7 +148,7 @@ export function EventsView({ canWrite, canDelete }: Props) {
               </Group>
               <Text size="xs" c="dimmed">{event.status}</Text>
             </Table.Td>
-            <Table.Td>{event.start_date}{event.end_date !== event.start_date ? ` – ${event.end_date}` : ''}</Table.Td>
+            <Table.Td>{event.start_date}{event.end_date !== event.start_date ? ' – '+event.end_date : ''}</Table.Td>
             <Table.Td>{event.programme || '-'}</Table.Td>
             <Table.Td>{event.venue || '-'}</Table.Td>
             <Table.Td>{query.data?.shifts.filter((shift) => shift.event_id === event.id).length || 0}</Table.Td>
@@ -110,27 +158,367 @@ export function EventsView({ canWrite, canDelete }: Props) {
       {!query.isLoading && !query.isError && !query.data?.events.length && <Text c="dimmed" ta="center" p="xl">No events found.</Text>}
     </Paper>
 
-    <Modal opened={opened} onClose={close} title={selected?.name || 'Event'} size="xl">
-      {selected && <EventEditor
-        event={selected}
-        shifts={shifts}
-        metrics={metrics}
-        canWrite={canWrite && selected.source !== 'keluarga'}
-        canDelete={canDelete && selected.source !== 'keluarga'}
-        onRefresh={refresh}
-        onDeleted={() => { setSelectedId(null); close(); void refresh(); }}
-      />}
+    <Modal opened={opened} onClose={close} title={selected?.name || 'Event'} size="calc(100vw - 40px)">
+      {selected && (selected.source==='keluarga'
+        ? <KeluargaEventWorkspace event={selected} shifts={shifts} canWrite={canWrite} onRefresh={refresh}/>
+        : <LegacyEventEditor
+            event={selected}
+            shifts={shifts}
+            metrics={metrics}
+            canWrite={canWrite}
+            canDelete={canDelete}
+            onRefresh={refresh}
+            onDeleted={() => { setSelectedId(null); close(); void refresh(); }}
+          />)}
     </Modal>
   </Stack>;
 }
 
-function EventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, onDeleted }: any) {
-  const [status, setStatus] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const people = useQuery({
+function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
+  const qc=useQueryClient();
+  const [message,setMessage]=useState<{kind:'error'|'success';text:string}|null>(null);
+  const [busy,setBusy]=useState(false);
+  const [overrideRow,setOverrideRow]=useState<EventRosterDetailRow|null>(null);
+  const [attendanceRow,setAttendanceRow]=useState<AttendanceRow|null>(null);
+
+  const people=useQuery({
     queryKey:['event-people',event.id],
     queryFn:()=>fetchEventPeople(event),
   });
+  const audit=useQuery({
+    queryKey:['event-audit',event.id],
+    queryFn:()=>fetchEventAudit(event),
+  });
+
+  const eventId=event.keluarga_event_id||event.id.replace(/^keluarga:/,'');
+  const pending=(people.data?.staged||[]).filter((row)=>row.decision==='pending');
+  const safePending=pending.filter((row)=>{
+    if(!row.matched_core_volunteer_id||!row.source_sign_in_at)return false;
+    const matches=(people.data?.roster||[]).filter((roster)=>roster.volunteer_id===row.matched_core_volunteer_id);
+    return matches.length===1;
+  });
+
+  async function reload() {
+    await Promise.all([
+      qc.invalidateQueries({queryKey:['event-people',event.id]}),
+      qc.invalidateQueries({queryKey:['event-audit',event.id]}),
+      onRefresh(),
+    ]);
+  }
+
+  async function review(row:HistoricalAttendanceImportRow,decision:'accept'|'reject',timeslotId?:string|null) {
+    setBusy(true);setMessage(null);
+    try{
+      await reviewStagedAttendance({
+        rowId:row.id,
+        expectedVersion:row.row_version,
+        decision,
+        keluargaEventId:eventId,
+        keluargaTimeslotId:timeslotId??null,
+        targetCoreVolunteerId:row.matched_core_volunteer_id,
+        reasonNote:decision==='accept'?'Reviewed in MakLom event workspace':'Rejected in MakLom event workspace',
+      });
+      setMessage({kind:'success',text:decision==='accept'?'Attendance accepted.':'Staged row rejected.'});
+      await reload();
+    }catch(error){
+      setMessage({kind:'error',text:error instanceof Error?error.message:'Could not review this staged row.'});
+    }finally{setBusy(false);}
+  }
+
+  async function acceptSafe() {
+    if(!safePending.length)return;
+    setBusy(true);setMessage(null);
+    let accepted=0;
+    try{
+      for(const row of safePending){
+        const roster=(people.data?.roster||[]).find((item)=>item.volunteer_id===row.matched_core_volunteer_id)!;
+        await reviewStagedAttendance({
+          rowId:row.id,
+          expectedVersion:row.row_version,
+          decision:'accept',
+          keluargaEventId:eventId,
+          keluargaTimeslotId:roster.timeslot_id,
+          targetCoreVolunteerId:row.matched_core_volunteer_id,
+          reasonNote:'Bulk-approved safe attendance in MakLom event workspace',
+        });
+        accepted+=1;
+      }
+      setMessage({kind:'success',text:'Accepted '+accepted+' safe staged attendance row'+(accepted===1?'':'s')+'.'});
+      await reload();
+    }catch(error){
+      setMessage({kind:'error',text:'Accepted '+accepted+' row'+(accepted===1?'':'s')+' before stopping. '+(error instanceof Error?error.message:'A later row could not be accepted.')});
+      await reload();
+    }finally{setBusy(false);}
+  }
+
+  async function preRegister(row:HistoricalAttendanceImportRow) {
+    setBusy(true);setMessage(null);
+    try{
+      await preRegisterStagedIdentity(row.id,row.row_version);
+      setMessage({kind:'success',text:'Created a pending identity record. No volunteer profile was created.'});
+      await reload();
+    }catch(error){
+      setMessage({kind:'error',text:error instanceof Error?error.message:'Could not pre-register this identity.'});
+    }finally{setBusy(false);}
+  }
+
+  return <Stack gap="md">
+    {message&&<Alert color={message.kind==='error'?'red':'green'}>{message.text}</Alert>}
+
+    <Paper withBorder radius="lg" p="md">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Group gap="xs">
+            <Title order={3}>{event.name}</Title>
+            <Badge variant="light">Keluarga event</Badge>
+          </Group>
+          <Text size="sm" c="dimmed">{event.start_date}{event.end_date!==event.start_date?' – '+event.end_date:''} · {event.venue||'Venue not recorded'}</Text>
+          <Text size="xs" c="dimmed" mt={4}>MakLom is the staff operations surface. Publishing details remain owned by Keluarga; operational actions below use governed commands and audit logging.</Text>
+        </div>
+        <Group gap="xs">
+          <Badge variant="light">{people.data?.roster.length||0} rostered</Badge>
+          <Badge variant="light" color="green">{people.data?.attendance.length||0} attendance</Badge>
+          <Badge variant="light" color={pending.length?'orange':'gray'}>{pending.length} review required</Badge>
+        </Group>
+      </Group>
+    </Paper>
+
+    <Paper withBorder radius="lg" p="md">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Title order={4}>Needs attention</Title>
+          <Text size="sm" c="dimmed">Resolve imported attendance before routine roster work.</Text>
+        </div>
+        {canWrite&&<Button size="xs" variant="light" disabled={!safePending.length||busy} loading={busy} onClick={()=>void acceptSafe()}>
+          Accept all safe ({safePending.length})
+        </Button>}
+      </Group>
+
+      {people.isError&&<Alert color="red" mt="md">{people.error instanceof Error?people.error.message:'Event workspace data could not be loaded.'}</Alert>}
+      <Stack gap="xs" mt="md">
+        {pending.map((row)=><Paper key={row.id} withBorder radius="md" p="sm">
+          <Group justify="space-between" align="flex-start" wrap="nowrap">
+            <div style={{minWidth:0}}>
+              <Group gap="xs">
+                <Text fw={700}>{row.full_name}</Text>
+                <Badge size="xs" color={row.matched_core_volunteer_id?'green':'orange'} variant="light">
+                  {row.matched_core_volunteer_id?'Volunteer matched':'Volunteer unresolved'}
+                </Badge>
+                {row.pending_identity_id&&<Badge size="xs" variant="light">Pending identity</Badge>}
+              </Group>
+              <Text size="xs" c="dimmed">{row.email||row.phone||'No email/mobile'} · source row {row.source_row_number}</Text>
+              <Text size="sm" mt={4}>{row.event_name}</Text>
+              <Text size="xs" c="dimmed">Source sign-in: {sgDateTime(row.source_sign_in_at)} · {row.review_flags?.map((x)=>x.replaceAll('_',' ')).join(' · ')||'No review flags'}</Text>
+            </div>
+            {canWrite&&<Group gap="xs" wrap="nowrap">
+              {!row.matched_core_volunteer_id&&!row.pending_identity_id&&<Button size="xs" variant="light" disabled={busy} onClick={()=>void preRegister(row)}>Pre-register identity</Button>}
+              {row.matched_core_volunteer_id&&row.source_sign_in_at&&<Button size="xs" disabled={busy} onClick={()=>{
+                const rosterMatches=(people.data?.roster||[]).filter((item)=>item.volunteer_id===row.matched_core_volunteer_id);
+                if(rosterMatches.length===1)void review(row,'accept',rosterMatches[0].timeslot_id);
+                else setMessage({kind:'error',text:'Choose a specific shift in Historical Attendance before accepting this row.'});
+              }}>Accept</Button>}
+              <Button size="xs" color="red" variant="light" disabled={busy} onClick={()=>void review(row,'reject',null)}>Reject</Button>
+            </Group>}
+          </Group>
+        </Paper>)}
+        {!people.isLoading&&!pending.length&&<Text c="dimmed" size="sm">No staged attendance needs review for this event.</Text>}
+      </Stack>
+    </Paper>
+
+    <Paper withBorder radius="lg" p="md">
+      <Group justify="space-between">
+        <div><Title order={4}>Roster</Title><Text size="sm" c="dimmed">Operational assignments and event-scoped logistics.</Text></div>
+        <Badge variant="light">{people.data?.roster.length||0}</Badge>
+      </Group>
+      <ScrollArea mt="sm">
+        <Table striped highlightOnHover miw={980} verticalSpacing="xs">
+          <Table.Thead><Table.Tr>
+            <Table.Th>Volunteer</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Contact</Table.Th>
+            <Table.Th>Event logistics</Table.Th><Table.Th>Link</Table.Th><Table.Th></Table.Th>
+          </Table.Tr></Table.Thead>
+          <Table.Tbody>{(people.data?.roster||[]).map((row)=><Table.Tr key={row.id}>
+            <Table.Td><Text fw={600} size="sm">{row.volunteer_name}</Text><Text size="xs" c="dimmed">{row.email||row.mobile||'—'}</Text></Table.Td>
+            <Table.Td><Text size="xs">{row.timeslot_id?(shifts.find((shift:any)=>shift.keluarga_timeslot_id===row.timeslot_id)?.name||'Assigned'):'General'}</Text></Table.Td>
+            <Table.Td><Text size="xs">{row.override?.contact_on_day||row.mobile||row.email||'—'}</Text>{row.override?.contact_on_day&&<Badge size="xs" variant="light">event override</Badge>}</Table.Td>
+            <Table.Td><Text size="xs">{[
+              row.override?.tshirt_size_override?('T-shirt '+row.override.tshirt_size_override):row.tshirt_size?('T-shirt '+row.tshirt_size):'',
+              row.override?.dietary_override||row.dietary_requirements||'',
+              row.override?.note||'',
+            ].filter(Boolean).join(' · ')||'—'}</Text></Table.Td>
+            <Table.Td><Badge size="xs" variant="light" color={row.volunteer_id?'green':'orange'}>{row.volunteer_id?'linked':'unresolved'}</Badge></Table.Td>
+            <Table.Td>{canWrite&&<Button size="xs" variant="subtle" onClick={()=>setOverrideRow(row)}>Operational override</Button>}</Table.Td>
+          </Table.Tr>)}</Table.Tbody>
+        </Table>
+      </ScrollArea>
+    </Paper>
+
+    <Paper withBorder radius="lg" p="md">
+      <Group justify="space-between">
+        <div><Title order={4}>Attendance</Title><Text size="sm" c="dimmed">Canonical sessions. Staff corrections require reason category, note, version check and audit entry.</Text></div>
+        <Badge color="green" variant="light">{people.data?.attendance.length||0}</Badge>
+      </Group>
+      <ScrollArea mt="sm">
+        <Table striped highlightOnHover miw={1050} verticalSpacing="xs">
+          <Table.Thead><Table.Tr>
+            <Table.Th>Volunteer</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Check-in</Table.Th><Table.Th>Check-out</Table.Th>
+            <Table.Th>Credited</Table.Th><Table.Th>Contribution</Table.Th><Table.Th></Table.Th>
+          </Table.Tr></Table.Thead>
+          <Table.Tbody>{(people.data?.attendance||[]).map((row)=><Table.Tr key={row.id}>
+            <Table.Td><Text fw={600} size="sm">{row.name}</Text><Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text></Table.Td>
+            <Table.Td>{row.shift_label||'General'}</Table.Td>
+            <Table.Td>{sgDateTime(row.sign_in_at)}</Table.Td>
+            <Table.Td>{sgDateTime(row.sign_out_at)}</Table.Td>
+            <Table.Td>{row.staff_credited_duration_minutes??row.duration_minutes??0} min</Table.Td>
+            <Table.Td><Badge size="xs" variant="light">{row.contribution_status||'—'}</Badge></Table.Td>
+            <Table.Td>{canWrite&&row.record_source==='keluarga'&&<Button size="xs" variant="subtle" onClick={()=>setAttendanceRow(row)}>Correct</Button>}</Table.Td>
+          </Table.Tr>)}</Table.Tbody>
+        </Table>
+      </ScrollArea>
+      {!people.isLoading&&!people.data?.attendance.length&&<Text c="dimmed" size="sm" mt="sm">No committed attendance yet.</Text>}
+    </Paper>
+
+    <Paper withBorder radius="lg" p="md">
+      <Title order={4}>Event details & shifts</Title>
+      <SimpleGrid cols={{base:1,md:4}} mt="sm">
+        <div><Text size="xs" c="dimmed">Programme</Text><Text size="sm">{event.programme||'—'}</Text></div>
+        <div><Text size="xs" c="dimmed">Venue</Text><Text size="sm">{event.venue||'—'}</Text></div>
+        <div><Text size="xs" c="dimmed">Status</Text><Text size="sm">{event.status}</Text></div>
+        <div><Text size="xs" c="dimmed">Sessions</Text><Text size="sm">{shifts.length}</Text></div>
+      </SimpleGrid>
+      {event.notes&&<Text size="sm" c="dimmed" mt="sm">{event.notes}</Text>}
+      <Stack gap={4} mt="md">{shifts.map((shift:any)=><Group key={shift.id} justify="space-between">
+        <Text size="sm" fw={600}>{shift.name}</Text>
+        <Text size="xs" c="dimmed">{shift.shift_date} {shift.start_time?'· '+String(shift.start_time).slice(0,5)+'–'+String(shift.end_time||'').slice(0,5):''}</Text>
+      </Group>)}</Stack>
+    </Paper>
+
+    <Paper withBorder radius="lg" p="md">
+      <Group justify="space-between"><div><Title order={4}>Audit trail</Title><Text size="sm" c="dimmed">Latest governed staff and import actions for this event.</Text></div><Badge variant="light">{audit.data?.length||0}</Badge></Group>
+      <Stack gap="xs" mt="sm">
+        {(audit.data||[]).slice(0,20).map((entry)=><Group key={entry.id} justify="space-between" align="flex-start">
+          <div><Text size="sm" fw={600}>{entry.action.replaceAll('.',' · ').replaceAll('_',' ')}</Text><Text size="xs" c="dimmed">{String(entry.metadata?.reason_note||entry.metadata?.review_note||entry.target_type||'')}</Text></div>
+          <Text size="xs" c="dimmed">{sgDateTime(entry.occurred_at)}</Text>
+        </Group>)}
+        {!audit.isLoading&&!audit.data?.length&&<Text size="sm" c="dimmed">No event audit entries yet.</Text>}
+      </Stack>
+    </Paper>
+
+    <Modal opened={Boolean(overrideRow)} onClose={()=>setOverrideRow(null)} title={overrideRow?'Operational override · '+overrideRow.volunteer_name:'Operational override'} size="lg">
+      {overrideRow&&<RosterOverrideEditor row={overrideRow} onSaved={async()=>{setOverrideRow(null);await reload();}}/>}
+    </Modal>
+
+    <Modal opened={Boolean(attendanceRow)} onClose={()=>setAttendanceRow(null)} title={attendanceRow?'Correct attendance · '+attendanceRow.name:'Correct attendance'} size="lg">
+      {attendanceRow&&<AttendanceCorrectionEditor row={attendanceRow} onSaved={async()=>{setAttendanceRow(null);await reload();}}/>}
+    </Modal>
+  </Stack>;
+}
+
+function RosterOverrideEditor({row,onSaved}:{row:EventRosterDetailRow;onSaved:()=>Promise<void>}) {
+  const [contact,setContact]=useState(row.override?.contact_on_day||'');
+  const [dietary,setDietary]=useState(row.override?.dietary_override||'');
+  const [shirt,setShirt]=useState<string|null>(row.override?.tshirt_size_override||null);
+  const [note,setNote]=useState(row.override?.note||'');
+  const [reasonCode,setReasonCode]=useState<string|null>('event_logistics');
+  const [reasonNote,setReasonNote]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+
+  async function save() {
+    if(!reasonCode){setError('Choose a reason category.');return;}
+    setBusy(true);setError(null);
+    try{
+      await setRosterOperationalOverride({
+        rosterId:row.id,
+        expectedRosterVersion:row.row_version,
+        expectedOverrideVersion:row.override?.row_version||0,
+        contactOnDay:contact.trim()||null,
+        dietaryOverride:dietary.trim()||null,
+        tshirtSizeOverride:shirt,
+        note:note.trim()||null,
+        reasonCode,
+        reasonNote,
+      });
+      await onSaved();
+    }catch(e){setError(e instanceof Error?e.message:'Could not save operational override.');}
+    finally{setBusy(false);}
+  }
+
+  return <Stack>
+    <Alert variant="light">These values apply only to this event. They do not overwrite the volunteer's master profile.</Alert>
+    {error&&<Alert color="red">{error}</Alert>}
+    <TextInput label="Contact on the day" value={contact} onChange={(e)=>setContact(e.currentTarget.value)}/>
+    <Select label="T-shirt size override" clearable value={shirt} onChange={setShirt} data={['S','M','L','XL','2XL','3XL','5XL','7XL']}/>
+    <Textarea label="Dietary / logistics override" value={dietary} onChange={(e)=>setDietary(e.currentTarget.value)}/>
+    <Textarea label="Operational note" value={note} onChange={(e)=>setNote(e.currentTarget.value)}/>
+    <Select label="Reason category" value={reasonCode} onChange={setReasonCode} data={REASON_OPTIONS} required/>
+    <Textarea label="Staff note" description="Required for audit traceability." value={reasonNote} onChange={(e)=>setReasonNote(e.currentTarget.value)} required/>
+    <Group justify="flex-end"><Button loading={busy} onClick={()=>void save()}>Save event override</Button></Group>
+  </Stack>;
+}
+
+function AttendanceCorrectionEditor({row,onSaved}:{row:AttendanceRow;onSaved:()=>Promise<void>}) {
+  const sessionId=row.id.replace(/^keluarga:/,'');
+  const [checkIn,setCheckIn]=useState(dateTimeLocalValue(row.sign_in_at));
+  const [checkOut,setCheckOut]=useState(dateTimeLocalValue(row.sign_out_at));
+  const [reasonCode,setReasonCode]=useState<string|null>('staff_correction');
+  const [reasonNote,setReasonNote]=useState('');
+  const [creditAction,setCreditAction]=useState<'unchanged'|'approve'|'needs_review'|'reject'>('unchanged');
+  const [minutes,setMinutes]=useState<number|string>(row.staff_credited_duration_minutes??row.duration_minutes??0);
+  const [approvalNote,setApprovalNote]=useState(row.staff_credit_note||'');
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+
+  async function save() {
+    if(!reasonCode){setError('Choose a reason category.');return;}
+    const checkedIn=fromSingaporeLocal(checkIn);
+    if(!checkedIn){setError('Check-in time is required.');return;}
+    setBusy(true);setError(null);
+    try{
+      await correctEventAttendance({
+        sessionId,
+        expectedVersion:row.row_version,
+        checkedInAt:checkedIn,
+        checkedOutAt:fromSingaporeLocal(checkOut),
+        reasonCode,
+        reasonNote,
+        creditAction,
+        approvedMinutes:creditAction==='approve'?Math.max(0,Number(minutes)||0):null,
+        approvalNote:approvalNote.trim()||null,
+      });
+      await onSaved();
+    }catch(e){setError(e instanceof Error?e.message:'Could not correct attendance.');}
+    finally{setBusy(false);}
+  }
+
+  return <Stack>
+    <Alert variant="light">If this session changed after you opened it, MakLom will reject the correction and ask you to refresh.</Alert>
+    {error&&<Alert color="red">{error}</Alert>}
+    <SimpleGrid cols={{base:1,md:2}}>
+      <TextInput label="Check-in" type="datetime-local" value={checkIn} onChange={(e)=>setCheckIn(e.currentTarget.value)} required/>
+      <TextInput label="Check-out" type="datetime-local" value={checkOut} onChange={(e)=>setCheckOut(e.currentTarget.value)}/>
+    </SimpleGrid>
+    <Select label="Reason category" value={reasonCode} onChange={setReasonCode} data={REASON_OPTIONS} required/>
+    <Textarea label="Staff correction note" value={reasonNote} onChange={(e)=>setReasonNote(e.currentTarget.value)} required/>
+    <Select
+      label="Contribution hours"
+      value={creditAction}
+      onChange={(value)=>setCreditAction((value||'unchanged') as any)}
+      data={[
+        {value:'unchanged',label:'Leave contribution review unchanged'},
+        {value:'approve',label:'Approve credited minutes'},
+        {value:'needs_review',label:'Mark contribution for review'},
+        {value:'reject',label:'Reject contribution credit'},
+      ]}
+    />
+    {creditAction==='approve'&&<NumberInput label="Approved minutes" min={0} value={minutes} onChange={setMinutes}/>}
+    {creditAction!=='unchanged'&&<Textarea label="Contribution review note" value={approvalNote} onChange={(e)=>setApprovalNote(e.currentTarget.value)}/>}
+    <Group justify="flex-end"><Button loading={busy} onClick={()=>void save()}>Apply correction</Button></Group>
+  </Stack>;
+}
+
+function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, onDeleted }: any) {
+  const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function save(form: HTMLFormElement) {
     setSaving(true); setStatus(null);
@@ -151,174 +539,73 @@ function EventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, o
     finally { setSaving(false); }
   }
 
-  const isKeluarga = event.source === 'keluarga';
-
   return <Stack>
-    {isKeluarga && <Alert variant="light">This event is owned by Keluarga MENDAKI and is read-only in MakLom.</Alert>}
-    {status && <Alert variant="light">{status}</Alert>}
-    <form onSubmit={(e) => { e.preventDefault(); void save(e.currentTarget); }}>
-      <SimpleGrid cols={{ base: 1, md: 2 }}>
-        <TextInput name="name" label="Name" defaultValue={event.name} disabled={!canWrite} />
-        <Select name="status" label="Status" defaultValue={event.status} data={['active','archived']} disabled={!canWrite} />
-        <TextInput name="start_date" label="Start date" type="date" defaultValue={event.start_date} disabled={!canWrite} />
-        <TextInput name="end_date" label="End date" type="date" defaultValue={event.end_date} disabled={!canWrite} />
-        <TextInput name="programme" label="Programme / category" defaultValue={event.programme || ''} disabled={!canWrite} />
-        <TextInput name="venue" label="Venue" defaultValue={event.venue || ''} disabled={!canWrite} />
+    {status&&<Alert variant="light">{status}</Alert>}
+    <form onSubmit={(e)=>{e.preventDefault();void save(e.currentTarget);}}>
+      <SimpleGrid cols={{base:1,md:2}}>
+        <TextInput name="name" label="Name" defaultValue={event.name} disabled={!canWrite}/>
+        <Select name="status" label="Status" defaultValue={event.status} data={['active','archived']} disabled={!canWrite}/>
+        <TextInput name="start_date" label="Start date" type="date" defaultValue={event.start_date} disabled={!canWrite}/>
+        <TextInput name="end_date" label="End date" type="date" defaultValue={event.end_date} disabled={!canWrite}/>
+        <TextInput name="programme" label="Programme / category" defaultValue={event.programme||''} disabled={!canWrite}/>
+        <TextInput name="venue" label="Venue" defaultValue={event.venue||''} disabled={!canWrite}/>
       </SimpleGrid>
-      <Textarea name="notes" label="Notes" mt="sm" defaultValue={event.notes || ''} disabled={!canWrite} />
-      {canWrite && <Group justify="flex-end" mt="md"><Button type="submit" loading={saving}>Save event</Button></Group>}
+      <Textarea name="notes" label="Notes" mt="sm" defaultValue={event.notes||''} disabled={!canWrite}/>
+      {canWrite&&<Group justify="flex-end" mt="md"><Button type="submit" loading={saving}>Save event</Button></Group>}
     </form>
-
-    <Paper withBorder p="md">
-      <Group justify="space-between" align="flex-start">
-        <div>
-          <Title order={4}>Roster & attendance</Title>
-          <Text size="sm" c="dimmed">
-            Live roster assignments, committed attendance, and staged historical rows associated with this event.
-          </Text>
-        </div>
-        <Group gap="xs">
-          <Badge variant="light">{people.data?.roster.length||0} roster</Badge>
-          <Badge variant="light" color="green">{people.data?.attendance.length||0} attendance</Badge>
-          {people.data?.staged.length ? <Badge variant="light" color="orange">{people.data.staged.length} staged</Badge> : null}
-        </Group>
-      </Group>
-
-      {people.isError&&<Alert color="red" mt="md">
-        Event roster and attendance could not be loaded. {people.error instanceof Error?people.error.message:'Please refresh and try again.'}
-      </Alert>}
-
-      {event.source==='keluarga'&&<Stack gap="xs" mt="md">
-        <Group justify="space-between">
-          <Text fw={700}>Operational roster</Text>
-          <Text size="xs" c="dimmed">Assignments in Keluarga Event Operations</Text>
-        </Group>
-        <ScrollArea>
-          <Table striped highlightOnHover miw={850} verticalSpacing="xs">
-            <Table.Thead><Table.Tr>
-              <Table.Th>Volunteer</Table.Th><Table.Th>Contact</Table.Th><Table.Th>Shift</Table.Th>
-              <Table.Th>Source</Table.Th><Table.Th>Link</Table.Th><Table.Th>Notes</Table.Th>
-            </Table.Tr></Table.Thead>
-            <Table.Tbody>{(people.data?.roster||[]).map((row:any)=><Table.Tr key={row.id}>
-              <Table.Td><Text fw={600} size="sm">{row.volunteer_name}</Text></Table.Td>
-              <Table.Td><Text size="xs">{row.email||row.mobile||'—'}</Text></Table.Td>
-              <Table.Td><Text size="xs">{row.timeslot_id ? (shifts.find((shift:any)=>shift.keluarga_timeslot_id===row.timeslot_id)?.name||'Assigned') : 'General'}</Text></Table.Td>
-              <Table.Td><Badge size="xs" variant="light">{row.entry_method||'unknown'}</Badge></Table.Td>
-              <Table.Td><Badge size="xs" variant="light" color={row.volunteer_link_status==='linked'?'green':'gray'}>{row.volunteer_link_status||'unlinked'}</Badge></Table.Td>
-              <Table.Td><Text size="xs">{[row.tshirt_size?('T-shirt '+row.tshirt_size):'',row.dietary_requirements||''].filter(Boolean).join(' · ')||'—'}</Text></Table.Td>
-            </Table.Tr>)}</Table.Tbody>
-          </Table>
-        </ScrollArea>
-        {!people.isLoading&&!people.data?.roster.length&&<Text c="dimmed" size="sm">No roster rows for this event.</Text>}
-      </Stack>}
-
-      <Stack gap="xs" mt="lg">
-        <Group justify="space-between">
-          <Text fw={700}>Committed attendance</Text>
-          <Text size="xs" c="dimmed">Rows already in MakLom / Keluarga attendance</Text>
-        </Group>
-        <ScrollArea>
-          <Table striped highlightOnHover miw={900} verticalSpacing="xs">
-            <Table.Thead><Table.Tr>
-              <Table.Th>Volunteer</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Status</Table.Th>
-              <Table.Th>Check-in</Table.Th><Table.Th>Check-out</Table.Th><Table.Th>Credited</Table.Th><Table.Th>Source</Table.Th>
-            </Table.Tr></Table.Thead>
-            <Table.Tbody>{(people.data?.attendance||[]).map((row:any)=><Table.Tr key={row.id}>
-              <Table.Td><Text fw={600} size="sm">{row.name}</Text><Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text></Table.Td>
-              <Table.Td><Text size="xs">{row.shift_label||'General'}</Text></Table.Td>
-              <Table.Td><Badge size="xs" color={row.attended?'green':'gray'} variant="light">{row.attended?'Attended':'Not attended'}</Badge></Table.Td>
-              <Table.Td><Text size="xs">{row.sign_in_at?new Date(row.sign_in_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'}):'—'}</Text></Table.Td>
-              <Table.Td><Text size="xs">{row.sign_out_at?new Date(row.sign_out_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'}):'—'}</Text></Table.Td>
-              <Table.Td><Text size="xs">{row.staff_credited_duration_minutes??row.duration_minutes??0} min</Text></Table.Td>
-              <Table.Td><Badge size="xs" variant="light">{row.record_source||'maklom'}</Badge></Table.Td>
-            </Table.Tr>)}</Table.Tbody>
-          </Table>
-        </ScrollArea>
-        {!people.isLoading&&!people.data?.attendance.length&&<Text c="dimmed" size="sm">No committed attendance rows for this event.</Text>}
-      </Stack>
-
-      {event.source!=='keluarga'&&<Stack gap="xs" mt="lg">
-        <Group justify="space-between">
-          <div>
-            <Text fw={700}>Staged historical attendance</Text>
-            <Text size="xs" c="dimmed">Review-only rows from staged spreadsheets. These are not committed attendance.</Text>
-          </div>
-          {people.data?.staged.length ? <Badge color="orange" variant="light">Needs review</Badge> : null}
-        </Group>
-        <ScrollArea>
-          <Table striped highlightOnHover miw={900} verticalSpacing="xs">
-            <Table.Thead><Table.Tr>
-              <Table.Th>Source row</Table.Th><Table.Th>Volunteer</Table.Th><Table.Th>Source event</Table.Th>
-              <Table.Th>Sign-in</Table.Th><Table.Th>Match</Table.Th><Table.Th>Decision</Table.Th><Table.Th>Flags</Table.Th>
-            </Table.Tr></Table.Thead>
-            <Table.Tbody>{(people.data?.staged||[]).map((row:any)=><Table.Tr key={row.id}>
-              <Table.Td><Text size="xs">Row {row.source_row_number}</Text></Table.Td>
-              <Table.Td><Text fw={600} size="sm">{row.full_name}</Text><Text size="xs" c="dimmed">{row.email||row.phone||'—'}</Text></Table.Td>
-              <Table.Td><Text size="xs">{row.event_name}</Text></Table.Td>
-              <Table.Td><Text size="xs">{row.source_sign_in_at?new Date(row.source_sign_in_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'}):'—'}</Text></Table.Td>
-              <Table.Td><Badge size="xs" color={row.match_status==='matched'?'green':'orange'} variant="light">{row.match_status.replaceAll('_',' ')}</Badge></Table.Td>
-              <Table.Td><Badge size="xs" color={row.decision==='approved'?'green':row.decision==='rejected'?'red':'gray'} variant="light">{row.decision}</Badge></Table.Td>
-              <Table.Td><Text size="xs">{row.review_flags?.slice(0,3).map((flag:string)=>flag.replaceAll('_',' ')).join(' · ')||'—'}</Text></Table.Td>
-            </Table.Tr>)}</Table.Tbody>
-          </Table>
-        </ScrollArea>
-        {!people.isLoading&&!people.data?.staged.length&&<Text c="dimmed" size="sm">No staged historical rows are associated with this event.</Text>}
-      </Stack>}
-    </Paper>
 
     <Paper withBorder p="md">
       <Title order={4}>Shifts</Title>
       <Stack gap="xs" mt="sm">
-        {shifts.map((shift: any) => <Group key={shift.id} justify="space-between">
-          <div><Text fw={600}>{shift.name}</Text><Text size="xs" c="dimmed">{shift.shift_date} {shift.start_time ? `· ${String(shift.start_time).slice(0,5)}–${String(shift.end_time || '').slice(0,5)}` : ''}</Text></div>
-          {canDelete && <Button size="xs" color="red" variant="subtle" onClick={() => void deleteShift(shift).then(onRefresh)}>Delete</Button>}
+        {shifts.map((shift:any)=><Group key={shift.id} justify="space-between">
+          <div><Text fw={600}>{shift.name}</Text><Text size="xs" c="dimmed">{shift.shift_date} {shift.start_time?'· '+String(shift.start_time).slice(0,5)+'–'+String(shift.end_time||'').slice(0,5):''}</Text></div>
+          {canDelete&&<Button size="xs" color="red" variant="subtle" onClick={()=>void deleteShift(shift).then(onRefresh)}>Delete</Button>}
         </Group>)}
-        {!shifts.length && <Text c="dimmed" size="sm">No shifts.</Text>}
-        {canWrite && <form onSubmit={(e) => {
-          e.preventDefault(); const data = new FormData(e.currentTarget);
-          void createShift(event.id, {
-            name: String(data.get('name') || '').trim(),
-            shift_date: String(data.get('date') || ''),
-            start_time: String(data.get('start') || '') || null,
-            end_time: String(data.get('end') || '') || null,
-            notes: null,
-          }).then(() => { e.currentTarget.reset(); return onRefresh(); });
+        {canWrite&&<form onSubmit={(e)=>{
+          e.preventDefault();const data=new FormData(e.currentTarget);
+          void createShift(event.id,{
+            name:String(data.get('name')||'').trim(),
+            shift_date:String(data.get('date')||''),
+            start_time:String(data.get('start')||'')||null,
+            end_time:String(data.get('end')||'')||null,
+            notes:null,
+          }).then(()=>{e.currentTarget.reset();return onRefresh();});
         }}>
-          <SimpleGrid cols={{ base: 1, md: 4 }}>
-            <TextInput name="name" label="Shift name" required />
-            <TextInput name="date" label="Date" type="date" required />
-            <TextInput name="start" label="Start" type="time" />
-            <TextInput name="end" label="End" type="time" />
+          <SimpleGrid cols={{base:1,md:4}}>
+            <TextInput name="name" label="Shift name" required/>
+            <TextInput name="date" label="Date" type="date" required/>
+            <TextInput name="start" label="Start" type="time"/>
+            <TextInput name="end" label="End" type="time"/>
           </SimpleGrid>
           <Group justify="flex-end" mt="sm"><Button size="xs" type="submit">Add shift</Button></Group>
         </form>}
       </Stack>
     </Paper>
 
-    {!isKeluarga && <Paper withBorder p="md">
+    <Paper withBorder p="md">
       <Title order={4}>Impact metrics</Title>
       <Stack gap="xs" mt="sm">
-        {metrics.map((metric: any) => <Group key={metric.id} justify="space-between">
-          <Text>{metric.label}: <b>{metric.value}</b> {metric.unit || ''}</Text>
-          {canDelete && <Button size="xs" color="red" variant="subtle" onClick={() => void deleteMetric(metric).then(onRefresh)}>Delete</Button>}
+        {metrics.map((metric:any)=><Group key={metric.id} justify="space-between">
+          <Text>{metric.label}: <b>{metric.value}</b> {metric.unit||''}</Text>
+          {canDelete&&<Button size="xs" color="red" variant="subtle" onClick={()=>void deleteMetric(metric).then(onRefresh)}>Delete</Button>}
         </Group>)}
-        {canWrite && <form onSubmit={(e) => {
-          e.preventDefault(); const data = new FormData(e.currentTarget);
-          void createMetric(event.id, String(data.get('label') || '').trim(), Number(data.get('value') || 0), String(data.get('unit') || '').trim() || null)
-            .then(() => { e.currentTarget.reset(); return onRefresh(); });
+        {canWrite&&<form onSubmit={(e)=>{
+          e.preventDefault();const data=new FormData(e.currentTarget);
+          void createMetric(event.id,String(data.get('label')||'').trim(),Number(data.get('value')||0),String(data.get('unit')||'').trim()||null)
+            .then(()=>{e.currentTarget.reset();return onRefresh();});
         }}>
-          <SimpleGrid cols={{ base: 1, md: 3 }}>
-            <TextInput name="label" label="Metric" required />
-            <NumberInput name="value" label="Value" min={0} required />
-            <TextInput name="unit" label="Unit" />
+          <SimpleGrid cols={{base:1,md:3}}>
+            <TextInput name="label" label="Metric" required/>
+            <NumberInput name="value" label="Value" min={0} required/>
+            <TextInput name="unit" label="Unit"/>
           </SimpleGrid>
           <Group justify="flex-end" mt="sm"><Button size="xs" type="submit">Add metric</Button></Group>
         </form>}
       </Stack>
-    </Paper>}
+    </Paper>
 
-    {canDelete && <Group justify="flex-end"><Button color="red" variant="light" onClick={() => {
-      if (confirm(`Delete ${event.name}? Related shifts and metrics will be removed.`)) void deleteEvent(event).then(onDeleted);
+    {canDelete&&<Group justify="flex-end"><Button color="red" variant="light" onClick={()=>{
+      if(confirm('Delete '+event.name+'? Related shifts and metrics will be removed.'))void deleteEvent(event).then(onDeleted);
     }}>Delete event</Button></Group>}
   </Stack>;
 }
