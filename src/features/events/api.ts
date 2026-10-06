@@ -280,6 +280,20 @@ export async function reviewStagedAttendance(input:{
   return data as Record<string,unknown>;
 }
 
+export async function addExistingVolunteerToEventRoster(input:{
+  eventId:string;
+  timeslotId:string;
+  volunteerId:string;
+}) {
+  const {data,error}=await supabase.rpc('maklom_event_add_existing_volunteer_to_roster',{
+    p_event_id:input.eventId,
+    p_timeslot_id:input.timeslotId,
+    p_volunteer_id:input.volunteerId,
+  });
+  if(error)throw error;
+  return data as Record<string,unknown>;
+}
+
 export async function preRegisterStagedIdentity(rowId:string,expectedVersion:number) {
   const {data,error}=await supabase.rpc('maklom_event_pre_register_staged_identity',{
     p_row_id:rowId,
