@@ -160,10 +160,11 @@ begin
       where nullif(regexp_replace(coalesce(p.phone,''), '[^0-9]', '', 'g'), '') is not null
     ), '[]'::jsonb),
     'legacy_codes', coalesce((
-      select jsonb_agg(distinct upper(btrim(a.source_id)))
+      select jsonb_agg(distinct upper(substr(btrim(a.source_id), length('legacy_volunteer_code:') + 1)))
       from core.volunteer_aliases a
       join public.volunteers p on p.core_volunteer_id = a.volunteer_id
-      where a.source_system = 'legacy_volunteer_code'
+      where a.source_system = 'external'
+        and lower(btrim(a.source_id)) like 'legacy_volunteer_code:%'
     ), '[]'::jsonb)
   ) into result;
 
@@ -317,8 +318,8 @@ begin
       from core.volunteer_aliases a
       join public.volunteers p on p.core_volunteer_id = a.volunteer_id
       join core.volunteers c on c.id = p.core_volunteer_id
-      where a.source_system = 'legacy_volunteer_code'
-        and upper(btrim(a.source_id)) = v_source_code
+      where a.source_system = 'external'
+        and upper(btrim(a.source_id)) = 'LEGACY_VOLUNTEER_CODE:' || v_source_code
       limit 1;
 
       if v_profile_id is not null then
@@ -700,8 +701,8 @@ begin
       select a.volunteer_id
       into v_alias_target
       from core.volunteer_aliases a
-      where a.source_system = 'legacy_volunteer_code'
-        and a.source_id = upper(btrim(v_row.source_volunteer_code))
+      where a.source_system = 'external'
+        and a.source_id = 'legacy_volunteer_code:' || upper(btrim(v_row.source_volunteer_code))
       limit 1;
 
       if v_alias_target is not null and v_alias_target <> v_row.core_volunteer_id then
@@ -713,9 +714,9 @@ begin
           volunteer_id, source_system, source_id, created_by
         ) values (
           v_row.core_volunteer_id,
-          'legacy_volunteer_code',
-          upper(btrim(v_row.source_volunteer_code)),
-          actor_id
+          'external',
+          'legacy_volunteer_code:' || upper(btrim(v_row.source_volunteer_code)),
+          null
         );
       end if;
     end if;
