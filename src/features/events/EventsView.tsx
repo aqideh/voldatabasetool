@@ -6,6 +6,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  addExistingVolunteerToEventRoster,
   correctEventAttendance,
   createEvent,
   createMetric,
