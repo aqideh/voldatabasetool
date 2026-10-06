@@ -294,6 +294,56 @@ export async function addExistingVolunteerToEventRoster(input:{
   return data as Record<string,unknown>;
 }
 
+export type StagedIdentityCandidate = {
+  core_volunteer_id:string;
+  profile_id:string;
+  volunteer_code:string|null;
+  name:string;
+  email:string|null;
+  phone:string|null;
+  score:number;
+};
+
+export async function fetchStagedIdentityCandidates(rowId:string,query:string|null=null) {
+  const {data,error}=await supabase.rpc('maklom_event_staged_identity_candidates',{
+    p_row_id:rowId,
+    p_query:query,
+  });
+  if(error)throw error;
+  return (Array.isArray(data)?data:[]) as StagedIdentityCandidate[];
+}
+
+export async function resolveStagedIdentity(input:{
+  rowId:string;
+  expectedVersion:number;
+  existingCoreVolunteerId:string|null;
+  createNew:boolean;
+  name:string|null;
+  email:string|null;
+  phone:string|null;
+}) {
+  const {data,error}=await supabase.rpc('maklom_event_resolve_staged_identity',{
+    p_row_id:input.rowId,
+    p_expected_version:input.expectedVersion,
+    p_existing_core_volunteer_id:input.existingCoreVolunteerId,
+    p_create_new:input.createNew,
+    p_name:input.name,
+    p_email:input.email,
+    p_phone:input.phone,
+  });
+  if(error)throw error;
+  return data as {
+    row_id:string;
+    core_volunteer_id:string;
+    profile_id:string|null;
+    volunteer_code:string|null;
+    display_name:string|null;
+    email:string|null;
+    phone:string|null;
+    created:boolean;
+  };
+}
+
 export async function preRegisterStagedIdentity(rowId:string,expectedVersion:number) {
   const {data,error}=await supabase.rpc('maklom_event_pre_register_staged_identity',{
     p_row_id:rowId,
