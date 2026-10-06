@@ -106,6 +106,7 @@ export default function App(){
       {section==='Profile Change Review'&&<ProfileChangeReviewView canWrite={canWrite}/>}
       {section==='Insights & Reviews'&&<ProfileInboxView canWrite={canWrite}/>}
       {section==='Form Attendance'&&<FormAttendanceView canWrite={canWrite} canDelete={canDelete}/>}
+      {section==='Historical Attendance'&&<HistoricalAttendanceView canWrite={canWrite}/>}
       {section==='Profile Reconciliation'&&<ProfileReconciliationView canWrite={canWrite}/>}
       {section==='Data Operations'&&<DataOperationsView canWrite={canWrite}/>}
     </Box></AppShell.Main>
