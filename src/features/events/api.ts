@@ -40,6 +40,23 @@ function normalise(value:string) {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+function eventIdentityKey(value:string) {
+  const cleaned = value
+    .trim()
+    .toLowerCase()
+    .replace(/\bready\s*set\s*learn\b/g, ' rsl ')
+    .replace(/\breadysetlearn\b/g, ' rsl ')
+    .replace(/\brsl\b/g, ' rsl ')
+    .replace(/\bmaths?\s+explorer(?:\s+buddy)?\b/g, ' ')
+    .replace(/\bcommunity\s+(?:club|centre|center)\b/g, ' cc ')
+    .replace(/\b(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(?:day)?\b/g, ' ')
+    .replace(/\b\d{1,2}[\s,/-]+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[\s,/-]+\d{2,4}\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return [...new Set(cleaned.split(' ').filter(Boolean))].join(' ');
+}
+
 export async function fetchEventsBundle() {
   const [events, shifts, metrics, keluargaEvents, keluargaTimeslots] = await Promise.all([
     supabase.from('events').select('*').order('start_date', { ascending: false }).order('name'),
@@ -155,16 +172,27 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
     const legacyRes = await supabase.from('events').select('id,name,start_date,end_date')
       .eq('start_date', event.start_date);
     if (legacyRes.error) throw legacyRes.error;
+
+    const canonicalKey = eventIdentityKey(event.name);
     const legacyIds = (legacyRes.data || [])
-      .filter((legacy) => normalise(legacy.name) === normalise(event.name) && legacy.start_date === event.start_date)
+      .filter((legacy) =>
+        legacy.start_date === event.start_date
+        && eventIdentityKey(legacy.name) === canonicalKey
+      )
       .map((legacy) => legacy.id);
-    if (legacyIds.length) {
-      const stagedRes = await supabase.from('historical_attendance_import_rows').select('*')
-        .in('matched_event_id', legacyIds)
-        .order('source_row_number');
-      if (stagedRes.error) throw stagedRes.error;
-      staged = (stagedRes.data || []) as HistoricalAttendanceImportRow[];
-    }
+
+    const stagedRes = await supabase.from('historical_attendance_import_rows').select('*')
+      .gte('event_date', event.start_date)
+      .lte('event_date', event.end_date)
+      .order('source_row_number');
+    if (stagedRes.error) throw stagedRes.error;
+
+    staged = ((stagedRes.data || []) as HistoricalAttendanceImportRow[])
+      .filter((row) => {
+        if (row.matched_event_id && legacyIds.includes(row.matched_event_id)) return true;
+        if (row.matched_event_id) return false;
+        return eventIdentityKey(row.event_name) === canonicalKey;
+      });
   }
 
   return {
