@@ -6,7 +6,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { loadMember, signIn, signOut } from './lib/auth';
 import { supabase } from './lib/supabase';
 import type { AppMember } from './lib/types';
-import { DashboardView } from './features/dashboard/DashboardView';
 import { LeadsView } from './features/leads/LeadsView';
 import { VolunteersView } from './features/volunteers/VolunteersView';
 import { EventsView } from './features/events/EventsView';
@@ -19,9 +18,15 @@ import { HistoricalAttendanceView } from './features/historical-attendance/Histo
 import { DataOperationsView } from './features/data-operations/DataOperationsView';
 import { VolunteerIntelligenceView } from './features/intelligence/VolunteerIntelligenceView';
 import { ProfileReconciliationView } from './features/profile-reconciliation/ProfileReconciliationView';
+import { WorkView, type WorkTarget } from './features/work/WorkView';
 
-const sections=['Overview','Volunteer Leads','Central Database','Volunteer Intelligence','Events & Shifts','Attendance','Contribution Review','Profile Change Review','Insights & Reviews','Form Attendance','Historical Attendance','Profile Reconciliation','Data Operations'] as const;
-type Section=(typeof sections)[number];
+const primarySections=['Work','Data Dashboard','Events','Volunteer Leads','Volunteers'] as const;
+const reviewSections=['Contribution Review','Profile Change Review','Insights & Reviews','Form Attendance','Historical Attendance','Profile Reconciliation','Data Operations','Attendance'] as const;
+type PrimarySection=(typeof primarySections)[number];
+type ReviewSection=(typeof reviewSections)[number];
+type Section=PrimarySection|ReviewSection;
+
+function sectionLabel(section:Section){return section;}
 
 function LoginScreen(){
   const[email,setEmail]=useState('');const[password,setPassword]=useState('');const[error,setError]=useState('');const[loading,setLoading]=useState(false);
@@ -43,7 +48,7 @@ function LoadingScreen({label}:{label:string}){
 }
 
 export default function App(){
-  const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[memberLoading,setMemberLoading]=useState(false);const[memberError,setMemberError]=useState('');const[section,setSection]=useState<Section>('Overview');const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();const memberRequest=useRef(0);
+  const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[memberLoading,setMemberLoading]=useState(false);const[memberError,setMemberError]=useState('');const[section,setSection]=useState<Section>('Work');const[requestedEventId,setRequestedEventId]=useState<string|null>(null);const[requestedEventName,setRequestedEventName]=useState<string|null>(null);const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();const memberRequest=useRef(0);
 
   const loadCurrentMember=useCallback(async(current:Session)=>{
     const request=++memberRequest.current;
@@ -94,13 +99,23 @@ export default function App(){
   const canWrite=member.role==='editor'||member.role==='admin',canDelete=member.role==='admin';
   return <AppShell header={{height:64}} navbar={{width:245,breakpoint:'sm',collapsed:{mobile:!opened}}} padding="lg">
     <AppShell.Header px="md"><Group h="100%" justify="space-between"><Group><Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm"/><div className="maklom-brand"><img src="/maklom-logo.svg" alt=""/><div><Text fw={800} fz="lg">MakLom</Text><Text size="xs" c="dimmed">Volunteer operations database</Text></div></div></Group><Group gap="xs"><Badge variant="light">{member.role}</Badge><Text size="sm" visibleFrom="sm">{session.user.email}</Text><Button size="xs" variant="subtle" onClick={()=>void signOut()}>Sign out</Button></Group></Group></AppShell.Header>
-    <AppShell.Navbar p="sm"><Stack gap={4}>{sections.map((item)=><NavLink key={item} label={item} active={section===item} onClick={()=>{setSection(item);close();}}/>)}</Stack></AppShell.Navbar>
+    <AppShell.Navbar p="sm"><Stack gap={4}>
+      <Text size="xs" c="dimmed" fw={700} tt="uppercase" px="sm" py={6}>MakLom</Text>
+      {primarySections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{setSection(item);close();}}/>)}
+      <Box mt="md">
+        <Text size="xs" c="dimmed" fw={700} tt="uppercase" px="sm" py={6}>Review tools</Text>
+        {reviewSections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{setSection(item);close();}}/>)}
+      </Box>
+    </Stack></AppShell.Navbar>
     <AppShell.Main bg="gray.0"><Box maw={1600} mx="auto">
-      {section==='Overview'&&<DashboardView/>}
+      {section==='Work'&&<WorkView
+        onNavigate={(target:WorkTarget)=>{setSection(target as Section);close();}}
+        onOpenEvent={(eventId,eventName)=>{setRequestedEventId(eventId);setRequestedEventName(eventName);setSection('Events');close();}}
+      />}
+      {section==='Data Dashboard'&&<VolunteerIntelligenceView/>}
       {section==='Volunteer Leads'&&<LeadsView canWrite={canWrite}/>}
-      {section==='Central Database'&&<VolunteersView canWrite={canWrite} canDelete={canDelete}/>}
-      {section==='Volunteer Intelligence'&&<VolunteerIntelligenceView/>}
-      {section==='Events & Shifts'&&<EventsView canWrite={canWrite} canDelete={canDelete}/>}
+      {section==='Volunteers'&&<VolunteersView canWrite={canWrite} canDelete={canDelete}/>}
+      {section==='Events'&&<EventsView canWrite={canWrite} canDelete={canDelete} requestedEventId={requestedEventId} requestedEventName={requestedEventName} onRequestedEventHandled={()=>{setRequestedEventId(null);setRequestedEventName(null);}}/>}
       {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Contribution Review'&&<ContributionReviewView canWrite={canWrite}/>}
       {section==='Profile Change Review'&&<ProfileChangeReviewView canWrite={canWrite}/>}

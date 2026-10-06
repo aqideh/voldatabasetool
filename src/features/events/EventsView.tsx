@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert, Badge, Button, Group, Modal, NumberInput, Paper, ScrollArea, Select, SimpleGrid, Stack,
   Table, Text, TextInput, Textarea, Title,
@@ -26,7 +26,13 @@ import {
 import type { AttendanceRow, EventRow, EventShiftRow, HistoricalAttendanceImportRow } from '../../lib/types';
 import type { EventRosterDetailRow, StagedIdentityCandidate } from './api';
 
-interface Props { canWrite: boolean; canDelete: boolean; }
+interface Props {
+  canWrite: boolean;
+  canDelete: boolean;
+  requestedEventId?:string|null;
+  requestedEventName?:string|null;
+  onRequestedEventHandled?:()=>void;
+}
 
 const REASON_OPTIONS=[
   {value:'system_outage',label:'System outage'},
@@ -54,13 +60,25 @@ function fromSingaporeLocal(value:string) {
   return value+':00+08:00';
 }
 
-export function EventsView({ canWrite, canDelete }: Props) {
+export function EventsView({ canWrite, canDelete, requestedEventId=null, requestedEventName=null, onRequestedEventHandled }: Props) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ['events-bundle'], queryFn: fetchEventsBundle });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [opened, { open, close }] = useDisclosure(false);
   const [message, setMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+
+  useEffect(()=>{
+    if(!query.data?.events.length||(!requestedEventId&&!requestedEventName))return;
+    const requestedName=requestedEventName?.trim().toLowerCase()||'';
+    const match=(requestedEventId?query.data.events.find((event)=>event.id===requestedEventId):null)
+      ||(requestedName?query.data.events.find((event)=>event.name.trim().toLowerCase()===requestedName):null);
+    if(match){
+      setSelectedId(match.id);
+      open();
+    }
+    onRequestedEventHandled?.();
+  },[query.data?.events,requestedEventId,requestedEventName,onRequestedEventHandled,open]);
 
   const selected = query.data?.events.find((event) => event.id === selectedId) || null;
   const shifts = useMemo(() => query.data?.shifts.filter((shift) => shift.event_id === selectedId) || [], [query.data, selectedId]);
@@ -108,8 +126,8 @@ export function EventsView({ canWrite, canDelete }: Props) {
   return <Stack gap="md">
     <Group justify="space-between" align="flex-end">
       <div>
-        <Title order={2}>Events & Shifts</Title>
-        <Text c="dimmed" size="sm">Staff event workspaces across Keluarga operations and MakLom history.</Text>
+        <Title order={2}>Events</Title>
+        <Text c="dimmed" size="sm">Event-level source of truth for details, shifts, attendance rows, corrections and audit history.</Text>
       </div>
       <Badge size="lg" variant="light">{query.data?.events.length || 0} events</Badge>
     </Group>
