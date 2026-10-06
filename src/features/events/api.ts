@@ -151,6 +151,20 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
       .order('source_row_number');
     if (stagedRes.error) throw stagedRes.error;
     staged = (stagedRes.data || []) as HistoricalAttendanceImportRow[];
+  } else {
+    const legacyRes = await supabase.from('events').select('id,name,start_date,end_date')
+      .eq('start_date', event.start_date);
+    if (legacyRes.error) throw legacyRes.error;
+    const legacyIds = (legacyRes.data || [])
+      .filter((legacy) => normalise(legacy.name) === normalise(event.name) && legacy.start_date === event.start_date)
+      .map((legacy) => legacy.id);
+    if (legacyIds.length) {
+      const stagedRes = await supabase.from('historical_attendance_import_rows').select('*')
+        .in('matched_event_id', legacyIds)
+        .order('source_row_number');
+      if (stagedRes.error) throw stagedRes.error;
+      staged = (stagedRes.data || []) as HistoricalAttendanceImportRow[];
+    }
   }
 
   return {
