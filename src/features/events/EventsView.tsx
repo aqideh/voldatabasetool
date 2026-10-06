@@ -222,10 +222,14 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
           if(shiftMatches.length!==1){
             throw new Error('Choose the specific event shift before accepting this attendance row.');
           }
-          resolvedTimeslotId=shiftMatches[0].keluarga_timeslot_id;
+          const inferredTimeslotId=shiftMatches[0].keluarga_timeslot_id;
+          if(!inferredTimeslotId){
+            throw new Error('The event shift could not be resolved.');
+          }
+          resolvedTimeslotId=inferredTimeslotId;
           await addExistingVolunteerToEventRoster({
             eventId,
-            timeslotId:resolvedTimeslotId,
+            timeslotId:inferredTimeslotId,
             volunteerId:row.matched_core_volunteer_id,
           });
         }else{
