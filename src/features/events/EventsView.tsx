@@ -270,28 +270,6 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
     }finally{setBusy(false);}
   }
 
-  async function rejectPair(pair:{checkIn:HistoricalAttendanceImportRow;checkOut:HistoricalAttendanceImportRow}) {
-    setBusy(true);setMessage(null);
-    try{
-      for(const row of [pair.checkIn,pair.checkOut]){
-        await reviewStagedAttendance({
-          rowId:row.id,
-          expectedVersion:row.row_version,
-          decision:'reject',
-          keluargaEventId:eventId,
-          keluargaTimeslotId:row.matched_keluarga_timeslot_id,
-          targetCoreVolunteerId:row.matched_core_volunteer_id,
-          reasonNote:'Rejected reused-sign-in attendance pair proposal',
-        });
-      }
-      setMessage({kind:'success',text:'Both source rows were rejected from attendance.'});
-      await reload();
-    }catch(error){
-      setMessage({kind:'error',text:error instanceof Error?error.message:'Could not reject this pair.'});
-      await reload();
-    }finally{setBusy(false);}
-  }
-
   async function acceptSafe() {
     if(!safePending.length)return;
     setBusy(true);setMessage(null);
@@ -366,7 +344,6 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
             </div>
             {canWrite&&<Group gap="xs" wrap="nowrap">
               <Button size="xs" disabled={busy} onClick={()=>void confirmPair(pair)}>Confirm pair</Button>
-              <Button size="xs" color="red" variant="light" disabled={busy} onClick={()=>void rejectPair(pair)}>Reject both</Button>
             </Group>}
           </Group>
         </Paper>)}
