@@ -9,6 +9,7 @@ import {
   type ReconciliationChange, type ReconciliationPreview, type ReconciliationRow,
 } from './api';
 import { safeDateTime } from '../../lib/utils';
+import { isSafeQueueRow, processSafeQueueRows, type SafeQueueProgress } from './safeQueue';
 
 function display(value:string|null|undefined){return value?.trim()||'—';}
 function fieldLabel(field:string){return field.replaceAll('_',' ');}
@@ -30,6 +31,7 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
   const[selectedBatchId,setSelectedBatchId]=useState<string|null>(()=>sessionStorage.getItem('maklom-profile-reconciliation-batch'));
   const[selectedRowId,setSelectedRowId]=useState<string|null>(null);
   const[busy,setBusy]=useState(false);
+  const[safeProgress,setSafeProgress]=useState<SafeQueueProgress|null>(null);
   const[message,setMessage]=useState<{kind:'error'|'success'|'info';text:string}|null>(null);
 
   const batches=useQuery({queryKey:['profile-reconciliation-batches'],queryFn:fetchReconciliationBatches});
@@ -174,11 +176,35 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
     }finally{setBusy(false);}
   }
 
+  async function processSafeQueue(){
+    if(!canWrite||!safeQueueRows.length)return;
+    setBusy(true);setMessage(null);
+    try{
+      const result=await processSafeQueueRows(safeQueueRows,setSafeProgress);
+      setMessage({
+        kind:result.skippedRows?'info':'success',
+        text:
+          result.appliedRows.toLocaleString()+' high-confidence volunteer'+(result.appliedRows===1?' was':'s were')+
+          ' processed and '+result.approvedFields.toLocaleString()+' blank field'+(result.approvedFields===1?' was':'s were')+
+          ' accepted.'+
+          (result.skippedRows?' '+result.skippedRows.toLocaleString()+' row(s) were skipped because they no longer passed the safety checks.':'')
+      });
+      await refresh();
+    }catch(error){
+      setMessage({kind:'error',text:error instanceof Error?error.message:'Could not complete the high-confidence queue.'});
+      await refresh();
+    }finally{
+      setSafeProgress(null);
+      setBusy(false);
+    }
+  }
+
   const batchOptions=(batches.data||[]).map((batch)=>({
     value:batch.id,
     label:new Date(batch.created_at).toLocaleString('en-SG')+' · '+batch.source_filename,
   }));
 
+  const safeQueueRows=(rows.data||[]).filter(isSafeQueueRow);
   const pendingChanges=activeRow?.maklom_profile_reconciliation_changes.filter((change)=>change.status==='pending')||[];
   const rejectedChanges=activeRow?.maklom_profile_reconciliation_changes.filter((change)=>change.status==='rejected')||[];
   const canAcceptAllEmpty=Boolean(
@@ -228,6 +254,31 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
     </Paper>
 
     {message&&<Alert color={message.kind==='error'?'red':message.kind==='success'?'green':'blue'}>{message.text}</Alert>}
+
+    {activeBatchId&&safeQueueRows.length>0&&<Paper withBorder radius="lg" p="md">
+      <Group justify="space-between" align="center" wrap="wrap">
+        <div>
+          <Group gap="xs">
+            <Text fw={800}>High-confidence safe queue</Text>
+            <Badge color="green" variant="light">{safeQueueRows.length.toLocaleString()} volunteers</Badge>
+          </Group>
+          <Text size="sm" c="dimmed" mt={3}>
+            Exact email + mobile + normalized name · no warnings · all remaining pending destination fields are blank.
+          </Text>
+          <Text size="xs" c="dimmed" mt={3}>
+            Previously rejected or approved fields are left untouched.
+          </Text>
+        </div>
+        <Group gap="xs">
+          <Button size="xs" variant="default" disabled={busy} onClick={()=>setSelectedRowId(safeQueueRows[0].id)}>Review first</Button>
+          {canWrite&&<Button size="xs" loading={busy} onClick={()=>void processSafeQueue()}>Process safe queue</Button>}
+        </Group>
+      </Group>
+      {safeProgress&&<Stack gap={4} mt="sm">
+        <Progress value={safeProgress.total?(safeProgress.done/safeProgress.total)*100:0}/>
+        <Text size="xs" c="dimmed">{safeProgress.done.toLocaleString()} of {safeProgress.total.toLocaleString()} volunteers processed</Text>
+      </Stack>}
+    </Paper>}
 
     {activeBatchId&&<Paper withBorder radius="lg" p={0} style={{overflow:'visible'}}>
       {!rows.isLoading&&!activeRow&&<Text c="dimmed" p="lg">This batch has no matched MakLom volunteers to review.</Text>}
