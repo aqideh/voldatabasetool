@@ -295,7 +295,6 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
                 <Badge size="xs" color={row.matched_core_volunteer_id?'green':'orange'} variant="light">
                   {row.matched_core_volunteer_id?'Volunteer matched':'Volunteer unresolved'}
                 </Badge>
-                {row.pending_identity_id&&<Badge size="xs" variant="light">Identity review started</Badge>}
               </Group>
               <Text size="xs" c="dimmed">{row.email||row.phone||'No email/mobile'} · source row {row.source_row_number}</Text>
               <Text size="sm" mt={4}>{row.event_name}</Text>
