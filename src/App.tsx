@@ -15,11 +15,12 @@ import { ContributionReviewView } from './features/contributions/ContributionRev
 import { ProfileChangeReviewView } from './features/profile-changes/ProfileChangeReviewView';
 import { ProfileInboxView } from './features/profile-inbox/ProfileInboxView';
 import { FormAttendanceView } from './features/form-attendance/FormAttendanceView';
+import { HistoricalAttendanceView } from './features/historical-attendance/HistoricalAttendanceView';
 import { DataOperationsView } from './features/data-operations/DataOperationsView';
 import { VolunteerIntelligenceView } from './features/intelligence/VolunteerIntelligenceView';
 import { ProfileReconciliationView } from './features/profile-reconciliation/ProfileReconciliationView';
 
-const sections=['Overview','Volunteer Leads','Central Database','Volunteer Intelligence','Events & Shifts','Attendance','Contribution Review','Profile Change Review','Insights & Reviews','Form Attendance','Profile Reconciliation','Data Operations'] as const;
+const sections=['Overview','Volunteer Leads','Central Database','Volunteer Intelligence','Events & Shifts','Attendance','Contribution Review','Profile Change Review','Insights & Reviews','Form Attendance','Historical Attendance','Profile Reconciliation','Data Operations'] as const;
 type Section=(typeof sections)[number];
 
 function LoginScreen(){
