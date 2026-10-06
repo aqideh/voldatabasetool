@@ -372,10 +372,11 @@ export async function previewHistoricalWorkbook(file:File,context?:HistoricalCon
     let matchStatus:HistoricalAttendanceMatchStatus=flags.some(isBlocking)?'needs_review':'matched';
     let decision:HistoricalAttendanceDecision='pending';
     let matchReason=[volunteer.reason,event.reason].filter(Boolean).join(' · ');
+    const sourcePeriod=lower(signIn.eventName).match(/\b(am|pm)\b/)?.[1]||'';
     const logicalKey=[
       volunteer.match?.id||personKey(signIn),
       event.match?.id||normaliseEvent(signIn.eventName),
-      shift.match?.id||signIn.eventDate||'',
+      shift.match?.id||sourcePeriod||signIn.eventDate||'',
     ].join('|');
 
     if(existingHashes.has(sourceRowHash)){
