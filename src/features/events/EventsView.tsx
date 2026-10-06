@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
-  Alert, Badge, Button, Group, Modal, NumberInput, Paper, Select, SimpleGrid, Stack,
+  Alert, Badge, Button, Group, Modal, NumberInput, Paper, ScrollArea, Select, SimpleGrid, Stack,
   Table, Text, TextInput, Textarea, Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createEvent, createMetric, createShift, deleteEvent, deleteMetric, deleteShift, fetchEventsBundle, updateEvent } from './api';
+import { createEvent, createMetric, createShift, deleteEvent, deleteMetric, deleteShift, fetchEventPeople, fetchEventsBundle, updateEvent } from './api';
 import type { EventRow } from '../../lib/types';
 
 interface Props { canWrite: boolean; canDelete: boolean; }
@@ -127,6 +127,10 @@ export function EventsView({ canWrite, canDelete }: Props) {
 function EventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, onDeleted }: any) {
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const people = useQuery({
+    queryKey:['event-people',event.id],
+    queryFn:()=>fetchEventPeople(event),
+  });
 
   async function save(form: HTMLFormElement) {
     setSaving(true); setStatus(null);
@@ -164,6 +168,103 @@ function EventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, o
       <Textarea name="notes" label="Notes" mt="sm" defaultValue={event.notes || ''} disabled={!canWrite} />
       {canWrite && <Group justify="flex-end" mt="md"><Button type="submit" loading={saving}>Save event</Button></Group>}
     </form>
+
+    <Paper withBorder p="md">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Title order={4}>Roster & attendance</Title>
+          <Text size="sm" c="dimmed">
+            Live roster assignments, committed attendance, and staged historical rows associated with this event.
+          </Text>
+        </div>
+        <Group gap="xs">
+          <Badge variant="light">{people.data?.roster.length||0} roster</Badge>
+          <Badge variant="light" color="green">{people.data?.attendance.length||0} attendance</Badge>
+          {people.data?.staged.length ? <Badge variant="light" color="orange">{people.data.staged.length} staged</Badge> : null}
+        </Group>
+      </Group>
+
+      {people.isError&&<Alert color="red" mt="md">
+        Event roster and attendance could not be loaded. {people.error instanceof Error?people.error.message:'Please refresh and try again.'}
+      </Alert>}
+
+      {event.source==='keluarga'&&<Stack gap="xs" mt="md">
+        <Group justify="space-between">
+          <Text fw={700}>Operational roster</Text>
+          <Text size="xs" c="dimmed">Assignments in Keluarga Event Operations</Text>
+        </Group>
+        <ScrollArea>
+          <Table striped highlightOnHover miw={850} verticalSpacing="xs">
+            <Table.Thead><Table.Tr>
+              <Table.Th>Volunteer</Table.Th><Table.Th>Contact</Table.Th><Table.Th>Shift</Table.Th>
+              <Table.Th>Source</Table.Th><Table.Th>Link</Table.Th><Table.Th>Notes</Table.Th>
+            </Table.Tr></Table.Thead>
+            <Table.Tbody>{(people.data?.roster||[]).map((row:any)=><Table.Tr key={row.id}>
+              <Table.Td><Text fw={600} size="sm">{row.volunteer_name}</Text></Table.Td>
+              <Table.Td><Text size="xs">{row.email||row.mobile||'—'}</Text></Table.Td>
+              <Table.Td><Text size="xs">{row.timeslot_id ? (shifts.find((shift:any)=>shift.keluarga_timeslot_id===row.timeslot_id)?.name||'Assigned') : 'General'}</Text></Table.Td>
+              <Table.Td><Badge size="xs" variant="light">{row.entry_method||'unknown'}</Badge></Table.Td>
+              <Table.Td><Badge size="xs" variant="light" color={row.volunteer_link_status==='linked'?'green':'gray'}>{row.volunteer_link_status||'unlinked'}</Badge></Table.Td>
+              <Table.Td><Text size="xs">{[row.tshirt_size?('T-shirt '+row.tshirt_size):'',row.dietary_requirements||''].filter(Boolean).join(' · ')||'—'}</Text></Table.Td>
+            </Table.Tr>)}</Table.Tbody>
+          </Table>
+        </ScrollArea>
+        {!people.isLoading&&!people.data?.roster.length&&<Text c="dimmed" size="sm">No roster rows for this event.</Text>}
+      </Stack>}
+
+      <Stack gap="xs" mt="lg">
+        <Group justify="space-between">
+          <Text fw={700}>Committed attendance</Text>
+          <Text size="xs" c="dimmed">Rows already in MakLom / Keluarga attendance</Text>
+        </Group>
+        <ScrollArea>
+          <Table striped highlightOnHover miw={900} verticalSpacing="xs">
+            <Table.Thead><Table.Tr>
+              <Table.Th>Volunteer</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Status</Table.Th>
+              <Table.Th>Check-in</Table.Th><Table.Th>Check-out</Table.Th><Table.Th>Credited</Table.Th><Table.Th>Source</Table.Th>
+            </Table.Tr></Table.Thead>
+            <Table.Tbody>{(people.data?.attendance||[]).map((row:any)=><Table.Tr key={row.id}>
+              <Table.Td><Text fw={600} size="sm">{row.name}</Text><Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text></Table.Td>
+              <Table.Td><Text size="xs">{row.shift_label||'General'}</Text></Table.Td>
+              <Table.Td><Badge size="xs" color={row.attended?'green':'gray'} variant="light">{row.attended?'Attended':'Not attended'}</Badge></Table.Td>
+              <Table.Td><Text size="xs">{row.sign_in_at?new Date(row.sign_in_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'}):'—'}</Text></Table.Td>
+              <Table.Td><Text size="xs">{row.sign_out_at?new Date(row.sign_out_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'}):'—'}</Text></Table.Td>
+              <Table.Td><Text size="xs">{row.staff_credited_duration_minutes??row.duration_minutes??0} min</Text></Table.Td>
+              <Table.Td><Badge size="xs" variant="light">{row.record_source||'maklom'}</Badge></Table.Td>
+            </Table.Tr>)}</Table.Tbody>
+          </Table>
+        </ScrollArea>
+        {!people.isLoading&&!people.data?.attendance.length&&<Text c="dimmed" size="sm">No committed attendance rows for this event.</Text>}
+      </Stack>
+
+      {event.source!=='keluarga'&&<Stack gap="xs" mt="lg">
+        <Group justify="space-between">
+          <div>
+            <Text fw={700}>Staged historical attendance</Text>
+            <Text size="xs" c="dimmed">Review-only rows from staged spreadsheets. These are not committed attendance.</Text>
+          </div>
+          {people.data?.staged.length ? <Badge color="orange" variant="light">Needs review</Badge> : null}
+        </Group>
+        <ScrollArea>
+          <Table striped highlightOnHover miw={900} verticalSpacing="xs">
+            <Table.Thead><Table.Tr>
+              <Table.Th>Source row</Table.Th><Table.Th>Volunteer</Table.Th><Table.Th>Source event</Table.Th>
+              <Table.Th>Sign-in</Table.Th><Table.Th>Match</Table.Th><Table.Th>Decision</Table.Th><Table.Th>Flags</Table.Th>
+            </Table.Tr></Table.Thead>
+            <Table.Tbody>{(people.data?.staged||[]).map((row:any)=><Table.Tr key={row.id}>
+              <Table.Td><Text size="xs">Row {row.source_row_number}</Text></Table.Td>
+              <Table.Td><Text fw={600} size="sm">{row.full_name}</Text><Text size="xs" c="dimmed">{row.email||row.phone||'—'}</Text></Table.Td>
+              <Table.Td><Text size="xs">{row.event_name}</Text></Table.Td>
+              <Table.Td><Text size="xs">{row.source_sign_in_at?new Date(row.source_sign_in_at).toLocaleString('en-SG',{timeZone:'Asia/Singapore'}):'—'}</Text></Table.Td>
+              <Table.Td><Badge size="xs" color={row.match_status==='matched'?'green':'orange'} variant="light">{row.match_status.replaceAll('_',' ')}</Badge></Table.Td>
+              <Table.Td><Badge size="xs" color={row.decision==='approved'?'green':row.decision==='rejected'?'red':'gray'} variant="light">{row.decision}</Badge></Table.Td>
+              <Table.Td><Text size="xs">{row.review_flags?.slice(0,3).map((flag:string)=>flag.replaceAll('_',' ')).join(' · ')||'—'}</Text></Table.Td>
+            </Table.Tr>)}</Table.Tbody>
+          </Table>
+        </ScrollArea>
+        {!people.isLoading&&!people.data?.staged.length&&<Text c="dimmed" size="sm">No staged historical rows are associated with this event.</Text>}
+      </Stack>}
+    </Paper>
 
     <Paper withBorder p="md">
       <Title order={4}>Shifts</Title>
