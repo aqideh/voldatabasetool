@@ -23,7 +23,7 @@ import {
   setRosterOperationalOverride,
   updateEvent,
 } from './api';
-import type { AttendanceRow, EventRow, HistoricalAttendanceImportRow } from '../../lib/types';
+import type { AttendanceRow, EventRow, EventShiftRow, HistoricalAttendanceImportRow } from '../../lib/types';
 import type { EventRosterDetailRow, StagedIdentityCandidate } from './api';
 
 interface Props { canWrite: boolean; canDelete: boolean; }
@@ -176,6 +176,82 @@ export function EventsView({ canWrite, canDelete }: Props) {
   </Stack>;
 }
 
+type StagedShiftResolution = {
+  safe:boolean;
+  timeslotId:string|null;
+  candidateTimeslotIds:string[];
+  reason:string;
+};
+
+function singaporeShiftWindow(shift:EventShiftRow) {
+  if(!shift.keluarga_timeslot_id||!shift.shift_date||!shift.start_time)return null;
+  const start=Date.parse(shift.shift_date+'T'+shift.start_time.slice(0,8)+'+08:00');
+  if(!Number.isFinite(start))return null;
+  let end=Number.POSITIVE_INFINITY;
+  if(shift.end_time){
+    end=Date.parse(shift.shift_date+'T'+shift.end_time.slice(0,8)+'+08:00');
+    if(Number.isFinite(end)&&end<=start)end+=24*60*60*1000;
+  }
+  return {timeslotId:shift.keluarga_timeslot_id,start,end};
+}
+
+function resolveStagedShift(
+  row:HistoricalAttendanceImportRow,
+  shifts:EventShiftRow[],
+  roster:EventRosterDetailRow[],
+):StagedShiftResolution {
+  if(!row.matched_core_volunteer_id){
+    return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'Resolve the volunteer first.'};
+  }
+  if(!row.source_sign_in_at){
+    return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'No usable source sign-in time.'};
+  }
+
+  const signIn=new Date(row.source_sign_in_at).getTime();
+  if(!Number.isFinite(signIn)){
+    return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'The source sign-in time is invalid.'};
+  }
+
+  const windows=shifts
+    .filter((shift)=>shift.shift_date===row.event_date&&Boolean(shift.keluarga_timeslot_id))
+    .map(singaporeShiftWindow)
+    .filter((window):window is NonNullable<ReturnType<typeof singaporeShiftWindow>>=>Boolean(window));
+
+  if(row.source_feedback_at){
+    const checkOut=new Date(row.source_feedback_at).getTime();
+    if(!Number.isFinite(checkOut)||checkOut<signIn){
+      return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'The source check-out is before the sign-in time.'};
+    }
+    const overlapping=windows.filter((window)=>window.start<checkOut&&window.end>signIn);
+    return overlapping.length
+      ? {safe:true,timeslotId:null,candidateTimeslotIds:overlapping.map((window)=>window.timeslotId),reason:'Source sign-in/check-out interval resolves to the event shifts.'}
+      : {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'No event shift overlaps the source attendance interval.'};
+  }
+
+  const containing=windows.filter((window)=>window.start<=signIn&&signIn<window.end);
+  if(containing.length===1){
+    return {safe:true,timeslotId:containing[0].timeslotId,candidateTimeslotIds:[containing[0].timeslotId],reason:'Source sign-in resolves to one event shift.'};
+  }
+  if(containing.length>1){
+    const rostered=containing.filter((window)=>roster.some((assignment)=>
+      assignment.volunteer_id===row.matched_core_volunteer_id&&assignment.timeslot_id===window.timeslotId
+    ));
+    if(rostered.length===1){
+      return {safe:true,timeslotId:rostered[0].timeslotId,candidateTimeslotIds:containing.map((window)=>window.timeslotId),reason:'Overlapping shift resolved from the existing roster assignment.'};
+    }
+    return {
+      safe:false,
+      timeslotId:null,
+      candidateTimeslotIds:containing.map((window)=>window.timeslotId),
+      reason:rostered.length>1
+        ? 'The sign-in time overlaps multiple shifts and the volunteer is rostered to more than one. Choose the correct shift.'
+        : 'The sign-in time overlaps multiple shifts. Choose the correct shift.',
+    };
+  }
+
+  return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'No event shift contains the source sign-in time.'};
+}
+
 function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
   const qc=useQueryClient();
   const [message,setMessage]=useState<{kind:'error'|'success';text:string}|null>(null);
@@ -183,6 +259,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
   const [overrideRow,setOverrideRow]=useState<EventRosterDetailRow|null>(null);
   const [attendanceRow,setAttendanceRow]=useState<AttendanceRow|null>(null);
   const [identityRow,setIdentityRow]=useState<HistoricalAttendanceImportRow|null>(null);
+  const [manualShiftByRow,setManualShiftByRow]=useState<Record<string,string>>({});
 
   const people=useQuery({
     queryKey:['event-people',event.id],
@@ -218,11 +295,16 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
   const standalonePending=pending.filter((row)=>!pairedPendingIds.has(row.id));
   const reviewRequiredCount=pairProposals.length+standalonePending.length;
 
-  const safePending=standalonePending.filter((row)=>{
-    if(!row.matched_core_volunteer_id||!row.source_sign_in_at)return false;
-    if(row.source_feedback_at)return true;
-    const matches=(people.data?.roster||[]).filter((roster)=>roster.volunteer_id===row.matched_core_volunteer_id);
-    return matches.length===1;
+  const shiftResolutionByRow=useMemo(()=>new Map(
+    standalonePending.map((row)=>[
+      row.id,
+      resolveStagedShift(row,shifts as EventShiftRow[],people.data?.roster||[]),
+    ])
+  ),[standalonePending,shifts,people.data?.roster]);
+
+  const safePending=standalonePending.flatMap((row)=>{
+    const resolution=shiftResolutionByRow.get(row.id);
+    return resolution?.safe?[{row,timeslotId:resolution.timeslotId}]:[];
   });
 
   async function reload() {
@@ -274,24 +356,37 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
     if(!safePending.length)return;
     setBusy(true);setMessage(null);
     let accepted=0;
+    const failures:string[]=[];
     try{
-      for(const row of safePending){
-        await reviewStagedAttendance({
-          rowId:row.id,
-          expectedVersion:row.row_version,
-          decision:'accept',
-          keluargaEventId:eventId,
-          keluargaTimeslotId:null,
-          targetCoreVolunteerId:row.matched_core_volunteer_id,
-          reasonNote:'Bulk-approved safe attendance in MakLom event workspace',
-        });
-        accepted+=1;
+      for(const candidate of safePending){
+        const {row,timeslotId}=candidate;
+        try{
+          await reviewStagedAttendance({
+            rowId:row.id,
+            expectedVersion:row.row_version,
+            decision:'accept',
+            keluargaEventId:eventId,
+            keluargaTimeslotId:timeslotId,
+            targetCoreVolunteerId:row.matched_core_volunteer_id,
+            reasonNote:'Bulk-approved safe attendance in MakLom event workspace',
+          });
+          accepted+=1;
+        }catch(error){
+          failures.push(row.full_name+': '+(error instanceof Error?error.message:'Could not accept this row.'));
+        }
       }
-      setMessage({kind:'success',text:'Accepted '+accepted+' safe staged attendance row'+(accepted===1?'':'s')+'.'});
       await reload();
+      if(failures.length){
+        const examples=failures.slice(0,3).join(' · ');
+        setMessage({
+          kind:'error',
+          text:'Accepted '+accepted+' safe row'+(accepted===1?'':'s')+'. '+failures.length+' row'+(failures.length===1?'':'s')+' still need review. '+examples+(failures.length>3?' · …':''),
+        });
+      }else{
+        setMessage({kind:'success',text:'Accepted '+accepted+' safe staged attendance row'+(accepted===1?'':'s')+'.'});
+      }
     }catch(error){
-      setMessage({kind:'error',text:'Accepted '+accepted+' row'+(accepted===1?'':'s')+' before stopping. '+(error instanceof Error?error.message:'A later row could not be accepted.')});
-      await reload();
+      setMessage({kind:'error',text:error instanceof Error?error.message:'Attendance review could not be refreshed.'});
     }finally{setBusy(false);}
   }
 
@@ -348,30 +443,56 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
           </Group>
         </Paper>)}
 
-        {standalonePending.map((row)=><Paper key={row.id} withBorder radius="md" p="sm">
-          <Group justify="space-between" align="flex-start" wrap="nowrap">
-            <div style={{minWidth:0}}>
-              <Group gap="xs">
-                <Text fw={700}>{row.full_name}</Text>
-                <Badge size="xs" color={row.matched_core_volunteer_id?'green':'orange'} variant="light">
-                  {row.matched_core_volunteer_id?'Volunteer matched':'Volunteer unresolved'}
-                </Badge>
-              </Group>
-              <Text size="xs" c="dimmed">{row.email||row.phone||'No email/mobile'} · source row {row.source_row_number}</Text>
-              <Text size="sm" mt={4}>{row.event_name}</Text>
-              <Text size="xs" c="dimmed">
-                Source sign-in: {sgDateTime(row.source_sign_in_at)}
-                {' · '}Source check-out (feedback): {sgDateTime(row.source_feedback_at)}
-                {' · '}{row.review_flags?.map((x)=>x.replaceAll('_',' ')).join(' · ')||'No review flags'}
-              </Text>
-            </div>
-            {canWrite&&<Group gap="xs" wrap="nowrap">
-              {!row.matched_core_volunteer_id&&<Button size="xs" variant="light" disabled={busy} onClick={()=>setIdentityRow(row)}>Resolve volunteer</Button>}
-              {row.matched_core_volunteer_id&&row.source_sign_in_at&&<Button size="xs" disabled={busy} onClick={()=>void review(row,'accept',null)}>Accept</Button>}
-              <Button size="xs" color="red" variant="light" disabled={busy} onClick={()=>void review(row,'reject',null)}>Reject</Button>
-            </Group>}
-          </Group>
-        </Paper>)}
+        {standalonePending.map((row)=>{
+          const resolution=shiftResolutionByRow.get(row.id);
+          const manualOptions=(resolution?.candidateTimeslotIds||[]).map((timeslotId)=>{
+            const shift=(shifts as EventShiftRow[]).find((item)=>item.keluarga_timeslot_id===timeslotId);
+            return {value:timeslotId,label:shift?.name||'Event shift'};
+          });
+          const manualTimeslotId=manualShiftByRow[row.id]||null;
+          const canAccept=Boolean(
+            row.matched_core_volunteer_id&&row.source_sign_in_at&&(resolution?.safe||manualTimeslotId)
+          );
+          const acceptTimeslotId=resolution?.safe?resolution.timeslotId:manualTimeslotId;
+          return <Paper key={row.id} withBorder radius="md" p="sm">
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <div style={{minWidth:0}}>
+                <Group gap="xs">
+                  <Text fw={700}>{row.full_name}</Text>
+                  <Badge size="xs" color={row.matched_core_volunteer_id?'green':'orange'} variant="light">
+                    {row.matched_core_volunteer_id?'Volunteer matched':'Volunteer unresolved'}
+                  </Badge>
+                </Group>
+                <Text size="xs" c="dimmed">{row.email||row.phone||'No email/mobile'} · source row {row.source_row_number}</Text>
+                <Text size="sm" mt={4}>{row.event_name}</Text>
+                <Text size="xs" c="dimmed">
+                  Source sign-in: {sgDateTime(row.source_sign_in_at)}
+                  {' · '}Source check-out (feedback): {sgDateTime(row.source_feedback_at)}
+                  {' · '}{row.review_flags?.map((x)=>x.replaceAll('_',' ')).join(' · ')||'No review flags'}
+                </Text>
+                {row.matched_core_volunteer_id&&!resolution?.safe&&<Text size="xs" c="orange" mt={4}>{resolution?.reason}</Text>}
+              </div>
+              {canWrite&&<Group gap="xs" wrap="nowrap">
+                {!row.matched_core_volunteer_id&&<Button size="xs" variant="light" disabled={busy} onClick={()=>setIdentityRow(row)}>Resolve volunteer</Button>}
+                {row.matched_core_volunteer_id&&row.source_sign_in_at&&!resolution?.safe&&manualOptions.length>1&&<Select
+                  size="xs"
+                  w={180}
+                  placeholder="Choose shift"
+                  data={manualOptions}
+                  value={manualTimeslotId}
+                  disabled={busy}
+                  onChange={(value)=>setManualShiftByRow((current)=>({...current,[row.id]:value||''}))}
+                />}
+                {row.matched_core_volunteer_id&&row.source_sign_in_at&&canAccept&&<Button
+                  size="xs"
+                  disabled={busy}
+                  onClick={()=>void review(row,'accept',acceptTimeslotId)}
+                >Accept</Button>}
+                <Button size="xs" color="red" variant="light" disabled={busy} onClick={()=>void review(row,'reject',null)}>Reject</Button>
+              </Group>}
+            </Group>
+          </Paper>;
+        })}
         {!people.isLoading&&!reviewRequiredCount&&<Text c="dimmed" size="sm">No staged attendance needs review for this event.</Text>}
       </Stack>
     </Paper>
