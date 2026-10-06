@@ -1,5 +1,5 @@
 import { supabase } from '../../lib/supabase';
-import type { EventImpactMetricRow, EventRow, EventShiftRow } from '../../lib/types';
+import type { AttendanceRow, EventImpactMetricRow, EventRow, EventShiftRow, HistoricalAttendanceImportRow } from '../../lib/types';
 import { newId } from '../../lib/utils';
 
 type KeluargaEventRow = {
@@ -9,6 +9,26 @@ type KeluargaEventRow = {
 
 type KeluargaTimeslotRow = {
   id:string; event_id:string; label:string|null; starts_at:string; ends_at:string; status:string; sort_order:number;
+};
+
+export type EventRosterDetailRow = {
+  id:string;
+  event_id:string;
+  volunteer_name:string;
+  email:string|null;
+  mobile:string|null;
+  timeslot_id:string|null;
+  tshirt_size:string|null;
+  entry_method:string|null;
+  source_assignment_status:string|null;
+  volunteer_link_status:string|null;
+  dietary_requirements:string|null;
+};
+
+export type EventPeopleBundle = {
+  roster:EventRosterDetailRow[];
+  attendance:AttendanceRow[];
+  staged:HistoricalAttendanceImportRow[];
 };
 
 function singaporeParts(value:string) {
@@ -102,6 +122,55 @@ export async function fetchEventsBundle() {
     ),
     shifts: [...projectedShifts, ...projectedLegacyShifts],
     metrics: (metrics.data || []) as EventImpactMetricRow[],
+  };
+}
+
+export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundle> {
+  const canonicalEventId = event.source === 'keluarga'
+    ? (event.keluarga_event_id || event.id.replace(/^keluarga:/, ''))
+    : event.id;
+
+  const attendanceRes = await supabase.from('maklom_attendance_feed').select(
+    'id,volunteer_id,name,email,contact,attended,event_name,event_date,duration_minutes,sign_in_at,sign_out_at,calculated_duration_minutes,staff_credited_duration_minutes,staff_credit_note,event_id,shift_id,shift_label,row_version,record_source,contribution_status'
+  ).eq('event_id', canonicalEventId).order('name');
+  if (attendanceRes.error) throw attendanceRes.error;
+
+  let roster:EventRosterDetailRow[] = [];
+  if (event.source === 'keluarga') {
+    const rosterRes = await supabase.from('phaseone_roster').select(
+      'id,event_id,volunteer_name,email,mobile,timeslot_id,tshirt_size,entry_method,source_assignment_status,volunteer_link_status,dietary_requirements'
+    ).eq('event_id', canonicalEventId).order('volunteer_name');
+    if (rosterRes.error) throw rosterRes.error;
+    roster = (rosterRes.data || []) as EventRosterDetailRow[];
+  }
+
+  let staged:HistoricalAttendanceImportRow[] = [];
+  if (event.source !== 'keluarga') {
+    const stagedRes = await supabase.from('historical_attendance_import_rows').select('*')
+      .eq('matched_event_id', event.id)
+      .order('source_row_number');
+    if (stagedRes.error) throw stagedRes.error;
+    staged = (stagedRes.data || []) as HistoricalAttendanceImportRow[];
+  } else {
+    const legacyRes = await supabase.from('events').select('id,name,start_date,end_date')
+      .eq('start_date', event.start_date);
+    if (legacyRes.error) throw legacyRes.error;
+    const legacyIds = (legacyRes.data || [])
+      .filter((legacy) => normalise(legacy.name) === normalise(event.name) && legacy.start_date === event.start_date)
+      .map((legacy) => legacy.id);
+    if (legacyIds.length) {
+      const stagedRes = await supabase.from('historical_attendance_import_rows').select('*')
+        .in('matched_event_id', legacyIds)
+        .order('source_row_number');
+      if (stagedRes.error) throw stagedRes.error;
+      staged = (stagedRes.data || []) as HistoricalAttendanceImportRow[];
+    }
+  }
+
+  return {
+    roster,
+    attendance:(attendanceRes.data || []) as AttendanceRow[],
+    staged,
   };
 }
 
