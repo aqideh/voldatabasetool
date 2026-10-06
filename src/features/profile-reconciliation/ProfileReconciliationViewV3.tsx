@@ -10,6 +10,7 @@ import {
 } from './api';
 import { safeDateTime } from '../../lib/utils';
 import { isSafeQueueRow, processSafeQueueRows, type SafeQueueProgress } from './safeQueue';
+import './reconciliationMotion.css';
 
 function display(value:string|null|undefined){return value?.trim()||'—';}
 function fieldLabel(field:string){return field.replaceAll('_',' ');}
@@ -32,6 +33,9 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
   const[selectedRowId,setSelectedRowId]=useState<string|null>(null);
   const[busy,setBusy]=useState(false);
   const[safeProgress,setSafeProgress]=useState<SafeQueueProgress|null>(null);
+  const[reviewStreak,setReviewStreak]=useState(()=>Number(sessionStorage.getItem('maklom-reconciliation-streak')||0));
+  const[lastAction,setLastAction]=useState<{changeId:string;decision:'approved'|'rejected'}|null>(null);
+  const[celebration,setCelebration]=useState<string|null>(null);
   const[message,setMessage]=useState<{kind:'error'|'success'|'info';text:string}|null>(null);
 
   const batches=useQuery({queryKey:['profile-reconciliation-batches'],queryFn:fetchReconciliationBatches});
@@ -120,6 +124,19 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
     ]);
   }
 
+  function bumpStreak(){
+    setReviewStreak((current)=>{
+      const next=current+1;
+      sessionStorage.setItem('maklom-reconciliation-streak',String(next));
+      return next;
+    });
+  }
+
+  function celebrate(label:string){
+    setCelebration(label);
+    window.setTimeout(()=>setCelebration(null),950);
+  }
+
   async function reviewMatch(row:ReconciliationRow,decision:'confirmed'|'rejected'){
     if(!canWrite)return;
     setBusy(true);setMessage(null);
@@ -136,6 +153,7 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
 
   async function reviewChange(change:ReconciliationChange,decision:'approved'|'rejected'){
     if(!canWrite)return;
+    const completesVolunteer=activeRow?.id===change.row_id&&pendingChanges.length===1;
     setBusy(true);setMessage(null);
     try{
       const result=await reviewReconciliationChange(change.id,decision) as {status?:string};
@@ -144,6 +162,12 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
           ?'This field changed in MakLom after the workbook was staged. It was marked stale and not overwritten.'
           :decision==='approved'?'Field approved and applied to the existing volunteer.':'Field rejected; MakLom was not changed.'
       });
+      if(result?.status!=='stale'){
+        setLastAction({changeId:change.id,decision});
+        window.setTimeout(()=>setLastAction(null),650);
+        bumpStreak();
+        if(completesVolunteer)celebrate('Volunteer resolved ✦');
+      }
       await refresh();
     }catch(error){
       setMessage({kind:'error',text:error instanceof Error?error.message:'Could not review this field.'});
@@ -169,6 +193,8 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
         approved+=1;
       }
       setMessage({kind:'success',text:approved+' empty field'+(approved===1?' was':'s were')+' accepted for this volunteer.'});
+      setReviewStreak((current)=>{const next=current+approved;sessionStorage.setItem('maklom-reconciliation-streak',String(next));return next;});
+      celebrate('Volunteer cleared ✦');
       await refresh();
     }catch(error){
       setMessage({kind:'error',text:error instanceof Error?error.message:'Could not accept all empty fields.'});
@@ -181,6 +207,8 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
     setBusy(true);setMessage(null);
     try{
       const result=await processSafeQueueRows(safeQueueRows,setSafeProgress);
+      setReviewStreak((current)=>{const next=current+result.approvedFields;sessionStorage.setItem('maklom-reconciliation-streak',String(next));return next;});
+      if(result.appliedRows)celebrate(result.appliedRows.toLocaleString()+' safe matches cleared ✦');
       setMessage({
         kind:result.skippedRows?'info':'success',
         text:
@@ -224,7 +252,17 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
     if(next)setSelectedRowId(next.id);
   }
 
-  return <Stack gap="sm">
+  return <>
+    {celebration&&<div className="recon-celebration" aria-hidden="true">
+      <div className="recon-celebration-card">{celebration}</div>
+      <span className="recon-sparkle">✦</span>
+      <span className="recon-sparkle">✧</span>
+      <span className="recon-sparkle">✦</span>
+      <span className="recon-sparkle">✧</span>
+      <span className="recon-sparkle">✦</span>
+      <span className="recon-sparkle">✧</span>
+    </div>}
+    <Stack gap="sm">
     <Group justify="space-between" align="flex-end">
       <div>
         <Title order={2}>Profile Reconciliation</Title>
@@ -294,6 +332,7 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
             <Group gap="xs">
               <Title order={4}>{rowLabel(activeRow)}</Title>
               <Badge variant="light" color={statusColor(activeRow.match_status)}>{activeRow.match_status.replaceAll('_',' ')}</Badge>
+              <Badge key={reviewStreak} className="recon-streak" variant="outline">{reviewStreak.toLocaleString()} actions</Badge>
             </Group>
             <Text size="sm" c="dimmed">Matched to {activeRow.target_volunteer_code} · {selectedIndex+1} of {rows.data?.length||0}</Text>
           </div>
@@ -382,7 +421,10 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {activeRow.maklom_profile_reconciliation_changes.map((change)=><Table.Tr key={change.id}>
+                    {activeRow.maklom_profile_reconciliation_changes.map((change)=><Table.Tr
+                      key={change.id}
+                      className={lastAction?.changeId===change.id?(lastAction.decision==='approved'?'recon-row-approved':'recon-row-rejected'):undefined}
+                    >
                       <Table.Td>
                         <Text fw={700} size="sm">{fieldLabel(change.field_name)}</Text>
                         <Text size="xs" c="dimmed">{change.target_scope==='private_details'?'Private details':'MakLom profile'} · {change.source_label}</Text>
@@ -435,7 +477,8 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
         </Group>
       </Stack>}
     </Paper>
-  </Stack>;
+  </Stack>
+  </>;
 }
 
 function Stat({label,value}:{label:string;value:number}){

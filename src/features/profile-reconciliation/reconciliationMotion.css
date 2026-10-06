@@ -1,0 +1,100 @@
+.recon-action-flash {
+  animation: reconPulse 420ms cubic-bezier(.2,.8,.2,1);
+}
+
+.recon-row-approved {
+  animation: reconApprove 520ms cubic-bezier(.2,.8,.2,1);
+}
+
+.recon-row-rejected {
+  animation: reconReject 420ms ease-out;
+}
+
+.recon-streak {
+  animation: reconStreakPop 360ms cubic-bezier(.2,.9,.2,1);
+}
+
+.recon-celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.recon-celebration-card {
+  padding: 14px 20px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.82);
+  color: white;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 16px 50px rgba(0,0,0,.22);
+  animation: reconCelebrateCard 900ms cubic-bezier(.2,.8,.2,1) forwards;
+}
+
+.recon-sparkle {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  font-size: 18px;
+  animation: reconSpark 900ms ease-out forwards;
+}
+
+.recon-sparkle:nth-child(2){--x:-120px;--y:-80px;animation-delay:20ms}
+.recon-sparkle:nth-child(3){--x:110px;--y:-95px;animation-delay:70ms}
+.recon-sparkle:nth-child(4){--x:-150px;--y:25px;animation-delay:110ms}
+.recon-sparkle:nth-child(5){--x:145px;--y:30px;animation-delay:150ms}
+.recon-sparkle:nth-child(6){--x:-80px;--y:95px;animation-delay:190ms}
+.recon-sparkle:nth-child(7){--x:90px;--y:105px;animation-delay:230ms}
+
+@keyframes reconPulse {
+  0%{transform:scale(1)}
+  45%{transform:scale(1.015)}
+  100%{transform:scale(1)}
+}
+
+@keyframes reconApprove {
+  0%{background:rgba(64,192,87,.18);transform:translateX(0)}
+  45%{background:rgba(64,192,87,.10);transform:translateX(4px)}
+  100%{background:transparent;transform:translateX(0)}
+}
+
+@keyframes reconReject {
+  0%{background:rgba(250,82,82,.14);transform:translateX(0)}
+  35%{transform:translateX(-4px)}
+  70%{transform:translateX(3px)}
+  100%{background:transparent;transform:translateX(0)}
+}
+
+@keyframes reconStreakPop {
+  0%{transform:scale(.85);opacity:.35}
+  65%{transform:scale(1.12);opacity:1}
+  100%{transform:scale(1)}
+}
+
+@keyframes reconCelebrateCard {
+  0%{transform:translateY(14px) scale(.9);opacity:0}
+  20%{transform:translateY(0) scale(1.04);opacity:1}
+  70%{transform:translateY(0) scale(1);opacity:1}
+  100%{transform:translateY(-8px) scale(.96);opacity:0}
+}
+
+@keyframes reconSpark {
+  0%{transform:translate(-50%,-50%) scale(.5);opacity:0}
+  20%{opacity:1}
+  100%{transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(120deg) scale(1.2);opacity:0}
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recon-action-flash,
+  .recon-row-approved,
+  .recon-row-rejected,
+  .recon-streak,
+  .recon-celebration-card,
+  .recon-sparkle {
+    animation: none !important;
+  }
+}
