@@ -221,6 +221,8 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
 
     staged = ((stagedRes.data || []) as HistoricalAttendanceImportRow[])
       .filter((row) => {
+        if (row.matched_keluarga_event_id === canonicalEventId) return true;
+        if (row.matched_keluarga_event_id) return false;
         if (row.matched_event_id && legacyIds.includes(row.matched_event_id)) return true;
         if (row.matched_event_id) return false;
         return eventIdentityKey(row.event_name) === canonicalKey;
