@@ -195,7 +195,30 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
 
   const eventId=event.keluarga_event_id||event.id.replace(/^keluarga:/,'');
   const pending=(people.data?.staged||[]).filter((row)=>row.decision==='pending');
-  const safePending=pending.filter((row)=>{
+
+  const pairProposals=useMemo(()=>{
+    const grouped=new Map<string,HistoricalAttendanceImportRow[]>();
+    for(const row of pending){
+      if(!row.matched_core_volunteer_id||!row.review_flags?.includes('reused_signin_pair_candidate'))continue;
+      const key=row.matched_core_volunteer_id+'|'+row.event_date;
+      grouped.set(key,[...(grouped.get(key)||[]),row]);
+    }
+    return [...grouped.values()].flatMap((rows)=>{
+      const sorted=rows
+        .filter((row)=>row.source_sign_in_at)
+        .sort((a,b)=>new Date(a.source_sign_in_at!).getTime()-new Date(b.source_sign_in_at!).getTime());
+      if(sorted.length!==2)return [];
+      const durationMinutes=Math.round((new Date(sorted[1].source_sign_in_at!).getTime()-new Date(sorted[0].source_sign_in_at!).getTime())/60000);
+      if(durationMinutes<15||durationMinutes>960)return [];
+      return [{checkIn:sorted[0],checkOut:sorted[1],durationMinutes}];
+    });
+  },[pending]);
+
+  const pairedPendingIds=new Set(pairProposals.flatMap((pair)=>[pair.checkIn.id,pair.checkOut.id]));
+  const standalonePending=pending.filter((row)=>!pairedPendingIds.has(row.id));
+  const reviewRequiredCount=pairProposals.length+standalonePending.length;
+
+  const safePending=standalonePending.filter((row)=>{
     if(!row.matched_core_volunteer_id||!row.source_sign_in_at)return false;
     if(row.source_feedback_at)return true;
     const matches=(people.data?.roster||[]).filter((roster)=>roster.volunteer_id===row.matched_core_volunteer_id);
