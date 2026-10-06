@@ -351,7 +351,27 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
 
       {people.isError&&<Alert color="red" mt="md">{people.error instanceof Error?people.error.message:'Event workspace data could not be loaded.'}</Alert>}
       <Stack gap="xs" mt="md">
-        {pending.map((row)=><Paper key={row.id} withBorder radius="md" p="sm">
+        {pairProposals.map((pair)=><Paper key={pair.checkIn.id+'|'+pair.checkOut.id} withBorder radius="md" p="sm">
+          <Group justify="space-between" align="flex-start" wrap="nowrap">
+            <div style={{minWidth:0}}>
+              <Group gap="xs">
+                <Text fw={700}>{pair.checkIn.full_name}</Text>
+                <Badge size="xs" color="blue" variant="light">Proposed check-in / check-out pair</Badge>
+                <Badge size="xs" color="green" variant="light">Volunteer matched</Badge>
+              </Group>
+              <Text size="xs" c="dimmed">{pair.checkIn.email||pair.checkIn.phone||'No email/mobile'} · source rows {pair.checkIn.source_row_number} + {pair.checkOut.source_row_number}</Text>
+              <Text size="sm" mt={4}>{pair.checkIn.event_name}</Text>
+              <Text size="sm" fw={600} mt={4}>{sgDateTime(pair.checkIn.source_sign_in_at)} to {sgDateTime(pair.checkOut.source_sign_in_at)} · {pair.durationMinutes} min</Text>
+              <Text size="xs" c="dimmed">The later submission came from the reused sign-in form. Confirming keeps both source rows for audit and commits one attendance session.</Text>
+            </div>
+            {canWrite&&<Group gap="xs" wrap="nowrap">
+              <Button size="xs" disabled={busy} onClick={()=>void confirmPair(pair)}>Confirm pair</Button>
+              <Button size="xs" color="red" variant="light" disabled={busy} onClick={()=>void rejectPair(pair)}>Reject both</Button>
+            </Group>}
+          </Group>
+        </Paper>)}
+
+        {standalonePending.map((row)=><Paper key={row.id} withBorder radius="md" p="sm">
           <Group justify="space-between" align="flex-start" wrap="nowrap">
             <div style={{minWidth:0}}>
               <Group gap="xs">
