@@ -82,6 +82,8 @@ export interface HistoricalAttendanceImportRow {
   duplicate_of_attendance_id:string|null; row_version:number;
   matched_keluarga_event_id:string|null; matched_keluarga_timeslot_id:string|null;
   committed_keluarga_session_id:string|null; pending_identity_id:string|null;
+  source_check_out_at:string|null; source_check_out_kind:'feedback_submission'|'reused_sign_in_form'|'manual'|null;
+  paired_source_row_id:string|null; pair_role:'check_in'|'check_out'|null;
 }
 
 export interface HistoricalAttendanceContextEvent {
