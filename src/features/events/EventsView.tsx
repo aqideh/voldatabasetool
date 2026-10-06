@@ -412,14 +412,17 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
         <Table striped highlightOnHover miw={1050} verticalSpacing="xs">
           <Table.Thead><Table.Tr>
             <Table.Th>Volunteer</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Check-in</Table.Th><Table.Th>Check-out</Table.Th>
-            <Table.Th>Credited</Table.Th><Table.Th>Contribution</Table.Th><Table.Th></Table.Th>
+            <Table.Th>Operational</Table.Th><Table.Th>Credited</Table.Th><Table.Th>Contribution</Table.Th><Table.Th></Table.Th>
           </Table.Tr></Table.Thead>
           <Table.Tbody>{(people.data?.attendance||[]).map((row)=><Table.Tr key={row.id}>
             <Table.Td><Text fw={600} size="sm">{row.name}</Text><Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text></Table.Td>
             <Table.Td>{row.shift_label||'General'}</Table.Td>
             <Table.Td>{sgDateTime(row.sign_in_at)}</Table.Td>
             <Table.Td>{sgDateTime(row.sign_out_at)}</Table.Td>
-            <Table.Td>{row.staff_credited_duration_minutes??row.duration_minutes??0} min</Table.Td>
+            <Table.Td>{row.duration_minutes??0} min</Table.Td>
+            <Table.Td>{row.staff_credited_duration_minutes!==null&&row.staff_credited_duration_minutes!==undefined
+              ? row.staff_credited_duration_minutes+' min'
+              : <Text size="xs" c="dimmed">Not approved</Text>}</Table.Td>
             <Table.Td><Badge size="xs" variant="light">{row.contribution_status||'—'}</Badge></Table.Td>
             <Table.Td>{canWrite&&row.record_source==='keluarga'&&<Button size="xs" variant="subtle" onClick={()=>setAttendanceRow(row)}>Correct</Button>}</Table.Td>
           </Table.Tr>)}</Table.Tbody>
