@@ -41,6 +41,7 @@ type FeedbackRow = {
 
 type PreviewRow = Omit<HistoricalAttendanceImportRow,
   'id'|'batch_id'|'committed_attendance_id'|'reviewed_at'|'reviewed_by'|'duplicate_of_attendance_id'|'row_version'
+  |'matched_keluarga_event_id'|'matched_keluarga_timeslot_id'|'committed_keluarga_session_id'|'pending_identity_id'
 >;
 
 type HistoricalContext = {

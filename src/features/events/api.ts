@@ -23,6 +23,28 @@ export type EventRosterDetailRow = {
   source_assignment_status:string|null;
   volunteer_link_status:string|null;
   dietary_requirements:string|null;
+  volunteer_id:string|null;
+  row_version:number;
+  override:null|{
+    roster_id:string;
+    event_id:string;
+    contact_on_day:string|null;
+    dietary_override:string|null;
+    tshirt_size_override:string|null;
+    note:string|null;
+    updated_at:string;
+    row_version:number;
+  };
+};
+
+export type EventAuditEntry = {
+  id:number;
+  actor_user_id:string|null;
+  action:string;
+  target_type:string|null;
+  target_id:string|null;
+  metadata:Record<string,unknown>;
+  occurred_at:string;
 };
 
 export type EventPeopleBundle = {
@@ -154,11 +176,21 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
 
   let roster:EventRosterDetailRow[] = [];
   if (event.source === 'keluarga') {
-    const rosterRes = await supabase.from('phaseone_roster').select(
-      'id,event_id,volunteer_name,email,mobile,timeslot_id,tshirt_size,entry_method,source_assignment_status,volunteer_link_status,dietary_requirements'
-    ).eq('event_id', canonicalEventId).order('volunteer_name');
+    const [rosterRes,overrideRes] = await Promise.all([
+      supabase.from('phaseone_roster').select(
+        'id,event_id,volunteer_name,email,mobile,timeslot_id,tshirt_size,entry_method,source_assignment_status,volunteer_link_status,dietary_requirements,volunteer_id,row_version'
+      ).eq('event_id', canonicalEventId).order('volunteer_name'),
+      supabase.from('phaseone_roster_operational_overrides').select(
+        'roster_id,event_id,contact_on_day,dietary_override,tshirt_size_override,note,updated_at,row_version'
+      ).eq('event_id', canonicalEventId),
+    ]);
     if (rosterRes.error) throw rosterRes.error;
-    roster = (rosterRes.data || []) as EventRosterDetailRow[];
+    if (overrideRes.error) throw overrideRes.error;
+    const overrideByRoster = new Map((overrideRes.data||[]).map((row)=>[row.roster_id,row]));
+    roster = (rosterRes.data || []).map((row)=>({
+      ...row,
+      override:overrideByRoster.get(row.id)||null,
+    })) as EventRosterDetailRow[];
   }
 
   let staged:HistoricalAttendanceImportRow[] = [];
@@ -189,6 +221,8 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
 
     staged = ((stagedRes.data || []) as HistoricalAttendanceImportRow[])
       .filter((row) => {
+        if (row.matched_keluarga_event_id === canonicalEventId) return true;
+        if (row.matched_keluarga_event_id) return false;
         if (row.matched_event_id && legacyIds.includes(row.matched_event_id)) return true;
         if (row.matched_event_id) return false;
         return eventIdentityKey(row.event_name) === canonicalKey;
@@ -200,6 +234,97 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
     attendance:(attendanceRes.data || []) as AttendanceRow[],
     staged,
   };
+}
+
+export async function reviewStagedAttendance(input:{
+  rowId:string;
+  expectedVersion:number;
+  decision:'accept'|'reject';
+  keluargaEventId:string;
+  keluargaTimeslotId:string|null;
+  targetCoreVolunteerId:string|null;
+  reasonNote:string|null;
+}) {
+  const {data,error}=await supabase.rpc('maklom_event_review_staged_attendance',{
+    p_row_id:input.rowId,
+    p_expected_version:input.expectedVersion,
+    p_decision:input.decision,
+    p_keluarga_event_id:input.keluargaEventId,
+    p_keluarga_timeslot_id:input.keluargaTimeslotId,
+    p_target_core_volunteer_id:input.targetCoreVolunteerId,
+    p_reason_note:input.reasonNote,
+  });
+  if(error)throw error;
+  return data as Record<string,unknown>;
+}
+
+export async function preRegisterStagedIdentity(rowId:string,expectedVersion:number) {
+  const {data,error}=await supabase.rpc('maklom_event_pre_register_staged_identity',{
+    p_row_id:rowId,
+    p_expected_version:expectedVersion,
+  });
+  if(error)throw error;
+  return data as Record<string,unknown>;
+}
+
+export async function setRosterOperationalOverride(input:{
+  rosterId:string;
+  expectedRosterVersion:number;
+  expectedOverrideVersion:number;
+  contactOnDay:string|null;
+  dietaryOverride:string|null;
+  tshirtSizeOverride:string|null;
+  note:string|null;
+  reasonCode:string;
+  reasonNote:string;
+}) {
+  const {data,error}=await supabase.rpc('maklom_event_set_roster_override',{
+    p_roster_id:input.rosterId,
+    p_expected_roster_version:input.expectedRosterVersion,
+    p_expected_override_version:input.expectedOverrideVersion,
+    p_contact_on_day:input.contactOnDay,
+    p_dietary_override:input.dietaryOverride,
+    p_tshirt_size_override:input.tshirtSizeOverride,
+    p_note:input.note,
+    p_reason_code:input.reasonCode,
+    p_reason_note:input.reasonNote,
+  });
+  if(error)throw error;
+  return data as Record<string,unknown>;
+}
+
+export async function correctEventAttendance(input:{
+  sessionId:string;
+  expectedVersion:number;
+  checkedInAt:string;
+  checkedOutAt:string|null;
+  reasonCode:string;
+  reasonNote:string;
+  creditAction:'unchanged'|'approve'|'needs_review'|'reject';
+  approvedMinutes:number|null;
+  approvalNote:string|null;
+}) {
+  const {data,error}=await supabase.rpc('maklom_event_correct_attendance',{
+    p_session_id:input.sessionId,
+    p_expected_version:input.expectedVersion,
+    p_checked_in_at:input.checkedInAt,
+    p_checked_out_at:input.checkedOutAt,
+    p_reason_code:input.reasonCode,
+    p_reason_note:input.reasonNote,
+    p_credit_action:input.creditAction,
+    p_approved_minutes:input.approvedMinutes,
+    p_approval_note:input.approvalNote,
+  });
+  if(error)throw error;
+  return data as Record<string,unknown>;
+}
+
+export async function fetchEventAudit(event:EventRow) {
+  if(event.source!=='keluarga')return [] as EventAuditEntry[];
+  const eventId=event.keluarga_event_id||event.id.replace(/^keluarga:/,'');
+  const {data,error}=await supabase.rpc('maklom_event_audit',{p_event_id:eventId});
+  if(error)throw error;
+  return (Array.isArray(data)?data:[]) as EventAuditEntry[];
 }
 
 export async function createEvent(input: Omit<EventRow, 'id' | 'updated_at' | 'row_version' | 'source' | 'keluarga_event_id'>) {
