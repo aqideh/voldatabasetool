@@ -62,7 +62,7 @@ function normalise(value:string) {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function eventIdentityKey(value:string) {
+function eventIdentityTokens(value:string) {
   const cleaned = value
     .trim()
     .toLowerCase()
@@ -73,10 +73,26 @@ function eventIdentityKey(value:string) {
     .replace(/\bcommunity\s+(?:club|centre|center)\b/g, ' cc ')
     .replace(/\b(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(?:day)?\b/g, ' ')
     .replace(/\b\d{1,2}[\s,/-]+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[\s,/-]+\d{2,4}\b/g, ' ')
+    .replace(/\b\d+(?:st|nd|rd|th)\b/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return [...new Set(cleaned.split(' ').filter(Boolean))].join(' ');
+  return [...new Set(cleaned.split(' ').filter(Boolean))];
+}
+
+function eventIdentityKey(value:string) {
+  return eventIdentityTokens(value).join(' ');
+}
+
+function eventNamesStronglyMatch(a:string,b:string) {
+  const aTokens=eventIdentityTokens(a);
+  const bTokens=eventIdentityTokens(b);
+  if(!aTokens.length||!bTokens.length)return false;
+  const bSet=new Set(bTokens);
+  const overlap=aTokens.filter((token)=>bSet.has(token)).length;
+  const shorter=Math.min(aTokens.length,bTokens.length);
+  const longer=Math.max(aTokens.length,bTokens.length);
+  return overlap>=3 && overlap/shorter>=0.7 && overlap/longer>=0.45;
 }
 
 export async function fetchEventsBundle() {
@@ -201,16 +217,21 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
     if (stagedRes.error) throw stagedRes.error;
     staged = (stagedRes.data || []) as HistoricalAttendanceImportRow[];
   } else {
-    const legacyRes = await supabase.from('events').select('id,name,start_date,end_date')
+    const legacyRes = await supabase.from('events').select('id,name,start_date,end_date,venue')
       .eq('start_date', event.start_date);
     if (legacyRes.error) throw legacyRes.error;
 
-    const canonicalKey = eventIdentityKey(event.name);
+    const canonicalIdentity = [event.name,event.venue].filter(Boolean).join(' ');
+    const canonicalKey = eventIdentityKey(canonicalIdentity);
     const legacyIds = (legacyRes.data || [])
-      .filter((legacy) =>
-        legacy.start_date === event.start_date
-        && eventIdentityKey(legacy.name) === canonicalKey
-      )
+      .filter((legacy) => {
+        const legacyIdentity=[legacy.name,legacy.venue].filter(Boolean).join(' ');
+        return legacy.start_date === event.start_date
+          && (
+            eventIdentityKey(legacyIdentity) === canonicalKey
+            || eventNamesStronglyMatch(legacyIdentity,canonicalIdentity)
+          );
+      })
       .map((legacy) => legacy.id);
 
     const stagedRes = await supabase.from('historical_attendance_import_rows').select('*')
@@ -225,7 +246,8 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
         if (row.matched_keluarga_event_id) return false;
         if (row.matched_event_id && legacyIds.includes(row.matched_event_id)) return true;
         if (row.matched_event_id) return false;
-        return eventIdentityKey(row.event_name) === canonicalKey;
+        return eventIdentityKey(row.event_name) === canonicalKey
+          || eventNamesStronglyMatch(row.event_name,canonicalIdentity);
       });
   }
 
