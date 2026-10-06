@@ -878,6 +878,26 @@ begin
         updated_at = now()
       where id = v_change.id;
 
+      select count(*)::integer
+      into v_pending_matches
+      from public.maklom_profile_reconciliation_rows r
+      where r.batch_id = v_row.batch_id
+        and r.match_status = 'needs_confirmation';
+
+      select count(*)::integer
+      into v_pending_changes
+      from public.maklom_profile_reconciliation_changes c
+      join public.maklom_profile_reconciliation_rows r on r.id = c.row_id
+      where r.batch_id = v_row.batch_id
+        and c.status = 'pending';
+
+      update public.maklom_profile_reconciliation_batches
+      set
+        pending_match_count = v_pending_matches,
+        status = case when v_pending_matches = 0 and v_pending_changes = 0 then 'completed' else 'staged' end,
+        updated_at = now()
+      where id = v_row.batch_id;
+
       return jsonb_build_object('change_id', v_change.id, 'status', 'stale', 'current_value', v_current);
     end if;
 
