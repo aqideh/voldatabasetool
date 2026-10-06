@@ -40,6 +40,7 @@ export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
   const [message,setMessage]=useState<{kind:'success'|'error';text:string}|null>(null);
   const [search,setSearch]=useState('');
   const [filter,setFilter]=useState<string>('all');
+  const [hideMatched,setHideMatched]=useState(false);
   const [page,setPage]=useState(1);
   const [selected,setSelected]=useState<HistoricalAttendanceImportRow|null>(null);
   const [opened,{open,close}]=useDisclosure(false);
@@ -55,14 +56,15 @@ export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
   const rows=useMemo(()=>{
     const q=search.trim().toLowerCase();
     return (data.data?.rows||[]).filter((row)=>{
-      const filterMatch=filter==='all'||row.match_status===filter||row.decision===filter;
+      const filterMatch=(filter==='all'||row.match_status===filter||row.decision===filter)
+        && (!hideMatched||row.match_status!=='matched');
       const searchMatch=!q||[
         row.full_name,row.email,row.phone,row.event_name,row.event_date,row.match_reason,
         row.review_flags.join(' '),
       ].join(' ').toLowerCase().includes(q);
       return filterMatch&&searchMatch;
     });
-  },[data.data,filter,search]);
+  },[data.data,filter,hideMatched,search]);
 
   const pageCount=Math.max(1,Math.ceil(rows.length/PAGE_SIZE));
   const visible=rows.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
@@ -185,12 +187,19 @@ export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
             {value:'rejected',label:'Rejected'},{value:'pending',label:'Pending decision'},
           ]}
         />
-        <Stack gap={4} justify="flex-end">
+        <Stack gap={6} justify="flex-end">
           <Text size="xs" c="dimmed">Batch status</Text>
           <Group gap="xs">
             <Badge variant="light">{activeBatch?.status||'—'}</Badge>
             <Text size="sm">{activeBatch?.row_count??0} rows</Text>
           </Group>
+          <Button
+            size="xs"
+            variant={hideMatched?'filled':'light'}
+            onClick={()=>{setHideMatched((value)=>!value);setPage(1);}}
+          >
+            {hideMatched?'Show matched':'Hide matched'}
+          </Button>
         </Stack>
       </SimpleGrid>
     </Paper>
