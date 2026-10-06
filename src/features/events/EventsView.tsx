@@ -17,6 +17,7 @@ import {
   fetchEventPeople,
   fetchEventsBundle,
   fetchStagedIdentityCandidates,
+  pairStagedAttendance,
   resolveStagedIdentity,
   reviewStagedAttendance,
   setRosterOperationalOverride,
@@ -194,7 +195,30 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
 
   const eventId=event.keluarga_event_id||event.id.replace(/^keluarga:/,'');
   const pending=(people.data?.staged||[]).filter((row)=>row.decision==='pending');
-  const safePending=pending.filter((row)=>{
+
+  const pairProposals=useMemo(()=>{
+    const grouped=new Map<string,HistoricalAttendanceImportRow[]>();
+    for(const row of pending){
+      if(!row.matched_core_volunteer_id||!row.review_flags?.includes('reused_signin_pair_candidate'))continue;
+      const key=row.matched_core_volunteer_id+'|'+row.event_date;
+      grouped.set(key,[...(grouped.get(key)||[]),row]);
+    }
+    return [...grouped.values()].flatMap((rows)=>{
+      const sorted=rows
+        .filter((row)=>row.source_sign_in_at)
+        .sort((a,b)=>new Date(a.source_sign_in_at!).getTime()-new Date(b.source_sign_in_at!).getTime());
+      if(sorted.length!==2)return [];
+      const durationMinutes=Math.round((new Date(sorted[1].source_sign_in_at!).getTime()-new Date(sorted[0].source_sign_in_at!).getTime())/60000);
+      if(durationMinutes<15||durationMinutes>960)return [];
+      return [{checkIn:sorted[0],checkOut:sorted[1],durationMinutes}];
+    });
+  },[pending]);
+
+  const pairedPendingIds=new Set(pairProposals.flatMap((pair)=>[pair.checkIn.id,pair.checkOut.id]));
+  const standalonePending=pending.filter((row)=>!pairedPendingIds.has(row.id));
+  const reviewRequiredCount=pairProposals.length+standalonePending.length;
+
+  const safePending=standalonePending.filter((row)=>{
     if(!row.matched_core_volunteer_id||!row.source_sign_in_at)return false;
     if(row.source_feedback_at)return true;
     const matches=(people.data?.roster||[]).filter((roster)=>roster.volunteer_id===row.matched_core_volunteer_id);
@@ -225,6 +249,24 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
       await reload();
     }catch(error){
       setMessage({kind:'error',text:error instanceof Error?error.message:'Could not review this staged row.'});
+    }finally{setBusy(false);}
+  }
+
+  async function confirmPair(pair:{checkIn:HistoricalAttendanceImportRow;checkOut:HistoricalAttendanceImportRow;durationMinutes:number}) {
+    setBusy(true);setMessage(null);
+    try{
+      await pairStagedAttendance({
+        checkInRowId:pair.checkIn.id,
+        checkInExpectedVersion:pair.checkIn.row_version,
+        checkOutRowId:pair.checkOut.id,
+        checkOutExpectedVersion:pair.checkOut.row_version,
+        keluargaEventId:eventId,
+        reasonNote:'Confirmed paired check-in/check-out because the sign-in form was reused for sign-out',
+      });
+      setMessage({kind:'success',text:'Attendance pair confirmed for '+pair.checkIn.full_name+'.'});
+      await reload();
+    }catch(error){
+      setMessage({kind:'error',text:error instanceof Error?error.message:'Could not confirm this attendance pair.'});
     }finally{setBusy(false);}
   }
 
@@ -269,7 +311,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
         <Group gap="xs">
           <Badge variant="light">{people.data?.roster.length||0} rostered</Badge>
           <Badge variant="light" color="green">{people.data?.attendance.length||0} attendance</Badge>
-          <Badge variant="light" color={pending.length?'orange':'gray'}>{pending.length} review required</Badge>
+          <Badge variant="light" color={reviewRequiredCount?'orange':'gray'}>{reviewRequiredCount} review required</Badge>
         </Group>
       </Group>
     </Paper>
@@ -287,7 +329,26 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
 
       {people.isError&&<Alert color="red" mt="md">{people.error instanceof Error?people.error.message:'Event workspace data could not be loaded.'}</Alert>}
       <Stack gap="xs" mt="md">
-        {pending.map((row)=><Paper key={row.id} withBorder radius="md" p="sm">
+        {pairProposals.map((pair)=><Paper key={pair.checkIn.id+'|'+pair.checkOut.id} withBorder radius="md" p="sm">
+          <Group justify="space-between" align="flex-start" wrap="nowrap">
+            <div style={{minWidth:0}}>
+              <Group gap="xs">
+                <Text fw={700}>{pair.checkIn.full_name}</Text>
+                <Badge size="xs" color="blue" variant="light">Proposed check-in / check-out pair</Badge>
+                <Badge size="xs" color="green" variant="light">Volunteer matched</Badge>
+              </Group>
+              <Text size="xs" c="dimmed">{pair.checkIn.email||pair.checkIn.phone||'No email/mobile'} · source rows {pair.checkIn.source_row_number} + {pair.checkOut.source_row_number}</Text>
+              <Text size="sm" mt={4}>{pair.checkIn.event_name}</Text>
+              <Text size="sm" fw={600} mt={4}>{sgDateTime(pair.checkIn.source_sign_in_at)} to {sgDateTime(pair.checkOut.source_sign_in_at)} · {pair.durationMinutes} min</Text>
+              <Text size="xs" c="dimmed">The later submission came from the reused sign-in form. Confirming keeps both source rows for audit and commits one attendance session.</Text>
+            </div>
+            {canWrite&&<Group gap="xs" wrap="nowrap">
+              <Button size="xs" disabled={busy} onClick={()=>void confirmPair(pair)}>Confirm pair</Button>
+            </Group>}
+          </Group>
+        </Paper>)}
+
+        {standalonePending.map((row)=><Paper key={row.id} withBorder radius="md" p="sm">
           <Group justify="space-between" align="flex-start" wrap="nowrap">
             <div style={{minWidth:0}}>
               <Group gap="xs">
@@ -311,7 +372,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
             </Group>}
           </Group>
         </Paper>)}
-        {!people.isLoading&&!pending.length&&<Text c="dimmed" size="sm">No staged attendance needs review for this event.</Text>}
+        {!people.isLoading&&!reviewRequiredCount&&<Text c="dimmed" size="sm">No staged attendance needs review for this event.</Text>}
       </Stack>
     </Paper>
 

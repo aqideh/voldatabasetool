@@ -258,6 +258,26 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
   };
 }
 
+export async function pairStagedAttendance(input:{
+  checkInRowId:string;
+  checkInExpectedVersion:number;
+  checkOutRowId:string;
+  checkOutExpectedVersion:number;
+  keluargaEventId:string;
+  reasonNote:string|null;
+}) {
+  const {data,error}=await supabase.rpc('maklom_event_pair_staged_attendance',{
+    p_check_in_row_id:input.checkInRowId,
+    p_check_in_expected_version:input.checkInExpectedVersion,
+    p_check_out_row_id:input.checkOutRowId,
+    p_check_out_expected_version:input.checkOutExpectedVersion,
+    p_keluarga_event_id:input.keluargaEventId,
+    p_reason_note:input.reasonNote,
+  });
+  if(error)throw error;
+  return data as Record<string,unknown>;
+}
+
 export async function reviewStagedAttendance(input:{
   rowId:string;
   expectedVersion:number;
