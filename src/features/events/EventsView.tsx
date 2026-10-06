@@ -20,6 +20,7 @@ import {
   pairStagedAttendance,
   resolveStagedIdentity,
   reviewStagedAttendance,
+  reviewLegacyStagedAttendance,
   setRosterOperationalOverride,
   updateEvent,
 } from './api';
@@ -92,6 +93,7 @@ export function EventsView({ canWrite, canDelete, requestedEventId=null, request
       qc.invalidateQueries({ queryKey: ['attendance'] }),
       qc.invalidateQueries({ queryKey: ['historical-attendance'] }),
       qc.invalidateQueries({ queryKey: ['dashboard-summary'] }),
+      qc.invalidateQueries({ queryKey: ['work-summary'] }),
     ]);
   }
 
@@ -839,9 +841,91 @@ function AttendanceCorrectionEditor({row,onSaved}:{row:AttendanceRow;onSaved:()=
   </Stack>;
 }
 
+function legacyShiftContains(row:HistoricalAttendanceImportRow,shift:EventShiftRow) {
+  if(!row.source_sign_in_at||shift.shift_date!==row.event_date||!shift.start_time)return false;
+  const signIn=Date.parse(row.source_sign_in_at);
+  const start=Date.parse(shift.shift_date+'T'+String(shift.start_time).slice(0,8)+'+08:00');
+  let end=shift.end_time
+    ? Date.parse(shift.shift_date+'T'+String(shift.end_time).slice(0,8)+'+08:00')
+    : Number.POSITIVE_INFINITY;
+  if(Number.isFinite(end)&&end<=start)end+=24*60*60*1000;
+  return Number.isFinite(signIn)&&Number.isFinite(start)&&start<=signIn&&signIn<end;
+}
+
 function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, onDeleted }: any) {
+  const qc=useQueryClient();
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reviewBusy,setReviewBusy]=useState(false);
+  const [identityRow,setIdentityRow]=useState<HistoricalAttendanceImportRow|null>(null);
+  const [shiftByRow,setShiftByRow]=useState<Record<string,string>>({});
+
+  const people=useQuery({
+    queryKey:['event-people',event.id],
+    queryFn:()=>fetchEventPeople(event),
+  });
+  const pending=(people.data?.staged||[]).filter((row)=>row.decision==='pending');
+
+  useEffect(()=>{
+    if(!people.data?.staged)return;
+    setShiftByRow((current)=>{
+      const next={...current};
+      for(const row of people.data!.staged){
+        if(next[row.id])continue;
+        if(row.matched_shift_id){
+          next[row.id]=row.matched_shift_id;
+          continue;
+        }
+        const candidates=(shifts as EventShiftRow[]).filter((shift)=>shift.shift_date===row.event_date);
+        const containing=candidates.filter((shift)=>legacyShiftContains(row,shift));
+        if(containing.length===1)next[row.id]=containing[0].id;
+        else if(candidates.length===1)next[row.id]=candidates[0].id;
+      }
+      return next;
+    });
+  },[people.data?.staged,shifts]);
+
+  async function reloadLegacyReview() {
+    await Promise.all([
+      qc.invalidateQueries({queryKey:['event-people',event.id]}),
+      qc.invalidateQueries({queryKey:['work-summary']}),
+      qc.invalidateQueries({queryKey:['attendance']}),
+      onRefresh(),
+    ]);
+  }
+
+  async function reviewLegacy(row:HistoricalAttendanceImportRow,decision:'accept'|'reject') {
+    const candidates=(shifts as EventShiftRow[]).filter((shift)=>shift.shift_date===row.event_date);
+    const selectedShift=shiftByRow[row.id]||row.matched_shift_id||null;
+    if(decision==='accept'){
+      if(!row.matched_core_volunteer_id){
+        setStatus('Resolve the volunteer before accepting this attendance row.');
+        return;
+      }
+      if(candidates.length>1&&!selectedShift){
+        setStatus('Choose the correct shift before accepting this attendance row.');
+        return;
+      }
+    }
+    setReviewBusy(true);setStatus(null);
+    try{
+      await reviewLegacyStagedAttendance({
+        rowId:row.id,
+        expectedVersion:row.row_version,
+        decision,
+        shiftId:decision==='accept'?selectedShift:null,
+        reasonNote:decision==='accept'
+          ? 'Confirmed in MakLom event data review'
+          : 'Rejected in MakLom event data review',
+      });
+      setStatus(decision==='accept'?'Attendance row confirmed.':'Staged attendance row rejected.');
+      await reloadLegacyReview();
+    }catch(error){
+      setStatus(error instanceof Error?error.message:'Could not review this staged attendance row.');
+    }finally{
+      setReviewBusy(false);
+    }
+  }
 
   async function save(form: HTMLFormElement) {
     setSaving(true); setStatus(null);
@@ -863,7 +947,82 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefr
   }
 
   return <Stack>
-    {status&&<Alert variant="light">{status}</Alert>}
+    {status&&<Alert variant="light" color={status.toLowerCase().includes('could not')||status.toLowerCase().includes('choose')||status.toLowerCase().includes('resolve')?'red':undefined}>{status}</Alert>}
+
+    <Paper withBorder p="md" radius="lg">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Title order={4}>Needs attention</Title>
+          <Text size="sm" c="dimmed">These are the exact staged attendance rows counted on Work for this event.</Text>
+        </div>
+        <Badge color={pending.length?'orange':'gray'} variant="light">{pending.length} pending</Badge>
+      </Group>
+
+      {people.isError&&<Alert color="red" mt="md">{people.error instanceof Error?people.error.message:'Event review data could not be loaded.'}</Alert>}
+      <Stack gap="xs" mt="md">
+        {pending.map((row)=>{
+          const candidates=(shifts as EventShiftRow[]).filter((shift)=>shift.shift_date===row.event_date);
+          const selectedShift=shiftByRow[row.id]||row.matched_shift_id||null;
+          const suggested=candidates.filter((shift)=>legacyShiftContains(row,shift));
+          const checkout=row.source_check_out_at||row.source_feedback_at;
+          const duration=checkout&&row.source_sign_in_at
+            ? Math.max(0,Math.floor((Date.parse(checkout)-Date.parse(row.source_sign_in_at))/60000))
+            : row.reported_minutes;
+          return <Paper key={row.id} withBorder radius="md" p="sm">
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <div style={{minWidth:0,flex:1}}>
+                <Group gap="xs" wrap="wrap">
+                  <Text fw={700}>{row.full_name}</Text>
+                  <Badge size="xs" color={row.matched_core_volunteer_id?'green':'orange'} variant="light">
+                    {row.matched_core_volunteer_id?'Volunteer matched':'Volunteer unresolved'}
+                  </Badge>
+                  {(row.review_flags||[]).map((flag)=><Badge key={flag} size="xs" color="orange" variant="light">
+                    {flag.replaceAll('_',' ')}
+                  </Badge>)}
+                </Group>
+                <Text size="xs" c="dimmed">{row.email||row.phone||'No contact'} · source row {row.source_row_number}</Text>
+                <SimpleGrid cols={{base:1,sm:3}} mt="sm">
+                  <div><Text size="xs" c="dimmed">Sign in</Text><Text size="sm">{sgDateTime(row.source_sign_in_at)}</Text></div>
+                  <div><Text size="xs" c="dimmed">Sign out / feedback</Text><Text size="sm">{sgDateTime(checkout)}</Text></div>
+                  <div><Text size="xs" c="dimmed">Source duration</Text><Text size="sm">{duration?duration+' min':'—'}</Text></div>
+                </SimpleGrid>
+                {row.match_reason&&<Text size="xs" c="dimmed" mt={6}>{row.match_reason}</Text>}
+                {suggested.length===1&&candidates.length>1&&<Text size="xs" c="blue" mt={4}>
+                  Suggested from sign-in time: {suggested[0].name}
+                </Text>}
+              </div>
+              {canWrite&&<Stack gap="xs" w={220}>
+                {!row.matched_core_volunteer_id&&<Button size="xs" variant="light" onClick={()=>setIdentityRow(row)} disabled={reviewBusy}>
+                  Resolve volunteer
+                </Button>}
+                {candidates.length>0&&<Select
+                  size="xs"
+                  label="Event shift"
+                  placeholder="Choose shift"
+                  data={candidates.map((shift)=>({
+                    value:shift.id,
+                    label:shift.name+' · '+String(shift.start_time||'').slice(0,5)+'–'+String(shift.end_time||'').slice(0,5),
+                  }))}
+                  value={selectedShift}
+                  disabled={reviewBusy}
+                  onChange={(value)=>setShiftByRow((current)=>({...current,[row.id]:value||''}))}
+                />}
+                <Group gap="xs" grow>
+                  <Button size="xs" disabled={reviewBusy||!row.matched_core_volunteer_id||(candidates.length>1&&!selectedShift)} onClick={()=>void reviewLegacy(row,'accept')}>
+                    Confirm
+                  </Button>
+                  <Button size="xs" color="red" variant="light" disabled={reviewBusy} onClick={()=>void reviewLegacy(row,'reject')}>
+                    Reject
+                  </Button>
+                </Group>
+              </Stack>}
+            </Group>
+          </Paper>;
+        })}
+        {!people.isLoading&&!pending.length&&<Text c="dimmed" size="sm">No staged attendance rows need review for this event.</Text>}
+      </Stack>
+    </Paper>
+
     <form onSubmit={(e)=>{e.preventDefault();void save(e.currentTarget);}}>
       <SimpleGrid cols={{base:1,md:2}}>
         <TextInput name="name" label="Name" defaultValue={event.name} disabled={!canWrite}/>
@@ -926,6 +1085,17 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefr
         </form>}
       </Stack>
     </Paper>
+
+    <Modal opened={Boolean(identityRow)} onClose={()=>setIdentityRow(null)} title={identityRow?'Resolve volunteer · '+identityRow.full_name:'Resolve volunteer'} size="lg">
+      {identityRow&&<StagedIdentityResolver
+        row={identityRow}
+        onResolved={async(result)=>{
+          setIdentityRow(null);
+          setStatus(result.created?'New volunteer created and linked.':'Existing volunteer linked.');
+          await reloadLegacyReview();
+        }}
+      />}
+    </Modal>
 
     {canDelete&&<Group justify="flex-end"><Button color="red" variant="light" onClick={()=>{
       if(confirm('Delete '+event.name+'? Related shifts and metrics will be removed.'))void deleteEvent(event).then(onDeleted);

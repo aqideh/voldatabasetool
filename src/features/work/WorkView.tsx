@@ -10,6 +10,7 @@ export type WorkTarget =
   | 'Form Attendance'
   | 'Profile Reconciliation'
   | 'Data Operations'
+  | 'Historical Attendance'
   | 'Volunteer Leads';
 
 interface Props {
@@ -86,7 +87,9 @@ export function WorkView({onNavigate,onOpenEvent}:Props){
                 {event.reviewRows>0&&<Badge size="xs" color="yellow" variant="light">{event.reviewRows} flagged row{event.reviewRows===1?'':'s'}</Badge>}
               </Group>
             </div>
-            <Button size="xs" onClick={()=>onOpenEvent(event.eventId,event.eventName)}>Open event</Button>
+            {event.eventId
+              ? <Button size="xs" onClick={()=>onOpenEvent(event.eventId,event.eventName)}>Open event</Button>
+              : <Button size="xs" variant="light" color="orange" onClick={()=>onNavigate('Historical Attendance')}>Resolve event match</Button>}
           </Group>
         </Paper>)}
         {!summary.isLoading&&!s?.eventGroups.length&&<Text size="sm" c="dimmed">No staged attendance is waiting for event-level review.</Text>}

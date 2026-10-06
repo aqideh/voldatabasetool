@@ -300,6 +300,25 @@ export async function reviewStagedAttendance(input:{
   return data as Record<string,unknown>;
 }
 
+
+export async function reviewLegacyStagedAttendance(input:{
+  rowId:string;
+  expectedVersion:number;
+  decision:'accept'|'reject';
+  shiftId:string|null;
+  reasonNote:string|null;
+}) {
+  const {data,error}=await supabase.rpc('maklom_event_review_legacy_staged_attendance',{
+    p_row_id:input.rowId,
+    p_expected_version:input.expectedVersion,
+    p_decision:input.decision,
+    p_shift_id:input.shiftId,
+    p_reason_note:input.reasonNote,
+  });
+  if(error)throw error;
+  return data as Record<string,unknown>;
+}
+
 export async function addExistingVolunteerToEventRoster(input:{
   eventId:string;
   timeslotId:string;
