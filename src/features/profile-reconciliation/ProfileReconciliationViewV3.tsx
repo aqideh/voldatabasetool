@@ -254,7 +254,7 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
 
         <Progress size={3} radius={0} value={rows.data?.length?((selectedIndex+1)/rows.data.length)*100:0}/>
 
-        <Grid gutter={0}>
+        <Grid>
           <Grid.Col span={{base:12,md:4,lg:3}}>
             <Stack
               gap="sm"
