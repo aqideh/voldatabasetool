@@ -17,6 +17,7 @@ import {
   fetchEventPeople,
   fetchEventsBundle,
   fetchStagedIdentityCandidates,
+  pairStagedAttendance,
   resolveStagedIdentity,
   reviewStagedAttendance,
   setRosterOperationalOverride,
