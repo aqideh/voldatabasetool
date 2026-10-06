@@ -180,6 +180,7 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
   }));
 
   const pendingChanges=activeRow?.maklom_profile_reconciliation_changes.filter((change)=>change.status==='pending')||[];
+  const rejectedChanges=activeRow?.maklom_profile_reconciliation_changes.filter((change)=>change.status==='rejected')||[];
   const canAcceptAllEmpty=Boolean(
     canWrite&&activeRow?.match_status==='confirmed'&&pendingChanges.length&&pendingChanges.every((change)=>!change.old_value?.trim())
   );
@@ -312,7 +313,9 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
                   <Text size="xs" c="dimmed">{resolvedChanges} of {totalChanges} resolved · {pendingChanges.length} pending</Text>
                 </div>
                 <Group gap="xs">
-                  {canAcceptAllEmpty&&<Button size="xs" loading={busy} onClick={()=>void acceptAllEmptyFields(activeRow)}>Accept all empty fields</Button>}
+                  {canAcceptAllEmpty&&<Button size="xs" loading={busy} onClick={()=>void acceptAllEmptyFields(activeRow)}>
+                    {rejectedChanges.length?'Accept remaining empty fields':'Accept all empty fields'}
+                  </Button>}
                   {activeRow.match_status!=='confirmed'&&<Badge color="orange" variant="light">Confirm match first</Badge>}
                 </Group>
               </Group>
