@@ -80,6 +80,8 @@ export interface HistoricalAttendanceImportRow {
   matched_shift_id:string|null; feedback_payload:Record<string,unknown>; shirt_quantity:number; shirt_size:string|null;
   decision:HistoricalAttendanceDecision; decision_note:string|null; reviewed_at:string|null; reviewed_by:string|null;
   duplicate_of_attendance_id:string|null; row_version:number;
+  matched_keluarga_event_id:string|null; matched_keluarga_timeslot_id:string|null;
+  committed_keluarga_session_id:string|null; pending_identity_id:string|null;
 }
 
 export interface HistoricalAttendanceContextEvent {
