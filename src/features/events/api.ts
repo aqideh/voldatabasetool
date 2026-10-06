@@ -258,7 +258,7 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
   };
 }
 
-export async function reviewStagedAttendance(input:{
+export async function pairStagedAttendance(input:{\n  checkInRowId:string;\n  checkInExpectedVersion:number;\n  checkOutRowId:string;\n  checkOutExpectedVersion:number;\n  keluargaEventId:string;\n  reasonNote:string|null;\n}) {\n  const {data,error}=await supabase.rpc('maklom_event_pair_staged_attendance',{\n    p_check_in_row_id:input.checkInRowId,\n    p_check_in_expected_version:input.checkInExpectedVersion,\n    p_check_out_row_id:input.checkOutRowId,\n    p_check_out_expected_version:input.checkOutExpectedVersion,\n    p_keluarga_event_id:input.keluargaEventId,\n    p_reason_note:input.reasonNote,\n  });\n  if(error)throw error;\n  return data as Record<string,unknown>;\n}\nexport async function reviewStagedAttendance(input:{
   rowId:string;
   expectedVersion:number;
   decision:'accept'|'reject';
