@@ -252,6 +252,46 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
     }finally{setBusy(false);}
   }
 
+  async function confirmPair(pair:{checkIn:HistoricalAttendanceImportRow;checkOut:HistoricalAttendanceImportRow;durationMinutes:number}) {
+    setBusy(true);setMessage(null);
+    try{
+      await pairStagedAttendance({
+        checkInRowId:pair.checkIn.id,
+        checkInExpectedVersion:pair.checkIn.row_version,
+        checkOutRowId:pair.checkOut.id,
+        checkOutExpectedVersion:pair.checkOut.row_version,
+        keluargaEventId:eventId,
+        reasonNote:'Confirmed paired check-in/check-out because the sign-in form was reused for sign-out',
+      });
+      setMessage({kind:'success',text:'Attendance pair confirmed for '+pair.checkIn.full_name+'.'});
+      await reload();
+    }catch(error){
+      setMessage({kind:'error',text:error instanceof Error?error.message:'Could not confirm this attendance pair.'});
+    }finally{setBusy(false);}
+  }
+
+  async function rejectPair(pair:{checkIn:HistoricalAttendanceImportRow;checkOut:HistoricalAttendanceImportRow}) {
+    setBusy(true);setMessage(null);
+    try{
+      for(const row of [pair.checkIn,pair.checkOut]){
+        await reviewStagedAttendance({
+          rowId:row.id,
+          expectedVersion:row.row_version,
+          decision:'reject',
+          keluargaEventId:eventId,
+          keluargaTimeslotId:row.matched_keluarga_timeslot_id,
+          targetCoreVolunteerId:row.matched_core_volunteer_id,
+          reasonNote:'Rejected reused-sign-in attendance pair proposal',
+        });
+      }
+      setMessage({kind:'success',text:'Both source rows were rejected from attendance.'});
+      await reload();
+    }catch(error){
+      setMessage({kind:'error',text:error instanceof Error?error.message:'Could not reject this pair.'});
+      await reload();
+    }finally{setBusy(false);}
+  }
+
   async function acceptSafe() {
     if(!safePending.length)return;
     setBusy(true);setMessage(null);
