@@ -22,6 +22,7 @@ import {
   reviewStagedAttendance,
   reviewLegacyStagedAttendance,
   setRosterOperationalOverride,
+  updateCanonicalEventDetails,
   updateEvent,
 } from './api';
 import type { AttendanceRow, EventRow, EventShiftRow, HistoricalAttendanceImportRow } from '../../lib/types';
@@ -345,6 +346,11 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
   const [attendanceRow,setAttendanceRow]=useState<AttendanceRow|null>(null);
   const [identityRow,setIdentityRow]=useState<HistoricalAttendanceImportRow|null>(null);
   const [manualShiftByRow,setManualShiftByRow]=useState<Record<string,string>>({});
+  const [editingEventDetails,setEditingEventDetails]=useState(false);
+  const [eventTitle,setEventTitle]=useState(event.name);
+  const [eventVenue,setEventVenue]=useState(event.venue||'');
+  const [eventProgramme,setEventProgramme]=useState(event.programme||'');
+  const [eventCorrectionNote,setEventCorrectionNote]=useState('');
 
   const people=useQuery({
     queryKey:['event-people',event.id],
@@ -429,6 +435,33 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
       qc.invalidateQueries({queryKey:['contribution-event-sheet',eventId]}),
       onRefresh(),
     ]);
+  }
+
+  async function saveEventDetails(){
+    const title=eventTitle.trim();
+    const note=eventCorrectionNote.trim();
+    if(title.length<2){setMessage({kind:'error',text:'Enter a valid event title.'});return;}
+    if(note.length<5){setMessage({kind:'error',text:'Add a short correction note explaining the change.'});return;}
+    setBusy(true);setMessage(null);
+    try{
+      const updated=await updateCanonicalEventDetails({
+        eventId,
+        expectedUpdatedAt:event.updated_at,
+        title,
+        venue:eventVenue.trim()||null,
+        programme:eventProgramme.trim()||null,
+        reasonNote:note,
+      });
+      setEventTitle(updated.title);
+      setEventVenue(updated.venue||'');
+      setEventProgramme(updated.opportunity_category||'');
+      setEditingEventDetails(false);
+      setEventCorrectionNote('');
+      setMessage({kind:'success',text:'Event details updated in the shared Keluarga/MakLom record.'});
+      await reload();
+    }catch(error){
+      setMessage({kind:'error',text:error instanceof Error?error.message:'Event details could not be updated.'});
+    }finally{setBusy(false);}
   }
 
   async function review(row:HistoricalAttendanceImportRow,decision:'accept'|'reject',timeslotId?:string|null) {
@@ -517,9 +550,16 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
             <Badge variant="light">Keluarga event</Badge>
           </Group>
           <Text size="sm" c="dimmed">{event.start_date}{event.end_date!==event.start_date?' – '+event.end_date:''} · {event.venue||'Venue not recorded'}</Text>
-          <Text size="xs" c="dimmed" mt={4}>MakLom is the staff operations surface. Publishing details remain owned by Keluarga; operational actions below use governed commands and audit logging.</Text>
+          <Text size="xs" c="dimmed" mt={4}>This is one shared event record. MakLom may correct core event metadata; publishing, opportunity content and volunteer-facing guide settings remain managed in Keluarga.</Text>
         </div>
         <Group gap="xs">
+          {canWrite&&<Button size="xs" variant="light" onClick={()=>{
+            setEventTitle(event.name);
+            setEventVenue(event.venue||'');
+            setEventProgramme(event.programme||'');
+            setEventCorrectionNote('');
+            setEditingEventDetails(true);
+          }}>Edit details</Button>}
           <Badge variant="light">{participationRows.length} roster rows</Badge>
           <Badge variant="light" color="green">{participationRows.filter((row)=>row.status==='attended').length} present</Badge>
           <Badge variant="light" color="red">{participationRows.filter((row)=>row.status==='absent').length} absent</Badge>
@@ -720,6 +760,29 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
         {!audit.isLoading&&!audit.data?.length&&<Text size="sm" c="dimmed">No event audit entries yet.</Text>}
       </Stack>
     </Paper>
+
+    <Modal opened={editingEventDetails} onClose={()=>setEditingEventDetails(false)} title="Edit event details" size="lg">
+      <Stack gap="sm">
+        <Alert color="blue" variant="light">
+          Changes here update the shared canonical event record, so the corrected title and venue will also appear in Keluarga. Publishing and full Event Guide content are not editable here.
+        </Alert>
+        <TextInput label="Event title" value={eventTitle} onChange={(e)=>setEventTitle(e.currentTarget.value)} required/>
+        <TextInput label="Venue" value={eventVenue} onChange={(e)=>setEventVenue(e.currentTarget.value)}/>
+        <TextInput label="Programme / category" value={eventProgramme} onChange={(e)=>setEventProgramme(e.currentTarget.value)}/>
+        <Textarea
+          label="Correction note"
+          description="Required for the audit trail."
+          value={eventCorrectionNote}
+          onChange={(e)=>setEventCorrectionNote(e.currentTarget.value)}
+          minRows={2}
+          required
+        />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={()=>setEditingEventDetails(false)}>Cancel</Button>
+          <Button loading={busy} onClick={()=>void saveEventDetails()}>Save changes</Button>
+        </Group>
+      </Stack>
+    </Modal>
 
     <Modal opened={Boolean(identityRow)} onClose={()=>setIdentityRow(null)} title={identityRow?'Resolve volunteer · '+identityRow.full_name:'Resolve volunteer'} size="lg">
       {identityRow&&<StagedIdentityResolver

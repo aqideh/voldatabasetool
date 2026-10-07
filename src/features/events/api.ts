@@ -456,6 +456,32 @@ export async function fetchEventAudit(event:EventRow) {
   return (Array.isArray(data)?data:[]) as EventAuditEntry[];
 }
 
+export async function updateCanonicalEventDetails(input:{
+  eventId:string;
+  expectedUpdatedAt:string;
+  title:string;
+  venue:string|null;
+  programme:string|null;
+  reasonNote:string;
+}) {
+  const {data,error}=await supabase.rpc('maklom_event_update_details',{
+    p_event_id:input.eventId,
+    p_expected_updated_at:input.expectedUpdatedAt,
+    p_title:input.title,
+    p_venue:input.venue,
+    p_opportunity_category:input.programme,
+    p_reason_note:input.reasonNote,
+  });
+  if(error)throw error;
+  return data as {
+    event_id:string;
+    title:string;
+    venue:string|null;
+    opportunity_category:string|null;
+    updated_at:string;
+  };
+}
+
 export async function createEvent(input: Omit<EventRow, 'id' | 'updated_at' | 'row_version' | 'source' | 'keluarga_event_id'>) {
   const id = newId('event');
   const { data, error } = await supabase.from('events').insert({ id, ...input }).select('*').single();
