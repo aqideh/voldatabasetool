@@ -17,7 +17,7 @@ export async function fetchDashboardSummary():Promise<DashboardSummary>{
     exactCount('volunteer_leads',(q)=>q.not('status','in','(converted,not_selected,withdrawn)')),
     exactCount('attendance_log'),
     exactCount('attendance_log',(q)=>q.eq('attended',true)),
-    exactCount('events',(q)=>q.eq('status','active')),
+    exactCount('maklom_reporting_events',(q)=>q.eq('status','active')),
     exactCount('event_shifts'),
     exactCount('suspected_duplicates',(q)=>q.eq('decision','pending')),
     supabase.from('attendance_log').select('volunteer_id,email,contact,name,event_name,event_date,attended,duration_minutes,calculated_duration_minutes,staff_credited_duration_minutes'),
