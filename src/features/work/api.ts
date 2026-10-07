@@ -20,6 +20,7 @@ export interface WorkContributionGroup {
 
 export interface WorkSummary {
   stagedAttendance:number;
+  approvedAttendanceToFinalize:number;
   contributionReviews:number;
   profileChanges:number;
   unresolvedObservations:number;
@@ -35,6 +36,7 @@ export interface WorkSummary {
 export async function fetchWorkSummary():Promise<WorkSummary>{
   const [
     staged,
+    approvedAttendance,
     contributions,
     profileChanges,
     observations,
@@ -49,6 +51,11 @@ export async function fetchWorkSummary():Promise<WorkSummary>{
       .eq('decision','pending')
       .order('event_date',{ascending:true})
       .limit(500),
+    supabase.from('historical_attendance_import_rows')
+      .select('id',{count:'exact',head:true})
+      .eq('decision','approved')
+      .is('committed_attendance_id',null)
+      .is('committed_keluarga_session_id',null),
     supabase.from('maklom_contribution_review_queue')
       .select('id,event_title,status,occurred_at',{count:'exact'})
       .in('status',['pending','needs_review'])
@@ -63,7 +70,7 @@ export async function fetchWorkSummary():Promise<WorkSummary>{
     supabase.from('volunteer_leads').select('id',{count:'exact',head:true}).not('status','in','(converted,not_selected,withdrawn)'),
   ]);
 
-  const results=[staged,contributions,profileChanges,observations,duplicates,reconciliationMatches,reconciliationChanges,formWarnings,leads];
+  const results=[staged,approvedAttendance,contributions,profileChanges,observations,duplicates,reconciliationMatches,reconciliationChanges,formWarnings,leads];
   const failed=results.find((result)=>result.error);
   if(failed?.error)throw failed.error;
 
@@ -104,6 +111,7 @@ export async function fetchWorkSummary():Promise<WorkSummary>{
 
   return{
     stagedAttendance:staged.count||0,
+    approvedAttendanceToFinalize:approvedAttendance.count||0,
     contributionReviews:contributions.count||0,
     profileChanges:profileChanges.count||0,
     unresolvedObservations:observations.count||0,
