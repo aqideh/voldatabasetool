@@ -24,6 +24,55 @@ export async function fetchMonthlyParticipation(){
   return(data||[]) as IntelligenceMonthlyRow[];
 }
 
+export async function fetchProgrammeBreakdown(){
+  const pageSize=1000;
+  let from=0;
+  const volunteerProgrammes=new Map<string,Map<string,string>>();
+  while(true){
+    const{data,error}=await supabase
+      .from('maklom_volunteer_intelligence')
+      .select('core_volunteer_id,programmes_registered')
+      .order('core_volunteer_id')
+      .range(from,from+pageSize-1);
+    if(error)throw error;
+    const rows=data||[];
+    for(const row of rows){
+      const volunteerId=String(row.core_volunteer_id||'').trim();
+      if(!volunteerId)continue;
+      const programmes=volunteerProgrammes.get(volunteerId)||new Map<string,string>();
+      for(const raw of row.programmes_registered||[]){
+        const label=String(raw||'').trim();
+        if(!label)continue;
+        const key=label.toLowerCase();
+        if(!programmes.has(key))programmes.set(key,label);
+      }
+      volunteerProgrammes.set(volunteerId,programmes);
+    }
+    if(rows.length<pageSize)break;
+    from+=pageSize;
+  }
+
+  const counts=new Map<string,{programme:string;unique_volunteers:number}>();
+  let taggedUniqueVolunteers=0;
+  let multiProgrammeVolunteers=0;
+  for(const programmes of volunteerProgrammes.values()){
+    if(programmes.size>0)taggedUniqueVolunteers+=1;
+    if(programmes.size>1)multiProgrammeVolunteers+=1;
+    for(const[key,label]of programmes){
+      const current=counts.get(key);
+      counts.set(key,{programme:current?.programme||label,unique_volunteers:(current?.unique_volunteers||0)+1});
+    }
+  }
+
+  return{
+    total_unique_volunteers:volunteerProgrammes.size,
+    tagged_unique_volunteers:taggedUniqueVolunteers,
+    untagged_unique_volunteers:volunteerProgrammes.size-taggedUniqueVolunteers,
+    multi_programme_volunteers:multiProgrammeVolunteers,
+    rows:[...counts.values()].sort((a,b)=>b.unique_volunteers-a.unique_volunteers||a.programme.localeCompare(b.programme)),
+  };
+}
+
 function applyFilters(query:any,filters:IntelligenceFilters){
   const search=safe(filters.search);
   if(search){const p=`%${search}%`;query=query.or(`name.ilike.${p},email.ilike.${p},phone.ilike.${p}`);}
