@@ -94,6 +94,7 @@ export function HistoricalAttendanceView({
     await Promise.all([
       qc.invalidateQueries({queryKey:['historical-attendance']}),
       qc.invalidateQueries({queryKey:['historical-attendance-focus']}),
+      qc.invalidateQueries({queryKey:['historical-attendance-context']}),
       qc.invalidateQueries({queryKey:['work-summary']}),
       qc.invalidateQueries({queryKey:['attendance']}),
       qc.invalidateQueries({queryKey:['dashboard-summary']}),
@@ -379,8 +380,14 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
         <Text size="sm"><b>Event:</b> {row.event_name}</Text>
         <Text size="sm"><b>Canonical date:</b> {row.event_date}</Text>
         <Text size="sm"><b>Sign-in:</b> {safeDateTime(row.source_sign_in_at)}</Text>
-        <Text size="sm"><b>Sign-out:</b> {safeDateTime(row.source_check_out_at)}</Text>
-        <Text size="sm"><b>Feedback submitted:</b> {safeDateTime(row.source_feedback_at)}</Text>
+        <Text size="sm"><b>Sign-out / feedback:</b> {safeDateTime(row.source_check_out_at||row.source_feedback_at)}</Text>
+        <Text size="xs" c="dimmed">
+          {row.source_check_out_at
+            ? 'Explicit source check-out'
+            : row.source_feedback_at
+              ? 'Using feedback submission time as the available sign-out evidence'
+              : 'No sign-out evidence available'}
+        </Text>
         <Text size="sm"><b>Shirt evidence:</b> {row.shirt_quantity||0}{row.shirt_size?' · '+row.shirt_size:''}</Text>
       </Paper>
       <Paper withBorder radius="md" p="md">
