@@ -16,6 +16,7 @@ export type WorkTarget =
 interface Props {
   onNavigate:(target:WorkTarget)=>void;
   onOpenEvent:(eventId:string|null,eventName:string)=>void;
+  onResolveEventMatch:(eventName:string,eventDate:string|null,rowIds:string[])=>void;
 }
 
 function dateLabel(value:string|null){
@@ -38,7 +39,7 @@ function QueueCard({label,count,note,button,onClick,color='blue'}:{
   </Paper>;
 }
 
-export function WorkView({onNavigate,onOpenEvent}:Props){
+export function WorkView({onNavigate,onOpenEvent,onResolveEventMatch}:Props){
   const summary=useQuery({
     queryKey:['work-summary'],
     queryFn:fetchWorkSummary,
@@ -89,7 +90,7 @@ export function WorkView({onNavigate,onOpenEvent}:Props){
             </div>
             {event.eventId
               ? <Button size="xs" onClick={()=>onOpenEvent(event.eventId,event.eventName)}>Open event</Button>
-              : <Button size="xs" variant="light" color="orange" onClick={()=>onNavigate('Historical Attendance')}>Resolve event match</Button>}
+              : <Button size="xs" variant="light" color="orange" onClick={()=>onResolveEventMatch(event.eventName,event.eventDate,event.rowIds)}>Resolve event match</Button>}
           </Group>
         </Paper>)}
         {!summary.isLoading&&!s?.eventGroups.length&&<Text size="sm" c="dimmed">No staged attendance is waiting for event-level review.</Text>}
