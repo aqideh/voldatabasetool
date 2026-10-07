@@ -48,7 +48,7 @@ function LoadingScreen({label}:{label:string}){
 }
 
 export default function App(){
-  const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[memberLoading,setMemberLoading]=useState(false);const[memberError,setMemberError]=useState('');const[section,setSection]=useState<Section>('Work');const[requestedEventId,setRequestedEventId]=useState<string|null>(null);const[requestedEventName,setRequestedEventName]=useState<string|null>(null);const[historicalFocus,setHistoricalFocus]=useState<{eventName:string;eventDate:string|null;rowIds:string[]}|null>(null);const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();const memberRequest=useRef(0);
+  const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[memberLoading,setMemberLoading]=useState(false);const[memberError,setMemberError]=useState('');const[section,setSection]=useState<Section>('Work');const[requestedEventId,setRequestedEventId]=useState<string|null>(null);const[requestedEventName,setRequestedEventName]=useState<string|null>(null);const[historicalFocus,setHistoricalFocus]=useState<{eventName:string;eventDate:string|null;rowIds:string[]}|null>(null);const[requestedEventRowIds,setRequestedEventRowIds]=useState<string[]>([]);const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();const memberRequest=useRef(0);
 
   const loadCurrentMember=useCallback(async(current:Session)=>{
     const request=++memberRequest.current;
@@ -110,13 +110,13 @@ export default function App(){
     <AppShell.Main bg="gray.0"><Box maw={1600} mx="auto">
       {section==='Work'&&<WorkView
         onNavigate={(target:WorkTarget)=>{setSection(target as Section);close();}}
-        onOpenEvent={(eventId,eventName)=>{setRequestedEventId(eventId);setRequestedEventName(eventName);setSection('Events');close();}}
+        onOpenEvent={(eventId,eventName,rowIds)=>{setRequestedEventId(eventId);setRequestedEventName(eventName);setRequestedEventRowIds(rowIds);setSection('Events');close();}}
         onResolveEventMatch={(eventName,eventDate,rowIds)=>{setHistoricalFocus({eventName,eventDate,rowIds});setSection('Historical Attendance');close();}}
       />}
       {section==='Data Dashboard'&&<VolunteerIntelligenceView/>}
       {section==='Volunteer Leads'&&<LeadsView canWrite={canWrite}/>}
       {section==='Volunteers'&&<VolunteersView canWrite={canWrite} canDelete={canDelete}/>}
-      {section==='Events'&&<EventsView canWrite={canWrite} canDelete={canDelete} requestedEventId={requestedEventId} requestedEventName={requestedEventName} onRequestedEventHandled={()=>{setRequestedEventId(null);setRequestedEventName(null);}}/>}
+      {section==='Events'&&<EventsView canWrite={canWrite} canDelete={canDelete} requestedEventId={requestedEventId} requestedEventName={requestedEventName} requestedRowIds={requestedEventRowIds} onRequestedEventHandled={()=>{setRequestedEventId(null);setRequestedEventName(null);setRequestedEventRowIds([]);}}/>}
       {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}
       {section==='Contribution Review'&&<ContributionReviewView canWrite={canWrite}/>}
       {section==='Profile Change Review'&&<ProfileChangeReviewView canWrite={canWrite}/>}
