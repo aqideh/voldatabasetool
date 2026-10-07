@@ -149,6 +149,13 @@ begin
     source_check_out_original_at = coalesce(source_check_out_original_at, source_check_out_at),
     effective_sign_in_at = p_effective_sign_in,
     effective_sign_out_at = p_effective_sign_out,
+    source_sign_in_at = p_effective_sign_in,
+    source_check_out_at = p_effective_sign_out,
+    source_check_out_kind = case
+      when p_effective_sign_out is null then null
+      when source_check_out_original_at is distinct from p_effective_sign_out then 'manual'
+      else source_check_out_kind
+    end,
     sign_in_evidence_type = coalesce(p_sign_in_evidence_type, sign_in_evidence_type, 'SOURCE_CAPTURED'),
     sign_out_evidence_type = case
       when p_effective_sign_out is null then null
