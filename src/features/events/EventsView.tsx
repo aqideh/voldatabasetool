@@ -1103,22 +1103,36 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefr
         <Badge variant="light">{people.data?.attendance.length||0} assignment{(people.data?.attendance.length||0)===1?'':'s'}</Badge>
       </Group>
       <ScrollArea mt="sm">
-        <Table striped highlightOnHover miw={900} verticalSpacing="xs">
+        <Table striped highlightOnHover miw={1000} verticalSpacing="xs">
           <Table.Thead><Table.Tr>
-            <Table.Th>Volunteer</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Status</Table.Th>
-            <Table.Th>Sign in</Table.Th><Table.Th>Sign out</Table.Th><Table.Th>Credited</Table.Th>
+            <Table.Th>Volunteer</Table.Th><Table.Th>Status</Table.Th><Table.Th>Shift</Table.Th>
+            <Table.Th>Scheduled</Table.Th><Table.Th>Sign in</Table.Th><Table.Th>Sign out</Table.Th><Table.Th>Hours</Table.Th>
           </Table.Tr></Table.Thead>
-          <Table.Tbody>{(people.data?.attendance||[]).map((row)=><Table.Tr key={row.id}>
-            <Table.Td>
-              <Text fw={600} size="sm">{row.name}</Text>
-              <Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text>
-            </Table.Td>
-            <Table.Td><Text size="sm">{(shifts as EventShiftRow[]).find((shift)=>shift.id===row.shift_id)?.name||row.shift_label||'General'}</Text></Table.Td>
-            <Table.Td><Badge size="xs" variant="light" color={row.attended?'green':'gray'}>{row.attended?'Attended':'Not attended'}</Badge></Table.Td>
-            <Table.Td><Text size="sm">{sgDateTime(row.sign_in_at)}</Text></Table.Td>
-            <Table.Td><Text size="sm">{sgDateTime(row.sign_out_at)}</Text></Table.Td>
-            <Table.Td><Text size="sm">{row.duration_minutes??0} min</Text></Table.Td>
-          </Table.Tr>)}</Table.Tbody>
+          <Table.Tbody>{[...(people.data?.attendance||[])].sort((a,b)=>
+            Number(b.attended)-Number(a.attended)||a.name.localeCompare(b.name)
+          ).map((row)=>{
+            const shift=(shifts as EventShiftRow[]).find((item)=>item.id===row.shift_id);
+            const observedMinutes=row.calculated_duration_minutes??(
+              row.sign_in_at&&row.sign_out_at
+                ? Math.max(0,Math.floor((Date.parse(row.sign_out_at)-Date.parse(row.sign_in_at))/60000))
+                : null
+            );
+            return <Table.Tr key={row.id}>
+              <Table.Td>
+                <Text fw={600} size="sm">{row.name}</Text>
+                <Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text>
+              </Table.Td>
+              <Table.Td><Badge size="xs" variant="light" color={row.attended?'green':'red'}>{row.attended?'Present':'Absent'}</Badge></Table.Td>
+              <Table.Td><Text size="sm">{shift?.name||row.shift_label||'General'}</Text></Table.Td>
+              <Table.Td><Text size="sm">{shift?.start_time?String(shift.start_time).slice(0,5)+'–'+String(shift.end_time||'').slice(0,5):'—'}</Text></Table.Td>
+              <Table.Td><Text size="sm">{sgTime(row.sign_in_at)}</Text></Table.Td>
+              <Table.Td><Text size="sm">{sgTime(row.sign_out_at)}</Text></Table.Td>
+              <Table.Td>
+                <Text size="sm" fw={row.attended?600:400}>{row.attended?durationLabel(observedMinutes??row.duration_minutes):'—'}</Text>
+                {row.attended&&observedMinutes!=null&&row.duration_minutes!==observedMinutes&&<Text size="xs" c="dimmed">Recorded credit: {durationLabel(row.duration_minutes)}</Text>}
+              </Table.Td>
+            </Table.Tr>;
+          })}</Table.Tbody>
         </Table>
       </ScrollArea>
       {!people.isLoading&&!people.data?.attendance.length&&<Text c="dimmed" size="sm" mt="sm">No assignment or attendance records are linked to this event yet.</Text>}
