@@ -8,6 +8,7 @@ export interface WorkEventGroup {
   count:number;
   unresolvedIdentities:number;
   reviewRows:number;
+  rowIds:string[];
 }
 
 export interface WorkContributionGroup {
@@ -81,8 +82,10 @@ export async function fetchWorkSummary():Promise<WorkSummary>{
       count:0,
       unresolvedIdentities:0,
       reviewRows:0,
+      rowIds:[],
     };
     current.count+=1;
+    current.rowIds.push(row.id);
     if(!row.matched_core_volunteer_id)current.unresolvedIdentities+=1;
     if(row.match_status==='needs_review'||(Array.isArray(row.review_flags)&&row.review_flags.length>0))current.reviewRows+=1;
     eventMap.set(key,current);
