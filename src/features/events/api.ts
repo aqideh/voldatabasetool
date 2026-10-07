@@ -196,7 +196,10 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
     const [rosterRes,overrideRes] = await Promise.all([
       supabase.from('phaseone_roster').select(
         'id,event_id,volunteer_name,email,mobile,timeslot_id,tshirt_size,entry_method,source_assignment_status,volunteer_link_status,dietary_requirements,volunteer_id,row_version'
-      ).eq('event_id', canonicalEventId).order('volunteer_name'),
+      )
+        .eq('event_id', canonicalEventId)
+        .or('source_assignment_status.is.null,source_assignment_status.neq.invalidated_historical_shift_match')
+        .order('volunteer_name'),
       supabase.from('phaseone_roster_operational_overrides').select(
         'roster_id,event_id,contact_on_day,dietary_override,tshirt_size_override,note,updated_at,row_version'
       ).eq('event_id', canonicalEventId),
