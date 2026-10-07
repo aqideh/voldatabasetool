@@ -17,6 +17,7 @@ import {
   fetchHistoricalAttendanceRowsByIds,
   fetchHistoricalContext,
   rejectHistoricalRow,
+  resolveHistoricalAttendanceTimes,
   reviewHistoricalRow,
   stageHistoricalWorkbook,
   updateHistoricalRow,
@@ -60,6 +61,28 @@ function historicalProgramme(source:string) {
 
 function normalisedEventName(value:string) {
   return value.trim().toLowerCase().replace(/\s+/g,' ');
+}
+
+function singaporeDateTimeInput(value:string|null|undefined) {
+  if(!value)return '';
+  const date=new Date(value);
+  const parts=new Intl.DateTimeFormat('en-CA',{
+    timeZone:'Asia/Singapore',year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',hourCycle:'h23',
+  }).formatToParts(date);
+  const get=(type:string)=>parts.find((part)=>part.type===type)?.value||'';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+}
+
+function singaporeInputToIso(value:string) {
+  return value?new Date(value+':00+08:00').toISOString():null;
+}
+
+function shiftBoundaryInput(shift:any,kind:'start'|'end') {
+  if(!shift)return '';
+  const time=kind==='start'?shift.start_time:shift.end_time;
+  if(!time)return '';
+  return `${shift.shift_date}T${String(time).slice(0,5)}`;
 }
 
 type HistoricalAttendanceFocus = {
@@ -354,6 +377,14 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
   const [newEventEnd,setNewEventEnd]=useState(row.event_date);
   const [newEventVenue,setNewEventVenue]=useState(historicalEventVenue(row.event_name));
   const [newEventProgramme,setNewEventProgramme]=useState(historicalProgramme(row.event_name));
+  const persistedEffectiveSignIn=row.effective_sign_in_at||row.source_sign_in_at;
+  const persistedEffectiveSignOut=row.effective_sign_out_at||row.source_check_out_at;
+  const [effectiveSignIn,setEffectiveSignIn]=useState(singaporeDateTimeInput(persistedEffectiveSignIn));
+  const [effectiveSignOut,setEffectiveSignOut]=useState(singaporeDateTimeInput(persistedEffectiveSignOut));
+  const [signInEvidenceType,setSignInEvidenceType]=useState<string>(row.sign_in_evidence_type||'SOURCE_CAPTURED');
+  const [signOutEvidenceType,setSignOutEvidenceType]=useState<string>(row.sign_out_evidence_type||'SOURCE_CAPTURED');
+  const [adjustmentReason,setAdjustmentReason]=useState('STAFF_CONFIRMED_ATTENDANCE');
+  const [adjustmentNote,setAdjustmentNote]=useState('');
 
   const eventShifts=shifts.filter((shift:any)=>shift.event_id===eventId&&shift.shift_date===row.event_date);
   const selectedVolunteer=volunteers.find((volunteer:any)=>volunteer.id===volunteerId);
@@ -367,6 +398,11 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
     ||shiftId!==savedShiftId
     ||Math.max(0,Number(minutes)||0)!==Number(row.reported_minutes||0)
     ||note.trim()!==(row.decision_note||'');
+  const hasUnsavedTimeChanges=
+    effectiveSignIn!==singaporeDateTimeInput(persistedEffectiveSignIn)
+    ||effectiveSignOut!==singaporeDateTimeInput(persistedEffectiveSignOut)
+    ||signInEvidenceType!==(row.sign_in_evidence_type||'SOURCE_CAPTURED')
+    ||signOutEvidenceType!==(row.sign_out_evidence_type||'SOURCE_CAPTURED');
 
   useEffect(()=>{
     if(!eventId||shiftId)return;
@@ -439,7 +475,7 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
   function mappingPatch(){
     const clearable=new Set(['volunteer_unmatched','volunteer_ambiguous','identity_conflict','event_unmatched','event_ambiguous','shift_ambiguous']);
     const remainingFlags=(row.review_flags||[]).filter((flag:string)=>!clearable.has(flag));
-    const blocking=new Set(['event_date_missing','feedback_event_mismatch','feedback_ambiguous']);
+    const blocking=new Set(['event_date_missing']);
     const safe=Boolean(selectedVolunteer&&selectedEvent)&&!remainingFlags.some((flag:string)=>blocking.has(flag));
     return {
       matched_volunteer_id:selectedVolunteer?.id??null,
@@ -455,6 +491,30 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
         ? 'Staff-confirmed mapping to '+selectedVolunteer.name+' · '+selectedEvent.name
         : row.match_reason,
     };
+  }
+
+  async function saveTimeAdjustment(){
+    const effectiveIn=singaporeInputToIso(effectiveSignIn);
+    const effectiveOut=singaporeInputToIso(effectiveSignOut);
+    if(!effectiveIn){setMessage('Enter an effective sign-in time.');return;}
+    if(effectiveOut&&effectiveOut<effectiveIn){setMessage('Effective sign-out cannot be before sign-in.');return;}
+    if(!adjustmentReason){setMessage('Select a reason for the attendance correction.');return;}
+    setSaving(true);setMessage(null);
+    try{
+      const updated=await resolveHistoricalAttendanceTimes({
+        row,
+        effectiveSignIn:effectiveIn,
+        effectiveSignOut:effectiveOut,
+        signInEvidenceType:signInEvidenceType as any,
+        signOutEvidenceType:effectiveOut?(signOutEvidenceType as any):null,
+        reasonCode:adjustmentReason,
+        reasonNote:adjustmentNote.trim()||null,
+        batchId:row.batch_id||null,
+      });
+      setMessage('Attendance timing resolved. Original source evidence has been preserved.');
+      await onSaved(updated);
+    }catch(error){setMessage(error instanceof Error?error.message:'Attendance timing could not be resolved.');}
+    finally{setSaving(false);}
   }
 
   async function saveMapping(){
@@ -473,6 +533,7 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
 
   async function confirm(){
     if(hasUnsavedMappingChanges){setMessage('Save progress before committing attendance.');return;}
+    if(hasUnsavedTimeChanges){setMessage('Save the attendance timing correction before committing attendance.');return;}
     if(!selectedVolunteer||!selectedEvent){setMessage('Select a volunteer and a canonical event before committing this row.');return;}
     setSaving(true);setMessage(null);
     try{
@@ -510,15 +571,13 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
         <Text size="sm"><b>Mobile:</b> {row.phone||'—'}</Text>
         <Text size="sm"><b>Event:</b> {row.event_name}</Text>
         <Text size="sm"><b>Canonical date:</b> {row.event_date}</Text>
-        <Text size="sm"><b>Sign-in:</b> {safeDateTime(row.source_sign_in_at)}</Text>
-        <Text size="sm"><b>Sign-out / feedback:</b> {safeDateTime(row.source_check_out_at||row.source_feedback_at)}</Text>
-        <Text size="xs" c="dimmed">
-          {row.source_check_out_at
-            ? 'Explicit source check-out'
-            : row.source_feedback_at
-              ? 'Using feedback submission time as the available sign-out evidence'
-              : 'No sign-out evidence available'}
-        </Text>
+        <Text size="sm"><b>Original source sign-in:</b> {safeDateTime(row.source_sign_in_original_at||row.source_sign_in_at)}</Text>
+        <Text size="sm"><b>Original source sign-out:</b> {safeDateTime(row.source_check_out_original_at||row.source_check_out_at)}</Text>
+        <Text size="sm"><b>Feedback timestamp:</b> {safeDateTime(row.source_feedback_at)}</Text>
+        {(row.effective_sign_in_at||row.effective_sign_out_at)&&<Text size="xs" c="dimmed" mt={4}>
+          Effective attendance: {safeDateTime(row.effective_sign_in_at||row.source_sign_in_at)}
+          {row.effective_sign_out_at?' – '+safeDateTime(row.effective_sign_out_at):' · no effective sign-out'}
+        </Text>}
         <Text size="sm"><b>Shirt evidence:</b> {row.shirt_quantity||0}{row.shirt_size?' · '+row.shirt_size:''}</Text>
       </Paper>
       <Paper withBorder radius="md" p="md">
@@ -598,6 +657,96 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
       }))}
       description={eventShifts.length>1?'Choose the specific shift before approval when the event has multiple sessions.':'Optional when the event has no distinct shift.'}
     />
+    <Paper withBorder radius="md" p="md">
+      <Stack gap="sm">
+        <div>
+          <Text fw={700}>Resolve attendance timing</Text>
+          <Text size="xs" c="dimmed">
+            Correct operational times without deleting the original source timestamps. Use an estimate only when you have enough evidence to justify it.
+          </Text>
+        </div>
+        <SimpleGrid cols={{base:1,md:2}}>
+          <TextInput
+            type="datetime-local"
+            label="Effective sign-in"
+            value={effectiveSignIn}
+            onChange={(event)=>setEffectiveSignIn(event.currentTarget.value)}
+            disabled={!canWrite}
+          />
+          <TextInput
+            type="datetime-local"
+            label="Effective sign-out"
+            value={effectiveSignOut}
+            onChange={(event)=>setEffectiveSignOut(event.currentTarget.value)}
+            disabled={!canWrite}
+          />
+          <Select
+            label="Sign-in evidence"
+            value={signInEvidenceType}
+            onChange={(value)=>setSignInEvidenceType(value||'ADMIN_CORRECTED')}
+            disabled={!canWrite}
+            data={[
+              {value:'SOURCE_CAPTURED',label:'Source captured'},
+              {value:'STAFF_CONFIRMED',label:'Staff confirmed'},
+              {value:'ADMIN_CORRECTED',label:'Admin corrected'},
+              {value:'SHIFT_START_ESTIMATE',label:'Shift start estimate'},
+              {value:'IMPORTED_RECORD',label:'Imported record'},
+            ]}
+          />
+          <Select
+            label="Sign-out evidence"
+            value={signOutEvidenceType}
+            onChange={(value)=>setSignOutEvidenceType(value||'ADMIN_CORRECTED')}
+            disabled={!canWrite||!effectiveSignOut}
+            data={[
+              {value:'SOURCE_CAPTURED',label:'Source captured'},
+              {value:'STAFF_CONFIRMED',label:'Staff confirmed'},
+              {value:'ADMIN_CORRECTED',label:'Admin corrected'},
+              {value:'SHIFT_END_ESTIMATE',label:'Shift end estimate'},
+              {value:'IMPORTED_RECORD',label:'Imported record'},
+            ]}
+          />
+        </SimpleGrid>
+        {selectedShift&&<Group gap="xs">
+          <Text size="xs" c="dimmed">Selected shift: {selectedShift.name} · {selectedShift.shift_date} {selectedShift.start_time||'—'}–{selectedShift.end_time||'—'}</Text>
+          {selectedShift.start_time&&<Button size="compact-xs" variant="light" onClick={()=>{
+            setEffectiveSignIn(shiftBoundaryInput(selectedShift,'start'));
+            setSignInEvidenceType('SHIFT_START_ESTIMATE');
+          }}>Use shift start</Button>}
+          {selectedShift.end_time&&<Button size="compact-xs" variant="light" onClick={()=>{
+            setEffectiveSignOut(shiftBoundaryInput(selectedShift,'end'));
+            setSignOutEvidenceType('SHIFT_END_ESTIMATE');
+          }}>Use shift end</Button>}
+        </Group>}
+        <Select
+          label="Adjustment reason"
+          value={adjustmentReason}
+          onChange={(value)=>setAdjustmentReason(value||'')}
+          disabled={!canWrite}
+          data={[
+            {value:'STAFF_CONFIRMED_ATTENDANCE',label:'Staff confirmed attendance'},
+            {value:'FORM_OPENED_LATE',label:'Form / QR opened late'},
+            {value:'INCORRECT_SOURCE_TIMESTAMP',label:'Incorrect source timestamp'},
+            {value:'MANUAL_ATTENDANCE_RECORD',label:'Manual attendance record'},
+            {value:'OTHER',label:'Other'},
+          ]}
+        />
+        <Textarea
+          label="Adjustment note"
+          description="Optional context for the audit trail."
+          value={adjustmentNote}
+          onChange={(event)=>setAdjustmentNote(event.currentTarget.value)}
+          disabled={!canWrite}
+          minRows={2}
+        />
+        {canWrite&&<Group justify="flex-end">
+          <Button variant="light" loading={saving} disabled={!hasUnsavedTimeChanges||!effectiveSignIn} onClick={()=>void saveTimeAdjustment()}>
+            Save attendance correction
+          </Button>
+        </Group>}
+      </Stack>
+    </Paper>
+
     <NumberInput
       label="Reviewed credited minutes"
       description={row.source_check_out_at
@@ -634,8 +783,8 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
       <Button color="red" variant="light" loading={saving} onClick={()=>void reject()}>Reject row</Button>
       <Button
         loading={saving}
-        disabled={!selectedVolunteer||!selectedEvent||hasUnsavedMappingChanges}
-        title={hasUnsavedMappingChanges?'Save progress before committing attendance.':undefined}
+        disabled={!selectedVolunteer||!selectedEvent||hasUnsavedMappingChanges||hasUnsavedTimeChanges}
+        title={hasUnsavedMappingChanges?'Save progress before committing attendance.':hasUnsavedTimeChanges?'Save the attendance timing correction before committing attendance.':undefined}
         onClick={()=>void confirm()}
       >
         Commit attendance
