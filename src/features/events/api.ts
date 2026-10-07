@@ -68,6 +68,7 @@ function eventIdentityTokens(value:string) {
     .toLowerCase()
     .replace(/\bready\s*set\s*learn\b/g, ' rsl ')
     .replace(/\breadysetlearn\b/g, ' rsl ')
+    .replace(/\braikan\s+ilmu\b/g, ' ri ')
     .replace(/\brsl\b/g, ' rsl ')
     .replace(/\bmaths?\s+explorer(?:\s+buddy)?\b/g, ' ')
     .replace(/\bcommunity\s+(?:club|centre|center)\b/g, ' cc ')
