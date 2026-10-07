@@ -1023,6 +1023,36 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefr
       </Stack>
     </Paper>
 
+    <Paper withBorder p="md" radius="lg">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Title order={4}>Assignments & attendance</Title>
+          <Text size="sm" c="dimmed">Legacy MakLom events store participation in attendance records. Confirmed rows linked to existing attendance remain visible here instead of disappearing after review.</Text>
+        </div>
+        <Badge variant="light">{people.data?.attendance.length||0} assignment{(people.data?.attendance.length||0)===1?'':'s'}</Badge>
+      </Group>
+      <ScrollArea mt="sm">
+        <Table striped highlightOnHover miw={900} verticalSpacing="xs">
+          <Table.Thead><Table.Tr>
+            <Table.Th>Volunteer</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Status</Table.Th>
+            <Table.Th>Sign in</Table.Th><Table.Th>Sign out</Table.Th><Table.Th>Credited</Table.Th>
+          </Table.Tr></Table.Thead>
+          <Table.Tbody>{(people.data?.attendance||[]).map((row)=><Table.Tr key={row.id}>
+            <Table.Td>
+              <Text fw={600} size="sm">{row.name}</Text>
+              <Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text>
+            </Table.Td>
+            <Table.Td><Text size="sm">{(shifts as EventShiftRow[]).find((shift)=>shift.id===row.shift_id)?.name||row.shift_label||'General'}</Text></Table.Td>
+            <Table.Td><Badge size="xs" variant="light" color={row.attended?'green':'gray'}>{row.attended?'Attended':'Not attended'}</Badge></Table.Td>
+            <Table.Td><Text size="sm">{sgDateTime(row.sign_in_at)}</Text></Table.Td>
+            <Table.Td><Text size="sm">{sgDateTime(row.sign_out_at)}</Text></Table.Td>
+            <Table.Td><Text size="sm">{row.duration_minutes??0} min</Text></Table.Td>
+          </Table.Tr>)}</Table.Tbody>
+        </Table>
+      </ScrollArea>
+      {!people.isLoading&&!people.data?.attendance.length&&<Text c="dimmed" size="sm" mt="sm">No assignment or attendance records are linked to this event yet.</Text>}
+    </Paper>
+
     <form onSubmit={(e)=>{e.preventDefault();void save(e.currentTarget);}}>
       <SimpleGrid cols={{base:1,md:2}}>
         <TextInput name="name" label="Name" defaultValue={event.name} disabled={!canWrite}/>
