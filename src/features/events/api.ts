@@ -97,14 +97,10 @@ function eventNamesStronglyMatch(a:string,b:string) {
 }
 
 export async function fetchEventsBundle() {
-  const [events, shifts, metrics, keluargaEvents, keluargaTimeslots] = await Promise.all([
-    supabase.from('events').select('*').order('start_date', { ascending: false }).order('name'),
+  const [events, shifts, metrics, keluargaTimeslots] = await Promise.all([
+    supabase.from('maklom_event_catalog').select('*').order('start_date', { ascending: false }).order('name'),
     supabase.from('event_shifts').select('*').order('shift_date').order('start_time'),
     supabase.from('event_impact_metrics').select('*').order('label'),
-    supabase.from('phaseone_events')
-      .select('id,title,reporting_at,venue,opportunity_category,opportunity_summary,opportunity_description,is_published,updated_at')
-      .eq('operations_scope', 'canonical')
-      .order('reporting_at', { ascending: false }),
     supabase.from('phaseone_event_timeslots')
       .select('id,event_id,label,starts_at,ends_at,status,sort_order')
       .order('sort_order')
@@ -113,42 +109,10 @@ export async function fetchEventsBundle() {
   if (events.error) throw events.error;
   if (shifts.error) throw shifts.error;
   if (metrics.error) throw metrics.error;
-  if (keluargaEvents.error) throw keluargaEvents.error;
   if (keluargaTimeslots.error) throw keluargaTimeslots.error;
 
-  const canonicalEvents = (keluargaEvents.data || []) as KeluargaEventRow[];
+  const catalogEvents = (events.data || []) as EventRow[];
   const canonicalTimeslots = (keluargaTimeslots.data || []) as KeluargaTimeslotRow[];
-  const timeslotsByEvent = new Map<string,KeluargaTimeslotRow[]>();
-  for (const slot of canonicalTimeslots) {
-    const list = timeslotsByEvent.get(slot.event_id) || [];
-    list.push(slot);
-    timeslotsByEvent.set(slot.event_id, list);
-  }
-
-  const projectedEvents:EventRow[] = canonicalEvents.map((event) => {
-    const eventTimeslots = timeslotsByEvent.get(event.id) || [];
-    const dates = eventTimeslots.flatMap((slot) => [singaporeParts(slot.starts_at).date, singaporeParts(slot.ends_at).date]).sort();
-    const fallbackDate = singaporeParts(event.reporting_at).date;
-    return {
-      id: `keluarga:${event.id}`,
-      name: event.title,
-      start_date: dates[0] || fallbackDate,
-      end_date: dates.at(-1) || fallbackDate,
-      programme: event.opportunity_category || null,
-      venue: event.venue || null,
-      notes: event.opportunity_summary || event.opportunity_description || null,
-      status: event.is_published ? 'active' : 'archived',
-      updated_at: event.updated_at,
-      row_version: 1,
-      source: 'keluarga',
-      keluarga_event_id: event.id,
-    };
-  });
-
-  const canonicalKeys = new Set(projectedEvents.map((event) => `${normalise(event.name)}|${event.start_date}`));
-  const projectedLegacyEvents = ((events.data || []) as EventRow[])
-    .filter((event) => !event.keluarga_event_id && !canonicalKeys.has(`${normalise(event.name)}|${event.start_date}`))
-    .map((event) => ({ ...event, source: 'maklom' as const }));
 
   const projectedShifts:EventShiftRow[] = canonicalTimeslots.map((slot) => {
     const start = singaporeParts(slot.starts_at);
@@ -167,15 +131,15 @@ export async function fetchEventsBundle() {
     };
   });
 
-  const retainedLegacyEventIds = new Set(projectedLegacyEvents.map((event) => event.id));
+  const retainedLegacyEventIds = new Set(
+    catalogEvents.filter((event) => event.source === 'maklom').map((event) => event.id)
+  );
   const projectedLegacyShifts = ((shifts.data || []) as EventShiftRow[])
     .filter((shift) => retainedLegacyEventIds.has(shift.event_id))
     .map((shift) => ({ ...shift, source: 'maklom' as const }));
 
   return {
-    events: [...projectedEvents, ...projectedLegacyEvents].sort((a, b) =>
-      b.start_date.localeCompare(a.start_date) || a.name.localeCompare(b.name)
-    ),
+    events: catalogEvents,
     shifts: [...projectedShifts, ...projectedLegacyShifts],
     metrics: (metrics.data || []) as EventImpactMetricRow[],
   };
@@ -483,13 +447,26 @@ export async function updateCanonicalEventDetails(input:{
 }
 
 export async function createEvent(input: Omit<EventRow, 'id' | 'updated_at' | 'row_version' | 'source' | 'keluarga_event_id'>) {
-  const id = newId('event');
-  const { data, error } = await supabase.from('events').insert({ id, ...input }).select('*').single();
+  const requestedId = newId('event');
+  const { data, error } = await supabase.rpc('maklom_resolve_or_create_legacy_event', {
+    p_id: requestedId,
+    p_name: input.name,
+    p_start_date: input.start_date,
+    p_end_date: input.end_date,
+    p_programme: input.programme,
+    p_venue: input.venue,
+    p_notes: input.notes,
+    p_status: input.status,
+  });
   if (error) throw error;
-  if (input.start_date === input.end_date) {
+
+  const resolved = data as EventRow;
+  if (!resolved) throw new Error('Event could not be resolved.');
+
+  if (resolved.id === requestedId && input.start_date === input.end_date) {
     const { error: shiftError } = await supabase.from('event_shifts').insert({
       id: newId('shift'),
-      event_id: id,
+      event_id: resolved.id,
       name: 'General',
       shift_date: input.start_date,
       start_time: null,
@@ -498,7 +475,18 @@ export async function createEvent(input: Omit<EventRow, 'id' | 'updated_at' | 'r
     });
     if (shiftError) throw shiftError;
   }
-  return { ...(data as EventRow), source: 'maklom' as const };
+
+  if (resolved.keluarga_event_id) {
+    const { data: canonical, error: canonicalError } = await supabase
+      .from('maklom_event_catalog')
+      .select('*')
+      .eq('keluarga_event_id', resolved.keluarga_event_id)
+      .maybeSingle();
+    if (canonicalError) throw canonicalError;
+    if (canonical) return canonical as EventRow;
+  }
+
+  return { ...resolved, source: 'maklom' as const };
 }
 
 export async function updateEvent(row: EventRow, patch: Partial<EventRow>) {
