@@ -360,14 +360,24 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
     queryKey:['event-participation',eventId],
     queryFn:()=>fetchContributionEventSheet(eventId),
   });
-  const participationRows=useMemo(()=>[...(participation.data?.rows||[])].sort((a,b)=>
-    participationStatusRank(a.status)-participationStatusRank(b.status)
-      || a.volunteer_name.localeCompare(b.volunteer_name)
-  ),[participation.data?.rows]);
+  const [participationSort,setParticipationSort]=useState<'status'|'shift-asc'|'shift-desc'>('status');
   const participationShiftById=useMemo(
     ()=>new Map((participation.data?.shifts||[]).map((shift)=>[shift.id,shift])),
     [participation.data?.shifts],
   );
+  const participationRows=useMemo(()=>[...(participation.data?.rows||[])].sort((a,b)=>{
+    if(participationSort!=='status'){
+      const aShift=participationShiftById.get(a.timeslot_id);
+      const bShift=participationShiftById.get(b.timeslot_id);
+      const aStart=aShift?Date.parse(aShift.starts_at):Number.POSITIVE_INFINITY;
+      const bStart=bShift?Date.parse(bShift.starts_at):Number.POSITIVE_INFINITY;
+      const direction=participationSort==='shift-desc'?-1:1;
+      const shiftOrder=(aStart-bStart)*direction;
+      if(shiftOrder!==0)return shiftOrder;
+    }
+    return participationStatusRank(a.status)-participationStatusRank(b.status)
+      || a.volunteer_name.localeCompare(b.volunteer_name);
+  }),[participation.data?.rows,participationShiftById,participationSort]);
   const attendanceBySessionId=useMemo(
     ()=>new Map((people.data?.attendance||[])
       .filter((row)=>row.record_source==='keluarga')
@@ -522,7 +532,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
       <Group justify="space-between" align="flex-start">
         <div>
           <Title order={4}>Roster & attendance</Title>
-          <Text size="sm" c="dimmed">Full event roster with attendance outcome, scheduled shift, reported sign-in/out and contributed time. Present volunteers are shown first; absent, withdrawn and unresolved rows remain visible below.</Text>
+          <Text size="sm" c="dimmed">Full event roster with attendance outcome, scheduled shift, reported sign-in/out and contributed time. Present volunteers are shown first by default; use the Shift heading to group the roster by deployment. Absent, withdrawn and unresolved rows remain visible.</Text>
         </div>
         <Badge variant="light">{participationRows.length} rows</Badge>
       </Group>
@@ -530,7 +540,17 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
       <ScrollArea mt="sm">
         <Table striped highlightOnHover miw={1180} verticalSpacing="xs">
           <Table.Thead><Table.Tr>
-            <Table.Th>Volunteer</Table.Th><Table.Th>Status</Table.Th><Table.Th>Shift</Table.Th>
+            <Table.Th>Volunteer</Table.Th><Table.Th>Status</Table.Th>
+            <Table.Th aria-sort={participationSort==='shift-asc'?'ascending':participationSort==='shift-desc'?'descending':'none'}>
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                aria-label={participationSort==='shift-asc'?'Sort shifts latest first':'Sort shifts earliest first'}
+                onClick={()=>setParticipationSort((current)=>current==='shift-asc'?'shift-desc':'shift-asc')}
+              >
+                Shift {participationSort==='shift-asc'?'↑':participationSort==='shift-desc'?'↓':'↕'}
+              </Button>
+            </Table.Th>
             <Table.Th>Scheduled</Table.Th><Table.Th>Sign in</Table.Th><Table.Th>Sign out</Table.Th>
             <Table.Th>Hours</Table.Th><Table.Th></Table.Th>
           </Table.Tr></Table.Thead>
