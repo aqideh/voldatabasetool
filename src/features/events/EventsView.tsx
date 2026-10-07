@@ -452,10 +452,9 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
         programme:eventProgramme.trim()||null,
         reasonNote:note,
       });
-      event.name=updated.title;
-      event.venue=updated.venue;
-      event.programme=updated.opportunity_category;
-      event.updated_at=updated.updated_at;
+      setEventTitle(updated.title);
+      setEventVenue(updated.venue||'');
+      setEventProgramme(updated.opportunity_category||'');
       setEditingEventDetails(false);
       setEventCorrectionNote('');
       setMessage({kind:'success',text:'Event details updated in the shared Keluarga/MakLom record.'});
