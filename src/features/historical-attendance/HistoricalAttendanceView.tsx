@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert, Badge, Button, FileButton, Group, Modal, NumberInput, Pagination, Paper,
   ScrollArea, Select, SimpleGrid, Stack, Table, Text, TextInput, Textarea, Title,
@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { HistoricalAttendanceImportRow } from '../../lib/types';
 import { safeDateTime } from '../../lib/utils';
+import { createEvent } from '../events/api';
 import {
   approveAllSafeHistoricalRows,
   commitHistoricalBatch,
@@ -34,6 +35,31 @@ function decisionColor(decision:string) {
   if(decision==='approved')return 'green';
   if(decision==='rejected')return 'red';
   return 'gray';
+}
+
+function historicalEventName(source:string) {
+  const trimmed=source.trim();
+  const withoutDate=trimmed.replace(
+    /\s*[-–—]\s*(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(?:day)?[,]?\s+\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{2,4}\s*$/i,
+    '',
+  ).trim();
+  return withoutDate||trimmed;
+}
+
+function historicalEventVenue(source:string) {
+  const name=historicalEventName(source);
+  const at=name.indexOf('@');
+  return at>=0?name.slice(at+1).trim():'';
+}
+
+function historicalProgramme(source:string) {
+  const name=historicalEventName(source);
+  const at=name.indexOf('@');
+  return (at>=0?name.slice(0,at):name).trim();
+}
+
+function normalisedEventName(value:string) {
+  return value.trim().toLowerCase().replace(/\s+/g,' ');
 }
 
 type HistoricalAttendanceFocus = {
@@ -322,11 +348,65 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
   const [note,setNote]=useState(row.decision_note||'');
   const [saving,setSaving]=useState(false);
   const [message,setMessage]=useState<string|null>(null);
+  const [eventCreateOpen,setEventCreateOpen]=useState(false);
+  const [newEventName,setNewEventName]=useState(historicalEventName(row.event_name));
+  const [newEventStart,setNewEventStart]=useState(row.event_date);
+  const [newEventEnd,setNewEventEnd]=useState(row.event_date);
+  const [newEventVenue,setNewEventVenue]=useState(historicalEventVenue(row.event_name));
+  const [newEventProgramme,setNewEventProgramme]=useState(historicalProgramme(row.event_name));
 
   const eventShifts=shifts.filter((shift:any)=>shift.event_id===eventId&&shift.shift_date===row.event_date);
   const selectedVolunteer=volunteers.find((volunteer:any)=>volunteer.id===volunteerId);
   const selectedEvent=events.find((event:any)=>event.id===eventId);
   const selectedShift=shifts.find((shift:any)=>shift.id===shiftId)||null;
+
+  useEffect(()=>{
+    if(!eventId||shiftId)return;
+    const dated=shifts.filter((shift:any)=>shift.event_id===eventId&&shift.shift_date===row.event_date);
+    if(dated.length===1)setShiftId(dated[0].id);
+  },[eventId,row.event_date,shiftId,shifts]);
+
+  async function createSourceEvent(){
+    const name=newEventName.trim();
+    const start=newEventStart.trim();
+    const end=newEventEnd.trim();
+    if(!name){setMessage('Event name is required.');return;}
+    if(!start||!end||end<start){setMessage('Enter a valid event date range.');return;}
+
+    const existing=events.find((event:any)=>
+      event.source==='maklom'
+      &&normalisedEventName(event.name)===normalisedEventName(name)
+      &&event.start_date<=end
+      &&event.end_date>=start
+    );
+    if(existing){
+      setEventId(existing.id);
+      setShiftId(null);
+      setEventCreateOpen(false);
+      setMessage('A matching MakLom event already exists and has been selected.');
+      return;
+    }
+
+    setSaving(true);setMessage(null);
+    try{
+      const created=await createEvent({
+        name,
+        start_date:start,
+        end_date:end,
+        programme:newEventProgramme.trim()||null,
+        venue:newEventVenue.trim()||null,
+        notes:null,
+        status:'archived',
+      });
+      setEventId(created.id);
+      setShiftId(null);
+      setEventCreateOpen(false);
+      setMessage('Historical event created and selected. Review the mapping, then confirm attendance.');
+      await onSaved(row);
+    }catch(error){
+      setMessage(error instanceof Error?error.message:'Historical event could not be created.');
+    }finally{setSaving(false);}
+  }
 
   async function createVolunteer(){
     if(!newName.trim()){setMessage('Volunteer name is required.');return;}
@@ -474,7 +554,37 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
       data={events.map((event:any)=>({
         value:event.id,label:event.name+' · '+event.start_date+(event.end_date!==event.start_date?'–'+event.end_date:'')+' · '+(event.source==='keluarga'?'Keluarga':'MakLom'),
       }))}
+      description="Select an existing event. If the historical event does not exist, create it below."
     />
+    {canWrite&&(!selectedEvent||eventCreateOpen)&&<Paper withBorder radius="md" p="md">
+      {!eventCreateOpen
+        ?<Group justify="space-between" align="center">
+          <div>
+            <Text fw={600} size="sm">Event not in MakLom?</Text>
+            <Text size="xs" c="dimmed">Create a historical MakLom event from this source row. This does not publish anything in Keluarga.</Text>
+          </div>
+          <Button size="xs" variant="light" onClick={()=>setEventCreateOpen(true)}>Create event</Button>
+        </Group>
+        :<Stack gap="sm">
+          <Group justify="space-between">
+            <div>
+              <Text fw={700}>Create historical event</Text>
+              <Text size="xs" c="dimmed">The source details are pre-filled and can be corrected before creation.</Text>
+            </div>
+            <Button size="compact-xs" variant="subtle" onClick={()=>setEventCreateOpen(false)}>Cancel</Button>
+          </Group>
+          <TextInput label="Event name" value={newEventName} onChange={(event)=>setNewEventName(event.currentTarget.value)}/>
+          <SimpleGrid cols={{base:1,md:2}}>
+            <TextInput label="Start date" type="date" value={newEventStart} onChange={(event)=>setNewEventStart(event.currentTarget.value)}/>
+            <TextInput label="End date" type="date" value={newEventEnd} onChange={(event)=>setNewEventEnd(event.currentTarget.value)}/>
+            <TextInput label="Venue" value={newEventVenue} onChange={(event)=>setNewEventVenue(event.currentTarget.value)}/>
+            <TextInput label="Programme / category" value={newEventProgramme} onChange={(event)=>setNewEventProgramme(event.currentTarget.value)}/>
+          </SimpleGrid>
+          <Group justify="flex-end">
+            <Button loading={saving} onClick={()=>void createSourceEvent()}>Create & select event</Button>
+          </Group>
+        </Stack>}
+    </Paper>}
     <Select
       label="Canonical shift"
       searchable clearable disabled={!canWrite||!eventId}
