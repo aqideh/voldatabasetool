@@ -15,6 +15,7 @@ import {
   fetchHistoricalAttendance,
   fetchHistoricalAttendanceRowsByIds,
   fetchHistoricalContext,
+  rejectHistoricalRow,
   reviewHistoricalRow,
   stageHistoricalWorkbook,
   updateHistoricalRow,
@@ -408,14 +409,9 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
   async function reject(){
     setSaving(true);setMessage(null);
     try{
-      const updated=await updateHistoricalRow(row,{
-        ...mappingPatch(),
-        decision:'rejected',
-        decision_note:note.trim()||'Rejected in Historical Attendance review',
-        reviewed_at:new Date().toISOString(),
-      });
+      await rejectHistoricalRow(row,note.trim()||'Rejected in Historical Attendance review');
       setMessage('Row rejected.');
-      await onSaved(updated);
+      await onSaved({...row,decision:'rejected',row_version:row.row_version+1});
     }catch(error){setMessage(error instanceof Error?error.message:'Row could not be rejected.');}
     finally{setSaving(false);}
   }

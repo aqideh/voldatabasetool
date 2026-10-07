@@ -623,6 +623,16 @@ export async function reviewHistoricalRow(input:{
   return data as Record<string,unknown>;
 }
 
+export async function rejectHistoricalRow(row:HistoricalAttendanceImportRow,reasonNote:string|null) {
+  const {data,error}=await supabase.rpc('maklom_historical_reject_row',{
+    p_row_id:row.id,
+    p_expected_version:row.row_version,
+    p_reason_note:reasonNote,
+  });
+  if(error)throw error;
+  return data as {row_id:string;decision:'rejected'};
+}
+
 export async function updateHistoricalRow(row:HistoricalAttendanceImportRow,patch:Partial<HistoricalAttendanceImportRow>) {
   const {data,error}=await supabase.from('historical_attendance_import_rows')
     .update(patch).eq('id',row.id).eq('row_version',row.row_version).select('*').maybeSingle();
