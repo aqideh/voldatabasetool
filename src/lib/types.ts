@@ -140,7 +140,7 @@ export interface IntelligenceSummary {
   accepted_insights:number; accepted_reviews:number; unresolved_observations:number;
 }
 export interface IntelligenceRetentionRow {
-  cohort_year:number; window_days:number; eligible_volunteers:number; retained_volunteers:number; retention_rate:number|null; as_of_date:string;
+  cohort_year:number|null; cohort_start:string|null; cohort_end:string|null; window_days:number; eligible_volunteers:number; retained_volunteers:number; retention_rate:number|null; as_of_date:string;
 }
 export interface IntelligenceMonthlyRow {
   month:string; unique_volunteers:number; event_participations:number; repeat_volunteers:number;
@@ -158,3 +158,23 @@ export interface IntelligenceFilters {
 }
 
 export interface IntelligenceImpactRow { label:string; unit:string|null; total:number; event_rows:number; }
+
+export interface IntelligenceDateRange { from:string|null; to:string|null; }
+export interface IntelligenceDataBounds { min_date:string|null; max_date:string|null; }
+export interface IntelligenceProgrammeBreakdown {
+  total_unique_volunteers:number; tagged_unique_volunteers:number; untagged_unique_volunteers:number; multi_programme_volunteers:number;
+  rows:Array<{programme:string;unique_volunteers:number}>;
+}
+export interface IntelligenceDataset {
+  volunteers:Array<Pick<VolunteerIntelligenceRow,'maklom_volunteer_id'|'core_volunteer_id'|'name'|'email'|'phone'|'recruited_year'|'tags'|'programmes_registered'>>;
+  participation:Array<{core_volunteer_id:string;event_key:string;event_date:string}>;
+  attendance:Array<{volunteer_id:string|null;event_date:string;attended:boolean;duration_minutes:number|null;calculated_duration_minutes:number|null;staff_credited_duration_minutes:number|null}>;
+  contributions:Array<{volunteer_id:string;occurred_at:string;approved_minutes:number|null;status:string}>;
+  observations:Array<{volunteer_id:string|null;source_kind:string;status:string;payload:Record<string,unknown>|null;reviewed_at:string|null;created_at:string}>;
+  impacts:Array<{event_id:string;label:string;value:number;unit:string|null}>;
+  events:Array<{id:string;start_date:string|null;end_date:string|null;created_at:string|null}>;
+}
+export interface IntelligenceReport {
+  bounds:IntelligenceDataBounds; summary:IntelligenceSummary; retention:IntelligenceRetentionRow[]; monthly:IntelligenceMonthlyRow[];
+  programmes:IntelligenceProgrammeBreakdown; impact:IntelligenceImpactRow[]; volunteers:VolunteerIntelligenceRow[];
+}
