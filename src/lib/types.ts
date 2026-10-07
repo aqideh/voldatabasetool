@@ -83,6 +83,10 @@ export interface HistoricalAttendanceImportRow {
   matched_keluarga_event_id:string|null; matched_keluarga_timeslot_id:string|null;
   committed_keluarga_session_id:string|null; pending_identity_id:string|null;
   source_check_out_at:string|null; source_check_out_kind:'feedback_submission'|'reused_sign_in_form'|'manual'|null;
+  source_sign_in_original_at:string|null; source_check_out_original_at:string|null;
+  effective_sign_in_at:string|null; effective_sign_out_at:string|null;
+  sign_in_evidence_type:'SOURCE_CAPTURED'|'STAFF_CONFIRMED'|'ADMIN_CORRECTED'|'SHIFT_START_ESTIMATE'|'IMPORTED_RECORD'|null;
+  sign_out_evidence_type:'SOURCE_CAPTURED'|'STAFF_CONFIRMED'|'ADMIN_CORRECTED'|'SHIFT_END_ESTIMATE'|'IMPORTED_RECORD'|null;
   paired_source_row_id:string|null; pair_role:'check_in'|'check_out'|null;
 }
 
