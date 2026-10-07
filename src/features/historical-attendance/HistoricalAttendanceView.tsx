@@ -12,6 +12,7 @@ import {
   approveAllSafeHistoricalRows,
   commitHistoricalBatch,
   fetchHistoricalAttendance,
+  fetchHistoricalAttendanceRowsByIds,
   fetchHistoricalContext,
   stageHistoricalWorkbook,
   updateHistoricalRow,
@@ -32,7 +33,17 @@ function decisionColor(decision:string) {
   return 'gray';
 }
 
-export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
+type HistoricalAttendanceFocus = {
+  eventName:string;
+  eventDate:string|null;
+  rowIds:string[];
+};
+
+export function HistoricalAttendanceView({
+  canWrite,
+  focus=null,
+  onClearFocus,
+}:{canWrite:boolean;focus?:HistoricalAttendanceFocus|null;onClearFocus?:()=>void}) {
   const qc=useQueryClient();
   const [batchId,setBatchId]=useState<string|null>(null);
   const [file,setFile]=useState<File|null>(null);
@@ -49,13 +60,19 @@ export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
     queryKey:['historical-attendance',batchId],
     queryFn:()=>fetchHistoricalAttendance(batchId),
   });
+  const focusedRows=useQuery({
+    queryKey:['historical-attendance-focus',focus?.rowIds||[]],
+    queryFn:()=>fetchHistoricalAttendanceRowsByIds(focus?.rowIds||[]),
+    enabled:Boolean(focus?.rowIds.length),
+  });
   const context=useQuery({queryKey:['historical-attendance-context'],queryFn:fetchHistoricalContext});
 
-  const activeBatchId=batchId||data.data?.selected||null;
-  const activeBatch=data.data?.batches.find((b)=>b.id===activeBatchId);
+  const activeBatchId=focus?null:(batchId||data.data?.selected||null);
+  const activeBatch=focus?undefined:data.data?.batches.find((b)=>b.id===activeBatchId);
+  const sourceRows=focus?(focusedRows.data||[]):(data.data?.rows||[]);
   const rows=useMemo(()=>{
     const q=search.trim().toLowerCase();
-    return (data.data?.rows||[]).filter((row)=>{
+    return sourceRows.filter((row)=>{
       const filterMatch=(filter==='all'||row.match_status===filter||row.decision===filter)
         && (!hideMatched||row.match_status!=='matched');
       const searchMatch=!q||[
@@ -64,17 +81,19 @@ export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
       ].join(' ').toLowerCase().includes(q);
       return filterMatch&&searchMatch;
     });
-  },[data.data,filter,hideMatched,search]);
+  },[sourceRows,filter,hideMatched,search]);
 
   const pageCount=Math.max(1,Math.ceil(rows.length/PAGE_SIZE));
   const visible=rows.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
-  const safePending=(data.data?.rows||[]).filter((row)=>row.match_status==='matched'&&row.decision==='pending').length;
-  const approved=(data.data?.rows||[]).filter((row)=>row.decision==='approved').length;
-  const pendingReview=(data.data?.rows||[]).filter((row)=>row.decision==='pending'&&row.match_status!=='matched').length;
+  const safePending=sourceRows.filter((row)=>row.match_status==='matched'&&row.decision==='pending').length;
+  const approved=sourceRows.filter((row)=>row.decision==='approved').length;
+  const pendingReview=sourceRows.filter((row)=>row.decision==='pending'&&row.match_status!=='matched').length;
 
   async function refresh(){
     await Promise.all([
       qc.invalidateQueries({queryKey:['historical-attendance']}),
+      qc.invalidateQueries({queryKey:['historical-attendance-focus']}),
+      qc.invalidateQueries({queryKey:['work-summary']}),
       qc.invalidateQueries({queryKey:['attendance']}),
       qc.invalidateQueries({queryKey:['dashboard-summary']}),
       qc.invalidateQueries({queryKey:['volunteer-intelligence']}),
@@ -127,15 +146,29 @@ export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
 
   return <Stack gap="md">
     <div>
-      <Title order={2}>Historical Attendance</Title>
+      <Title order={2}>{focus?'Resolve event match':'Historical Attendance'}</Title>
       <Text c="dimmed" size="sm">
-        Stage historical XLSX form exports, reconcile them against existing MakLom volunteers and events, review uncertain rows, then commit approved attendance with source provenance.
+        {focus
+          ? 'Review only the flagged source rows from the Work queue and resolve their event or volunteer identity before approving them.'
+          : 'Stage historical XLSX form exports, reconcile them against existing MakLom volunteers and events, review uncertain rows, then commit approved attendance with source provenance.'}
       </Text>
     </div>
 
+    {focus&&<Alert color="orange" variant="light">
+      <Group justify="space-between" align="center">
+        <div>
+          <Text fw={700}>{focus.eventName}</Text>
+          <Text size="sm">
+            {focus.eventDate?focus.eventDate+' · ':''}{focus.rowIds.length} flagged row{focus.rowIds.length===1?'':'s'} from Work.
+          </Text>
+        </div>
+        {onClearFocus&&<Button size="xs" variant="light" onClick={onClearFocus}>Show all historical attendance</Button>}
+      </Group>
+    </Alert>}
+
     {message&&<Alert color={message.kind==='error'?'red':'green'}>{message.text}</Alert>}
 
-    <Paper withBorder radius="lg" p="lg">
+    {!focus&&<Paper withBorder radius="lg" p="lg">
       <Stack gap="md">
         <Group justify="space-between" align="flex-start">
           <div>
@@ -154,9 +187,9 @@ export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
           {canWrite&&<Button ml="auto" loading={busy} disabled={!file} onClick={()=>void stage()}>Stage for review</Button>}
         </Group>
       </Stack>
-    </Paper>
+    </Paper>}
 
-    <Paper withBorder radius="lg" p="md">
+    {!focus&&<Paper withBorder radius="lg" p="md">
       <SimpleGrid cols={{base:1,md:4}}>
         <Select
           label="Import batch"
@@ -202,7 +235,7 @@ export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
           </Button>
         </Stack>
       </SimpleGrid>
-    </Paper>
+    </Paper>}
 
     {activeBatch&&<SimpleGrid cols={{base:2,md:4}}>
       <Paper withBorder radius="md" p="md"><Text size="xs" c="dimmed">Safe & pending</Text><Text fw={800} fz="xl">{safePending}</Text></Paper>
@@ -248,8 +281,8 @@ export function HistoricalAttendanceView({canWrite}:{canWrite:boolean}) {
           </Table.Tr>)}</Table.Tbody>
         </Table>
       </ScrollArea>
-      {!data.isLoading&&!visible.length&&<Text c="dimmed" ta="center" p="xl">No historical attendance rows match these filters.</Text>}
-      {data.isError&&<Alert color="red" m="md">Historical attendance could not be loaded.</Alert>}
+      {!(focus?focusedRows.isLoading:data.isLoading)&&!visible.length&&<Text c="dimmed" ta="center" p="xl">{focus?'No flagged rows remain for this Work item.':'No historical attendance rows match these filters.'}</Text>}
+      {(focus?focusedRows.isError:data.isError)&&<Alert color="red" m="md">{focus?'The flagged rows could not be loaded.':'Historical attendance could not be loaded.'}</Alert>}
     </Paper>
 
     {rows.length>0&&<Group justify="space-between">

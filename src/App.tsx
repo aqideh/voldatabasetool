@@ -48,7 +48,7 @@ function LoadingScreen({label}:{label:string}){
 }
 
 export default function App(){
-  const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[memberLoading,setMemberLoading]=useState(false);const[memberError,setMemberError]=useState('');const[section,setSection]=useState<Section>('Work');const[requestedEventId,setRequestedEventId]=useState<string|null>(null);const[requestedEventName,setRequestedEventName]=useState<string|null>(null);const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();const memberRequest=useRef(0);
+  const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[memberLoading,setMemberLoading]=useState(false);const[memberError,setMemberError]=useState('');const[section,setSection]=useState<Section>('Work');const[requestedEventId,setRequestedEventId]=useState<string|null>(null);const[requestedEventName,setRequestedEventName]=useState<string|null>(null);const[historicalFocus,setHistoricalFocus]=useState<{eventName:string;eventDate:string|null;rowIds:string[]}|null>(null);const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();const memberRequest=useRef(0);
 
   const loadCurrentMember=useCallback(async(current:Session)=>{
     const request=++memberRequest.current;
@@ -104,13 +104,14 @@ export default function App(){
       {primarySections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{setSection(item);close();}}/>)}
       <Box mt="md">
         <Text size="xs" c="dimmed" fw={700} tt="uppercase" px="sm" py={6}>Review tools</Text>
-        {reviewSections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{setSection(item);close();}}/>)}
+        {reviewSections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{if(item==='Historical Attendance')setHistoricalFocus(null);setSection(item);close();}}/>)}
       </Box>
     </Stack></AppShell.Navbar>
     <AppShell.Main bg="gray.0"><Box maw={1600} mx="auto">
       {section==='Work'&&<WorkView
         onNavigate={(target:WorkTarget)=>{setSection(target as Section);close();}}
         onOpenEvent={(eventId,eventName)=>{setRequestedEventId(eventId);setRequestedEventName(eventName);setSection('Events');close();}}
+        onResolveEventMatch={(eventName,eventDate,rowIds)=>{setHistoricalFocus({eventName,eventDate,rowIds});setSection('Historical Attendance');close();}}
       />}
       {section==='Data Dashboard'&&<VolunteerIntelligenceView/>}
       {section==='Volunteer Leads'&&<LeadsView canWrite={canWrite}/>}
@@ -121,7 +122,7 @@ export default function App(){
       {section==='Profile Change Review'&&<ProfileChangeReviewView canWrite={canWrite}/>}
       {section==='Insights & Reviews'&&<ProfileInboxView canWrite={canWrite}/>}
       {section==='Form Attendance'&&<FormAttendanceView canWrite={canWrite} canDelete={canDelete}/>}
-      {section==='Historical Attendance'&&<HistoricalAttendanceView canWrite={canWrite}/>}
+      {section==='Historical Attendance'&&<HistoricalAttendanceView canWrite={canWrite} focus={historicalFocus} onClearFocus={()=>setHistoricalFocus(null)}/>}
       {section==='Profile Reconciliation'&&<ProfileReconciliationView canWrite={canWrite}/>}
       {section==='Data Operations'&&<DataOperationsView canWrite={canWrite}/>}
     </Box></AppShell.Main>
