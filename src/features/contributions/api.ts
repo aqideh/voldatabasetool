@@ -68,15 +68,11 @@ type RawRoster = {
   attendance_person_key:string|null;
 };
 
-type RawEffectiveAttendance = {
+type RawAttendanceState = {
   roster_id:string;
   signed_in_at:string|null;
   signed_out_at:string|null;
   non_attendance_status:string|null;
-  session_id:string|null;
-  session_checked_in_at:string|null;
-  session_checked_out_at:string|null;
-  continuation_type:string|null;
 };
 
 type RawSession = {
@@ -156,8 +152,13 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
       .from('phaseone_roster')
       .select('id,event_id,volunteer_id,volunteer_key,volunteer_name,email,mobile,timeslot_id,attendance_person_key')
       .eq('event_id',eventId)
+      .or('source_assignment_status.is.null,source_assignment_status.neq.invalidated_historical_shift_match')
       .limit(10000),
-    Promise.resolve({data:[] as RawEffectiveAttendance[],error:null}),
+    supabase
+      .from('phaseone_attendance')
+      .select('roster_id,signed_in_at,signed_out_at,non_attendance_status')
+      .eq('event_id',eventId)
+      .limit(10000),
     supabase
       .from('phaseone_attendance_sessions')
       .select('id,event_id,attendance_date,person_key,origin_roster_id,checked_in_at,checked_out_at,updated_at')
@@ -181,7 +182,7 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
   const shifts=(shiftsRes.data||[]) as ContributionSheetShift[];
   const shiftById=new Map(shifts.map((shift)=>[shift.id,shift]));
   const roster=(rosterRes.data||[]) as RawRoster[];
-  const effectiveByRoster=new Map(((effectiveRes.data||[]) as RawEffectiveAttendance[]).map((row)=>[row.roster_id,row]));
+  const attendanceByRoster=new Map(((effectiveRes.data||[]) as RawAttendanceState[]).map((row)=>[row.roster_id,row]));
   const sessions=(sessionsRes.data||[]) as RawSession[];
   const sessionById=new Map(sessions.map((session)=>[session.id,session]));
   const sessionsByPerson=new Map<string,RawSession[]>();
@@ -196,13 +197,12 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
     const shift=shiftById.get(rosterRow.timeslot_id);
     if(!shift)return [];
 
-    const effective=effectiveByRoster.get(rosterRow.id)||null;
-    const nonAttendance=effective?.non_attendance_status==='withdrawn'||effective?.non_attendance_status==='absent'
-      ? effective.non_attendance_status
+    const attendance=attendanceByRoster.get(rosterRow.id)||null;
+    const nonAttendance=attendance?.non_attendance_status==='withdrawn'||attendance?.non_attendance_status==='absent'
+      ? attendance.non_attendance_status
       : null;
 
     let session:RawSession|null=null;
-    if(effective?.session_id)session=sessionById.get(effective.session_id)||null;
     if(!session&&!nonAttendance&&rosterRow.attendance_person_key){
       const candidates=(sessionsByPerson.get(rosterRow.attendance_person_key)||[])
         .map((candidate)=>({candidate,overlap:overlapMs(candidate,shift)}))
@@ -243,8 +243,8 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
       timeslot_id:rosterRow.timeslot_id,
       attendance_person_key:rosterRow.attendance_person_key,
       status,
-      sign_in_at:session?.checked_in_at||effective?.signed_in_at||null,
-      sign_out_at:session?.checked_out_at||effective?.signed_out_at||null,
+      sign_in_at:session?.checked_in_at||attendance?.signed_in_at||null,
+      sign_out_at:session?.checked_out_at||attendance?.signed_out_at||null,
       session_id:session?.id||null,
       session_origin_roster_id:session?.origin_roster_id||null,
       contribution_id:contribution?.id||null,
