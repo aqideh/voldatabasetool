@@ -145,6 +145,19 @@ export async function fetchEventsBundle() {
   };
 }
 
+export async function fetchHistoricalAttendanceRowsByIds(rowIds:string[]) {
+  if(!rowIds.length)return [] as HistoricalAttendanceImportRow[];
+  const {data,error}=await supabase.from('historical_attendance_import_rows')
+    .select('*')
+    .in('id',rowIds)
+    .eq('decision','pending')
+    .order('source_row_number');
+  if(error)throw error;
+  const rows=(data||[]) as HistoricalAttendanceImportRow[];
+  const order=new Map(rowIds.map((id,index)=>[id,index]));
+  return rows.sort((a,b)=>(order.get(a.id)??Number.MAX_SAFE_INTEGER)-(order.get(b.id)??Number.MAX_SAFE_INTEGER));
+}
+
 export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundle> {
   const canonicalEventId = event.source === 'keluarga'
     ? (event.keluarga_event_id || event.id.replace(/^keluarga:/, ''))
