@@ -638,7 +638,68 @@ export async function approveAllSafeHistoricalRows(batchId:string) {
 }
 
 export async function commitHistoricalBatch(batchId:string) {
-  const {data,error}=await supabase.rpc('maklom_commit_historical_attendance_batch',{p_batch_id:batchId});
-  if(error)throw error;
-  return data as {batch_id:string;inserted:number;duplicates:number;pending:number;status:string};
+  const rowsRes=await supabase.from('historical_attendance_import_rows')
+    .select('*')
+    .eq('batch_id',batchId)
+    .eq('decision','approved')
+    .is('committed_attendance_id',null)
+    .is('committed_keluarga_session_id',null)
+    .order('source_row_number');
+  if(rowsRes.error)throw rowsRes.error;
+
+  let inserted=0;
+  let duplicates=0;
+  const failures:string[]=[];
+
+  for(const row of (rowsRes.data||[]) as HistoricalAttendanceImportRow[]){
+    try{
+      if(row.matched_keluarga_event_id){
+        const {data,error}=await supabase.rpc('maklom_event_review_staged_attendance',{
+          p_row_id:row.id,
+          p_expected_version:row.row_version,
+          p_decision:'accept',
+          p_keluarga_event_id:row.matched_keluarga_event_id,
+          p_keluarga_timeslot_id:row.matched_keluarga_timeslot_id,
+          p_target_core_volunteer_id:row.matched_core_volunteer_id,
+          p_reason_note:'Finalized from Historical Attendance review',
+        });
+        if(error)throw error;
+        if((data as any)?.existing_session)duplicates+=1; else inserted+=1;
+      }else if(row.matched_event_id){
+        const {error}=await supabase.rpc('maklom_event_review_legacy_staged_attendance',{
+          p_row_id:row.id,
+          p_expected_version:row.row_version,
+          p_decision:'accept',
+          p_shift_id:row.matched_shift_id,
+          p_reason_note:'Finalized from Historical Attendance review',
+        });
+        if(error)throw error;
+        const verified=await supabase.from('historical_attendance_import_rows')
+          .select('match_status')
+          .eq('id',row.id)
+          .single();
+        if(verified.error)throw verified.error;
+        if(verified.data.match_status==='duplicate')duplicates+=1; else inserted+=1;
+      }else{
+        failures.push('Row '+row.source_row_number+': no canonical event is selected.');
+      }
+    }catch(error){
+      failures.push('Row '+row.source_row_number+': '+(error instanceof Error?error.message:'Could not finalize row.'));
+    }
+  }
+
+  const remaining=await supabase.from('historical_attendance_import_rows')
+    .select('id',{count:'exact',head:true})
+    .eq('batch_id',batchId)
+    .eq('decision','pending');
+  if(remaining.error)throw remaining.error;
+
+  return {
+    batch_id:batchId,
+    inserted,
+    duplicates,
+    pending:remaining.count||0,
+    status:(remaining.count||0)>0?'partial':'committed',
+    failures,
+  };
 }
