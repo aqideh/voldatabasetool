@@ -804,6 +804,9 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
             row.matched_core_volunteer_id&&row.source_sign_in_at&&(resolution?.safe||manualTimeslotId)
           );
           const acceptTimeslotId=resolution?.safe?resolution.timeslotId:manualTimeslotId;
+          const timingShift=(shifts as EventShiftRow[]).find((shift)=>shift.keluarga_timeslot_id===acceptTimeslotId)
+            ||(shifts as EventShiftRow[]).find((shift)=>shift.keluarga_timeslot_id===row.matched_keluarga_timeslot_id)
+            ||null;
           return <Paper key={row.id} withBorder radius="md" p="sm">
             <Group justify="space-between" align="flex-start" wrap="nowrap">
               <div style={{minWidth:0}}>
@@ -822,6 +825,12 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
                   {' · '}{row.review_flags?.map((x)=>x.replaceAll('_',' ')).join(' · ')||'No review flags'}
                 </Text>
                 {row.matched_core_volunteer_id&&!resolution?.safe&&<Text size="xs" c="orange" mt={4}>{resolution?.reason}</Text>}
+                <StagedAttendanceTimingEditor
+                  row={row}
+                  shift={timingShift}
+                  disabled={busy}
+                  onSaved={async()=>{setMessage({kind:'success',text:'Attendance timing saved. Review the refreshed row, then accept it.'});await reload();}}
+                />
               </div>
               {canWrite&&<Group gap="xs" wrap="nowrap">
                 {!row.matched_core_volunteer_id&&<Button size="xs" variant="light" disabled={busy} onClick={()=>setIdentityRow(row)}>Resolve volunteer</Button>}
@@ -1301,6 +1310,7 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, focuse
           const duration=checkout&&row.source_sign_in_at
             ? Math.max(0,Math.floor((Date.parse(checkout)-Date.parse(row.source_sign_in_at))/60000))
             : row.reported_minutes;
+          const timingShift=(shifts as EventShiftRow[]).find((shift)=>shift.id===selectedShift)||null;
           return <Paper key={row.id} withBorder radius="md" p="sm">
             <Group justify="space-between" align="flex-start" wrap="nowrap">
               <div style={{minWidth:0,flex:1}}>
@@ -1323,6 +1333,12 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, focuse
                 {suggested.length===1&&candidates.length>1&&<Text size="xs" c="blue" mt={4}>
                   Suggested from sign-in time: {suggested[0].name}
                 </Text>}
+                <StagedAttendanceTimingEditor
+                  row={row}
+                  shift={timingShift}
+                  disabled={reviewBusy}
+                  onSaved={async()=>{setStatus('Attendance timing saved. Review the refreshed row, then confirm it.');await reloadLegacyReview();}}
+                />
               </div>
               {canWrite&&<Stack gap="xs" w={220}>
                 {!row.matched_core_volunteer_id&&<Button size="xs" variant="light" onClick={()=>setIdentityRow(row)} disabled={reviewBusy}>
