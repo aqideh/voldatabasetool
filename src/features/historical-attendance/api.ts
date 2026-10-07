@@ -43,6 +43,8 @@ type PreviewRow = Omit<HistoricalAttendanceImportRow,
   'id'|'batch_id'|'committed_attendance_id'|'reviewed_at'|'reviewed_by'|'duplicate_of_attendance_id'|'row_version'
   |'matched_keluarga_event_id'|'matched_keluarga_timeslot_id'|'committed_keluarga_session_id'|'pending_identity_id'
   |'source_check_out_at'|'source_check_out_kind'|'paired_source_row_id'|'pair_role'
+  |'source_sign_in_original_at'|'source_check_out_original_at'|'effective_sign_in_at'|'effective_sign_out_at'
+  |'sign_in_evidence_type'|'sign_out_evidence_type'
 >;
 
 type HistoricalContext = {
@@ -588,6 +590,31 @@ export async function createHistoricalVolunteerFromRow(input:{
     phone:string|null;
     created:boolean;
   };
+}
+
+export async function resolveHistoricalAttendanceTimes(input:{
+  row:HistoricalAttendanceImportRow;
+  effectiveSignIn:string;
+  effectiveSignOut:string|null;
+  signInEvidenceType:HistoricalAttendanceImportRow['sign_in_evidence_type'];
+  signOutEvidenceType:HistoricalAttendanceImportRow['sign_out_evidence_type'];
+  reasonCode:string;
+  reasonNote:string|null;
+  batchId:string|null;
+}) {
+  const {data,error}=await supabase.rpc('maklom_resolve_historical_attendance_times',{
+    p_row_id:input.row.id,
+    p_expected_version:input.row.row_version,
+    p_effective_sign_in:input.effectiveSignIn,
+    p_effective_sign_out:input.effectiveSignOut,
+    p_sign_in_evidence_type:input.signInEvidenceType,
+    p_sign_out_evidence_type:input.signOutEvidenceType,
+    p_reason_code:input.reasonCode,
+    p_reason_note:input.reasonNote,
+    p_batch_id:input.batchId,
+  });
+  if(error)throw error;
+  return data as HistoricalAttendanceImportRow;
 }
 
 export async function reviewHistoricalRow(input:{
