@@ -216,6 +216,7 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
     else if(nonAttendance==='absent')status='absent';
     else if(session?.checked_out_at)status='attended';
     else if(session?.checked_in_at)status='checked_in';
+    else if(Date.parse(shift.ends_at)<Date.now())status='absent';
 
     const contribution=session?contributionBySession.get(session.id)||null:null;
 
