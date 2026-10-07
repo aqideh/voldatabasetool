@@ -48,7 +48,7 @@ export function WorkView({onNavigate,onOpenEvent,onResolveEventMatch}:Props){
   });
   const s=summary.data;
   const blockerCount=(s?.stagedAttendance||0)+(s?.duplicateCases||0)+(s?.unresolvedObservations||0)+(s?.reconciliationMatches||0)+(s?.formAttendanceWarnings||0);
-  const confirmationCount=(s?.contributionReviews||0)+(s?.profileChanges||0)+(s?.reconciliationChanges||0);
+  const confirmationCount=(s?.approvedAttendanceToFinalize||0)+(s?.contributionReviews||0)+(s?.profileChanges||0)+(s?.reconciliationChanges||0);
 
   return <Stack gap="lg">
     <Group justify="space-between" align="flex-end">
@@ -113,6 +113,7 @@ export function WorkView({onNavigate,onOpenEvent,onResolveEventMatch}:Props){
       <Title order={4}>Confirm next</Title>
       <Text c="dimmed" size="sm" mb="sm">These decisions determine what becomes authoritative in MakLom.</Text>
       <SimpleGrid cols={{base:1,sm:2,xl:4}}>
+        <QueueCard label="Approved attendance" count={s?.approvedAttendanceToFinalize||0} note="Historical attendance has been approved but not yet finalized into authoritative attendance records." button="Finalize attendance" onClick={()=>onNavigate('Historical Attendance')} color="blue"/>
         <QueueCard label="Contribution hours" count={s?.contributionReviews||0} note="Attendance-derived hours waiting for approval or re-review before they count as approved KELUARGA time." button="Review contributions" onClick={()=>onNavigate('Contribution Review')} color="blue"/>
         <QueueCard label="Profile changes" count={s?.profileChanges||0} note="Volunteer profile changes waiting for Volunteer Management confirmation." button="Review profile changes" onClick={()=>onNavigate('Profile Change Review')} color="blue"/>
         <QueueCard label="Reconciliation fields" count={s?.reconciliationChanges||0} note="Proposed imported profile fields waiting for approve/reject decisions." button="Open reconciliation" onClick={()=>onNavigate('Profile Reconciliation')} color="blue"/>
