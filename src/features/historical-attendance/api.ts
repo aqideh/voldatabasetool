@@ -483,6 +483,7 @@ export async function fetchHistoricalAttendanceRowsByIds(rowIds:string[]) {
   const {data,error}=await supabase.from('historical_attendance_import_rows')
     .select('*')
     .in('id',rowIds)
+    .eq('decision','pending')
     .order('event_date')
     .order('source_row_number');
   if(error)throw error;
