@@ -74,11 +74,32 @@ export async function fetchWorkSummary():Promise<WorkSummary>{
   const failed=results.find((result)=>result.error);
   if(failed?.error)throw failed.error;
 
+  const legacyEventIds=[...new Set(
+    (staged.data||[])
+      .map((row)=>row.matched_event_id)
+      .filter((id):id is string=>Boolean(id))
+  )];
+  const legacyCanonicalById=new Map<string,string>();
+  if(legacyEventIds.length){
+    const legacyLinks=await supabase.from('events')
+      .select('id,keluarga_event_id')
+      .in('id',legacyEventIds);
+    if(legacyLinks.error)throw legacyLinks.error;
+    for(const row of legacyLinks.data||[]){
+      if(row.keluarga_event_id)legacyCanonicalById.set(row.id,row.keluarga_event_id);
+    }
+  }
+
   const eventMap=new Map<string,WorkEventGroup>();
   for(const row of staged.data||[]){
+    const linkedCanonicalEventId=row.matched_event_id
+      ? legacyCanonicalById.get(row.matched_event_id)||null
+      : null;
     const eventId=row.matched_keluarga_event_id
       ? 'keluarga:'+row.matched_keluarga_event_id
-      : row.matched_event_id||null;
+      : linkedCanonicalEventId
+        ? 'keluarga:'+linkedCanonicalEventId
+        : row.matched_event_id||null;
     const eventName=String(row.event_name||'Unknown event');
     const key=eventId||'name:'+eventName.toLowerCase()+'|'+String(row.event_date||'');
     const current=eventMap.get(key)||{

@@ -15,7 +15,7 @@ export type WorkTarget =
 
 interface Props {
   onNavigate:(target:WorkTarget)=>void;
-  onOpenEvent:(eventId:string|null,eventName:string)=>void;
+  onOpenEvent:(eventId:string|null,eventName:string,rowIds:string[])=>void;
   onResolveEventMatch:(eventName:string,eventDate:string|null,rowIds:string[])=>void;
 }
 
@@ -89,7 +89,7 @@ export function WorkView({onNavigate,onOpenEvent,onResolveEventMatch}:Props){
               </Group>
             </div>
             {event.eventId
-              ? <Button size="xs" onClick={()=>onOpenEvent(event.eventId,event.eventName)}>Open event</Button>
+              ? <Button size="xs" onClick={()=>onOpenEvent(event.eventId,event.eventName,event.rowIds)}>Open event</Button>
               : <Button size="xs" variant="light" color="orange" onClick={()=>onResolveEventMatch(event.eventName,event.eventDate,event.rowIds)}>Resolve event match</Button>}
           </Group>
         </Paper>)}
