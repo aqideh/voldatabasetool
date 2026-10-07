@@ -25,6 +25,7 @@ import {
   updateEvent,
 } from './api';
 import type { AttendanceRow, EventRow, EventShiftRow, HistoricalAttendanceImportRow } from '../../lib/types';
+import { fetchContributionEventSheet, type ContributionSheetRowStatus } from '../contributions/api';
 import type { EventRosterDetailRow, StagedIdentityCandidate } from './api';
 
 interface Props {
@@ -48,6 +49,40 @@ const REASON_OPTIONS=[
 function sgDateTime(value:string|null|undefined) {
   if(!value)return '—';
   return new Date(value).toLocaleString('en-SG',{timeZone:'Asia/Singapore'});
+}
+
+function sgTime(value:string|null|undefined) {
+  if(!value)return '—';
+  return new Date(value).toLocaleTimeString('en-SG',{
+    timeZone:'Asia/Singapore',
+    hour:'2-digit',
+    minute:'2-digit',
+    hour12:true,
+  });
+}
+
+function durationLabel(minutes:number|null|undefined) {
+  if(minutes==null)return '—';
+  const safe=Math.max(0,Math.round(minutes));
+  const hours=Math.floor(safe/60);
+  const mins=safe%60;
+  return hours?hours+'h '+mins+'m':mins+'m';
+}
+
+function participationStatusRank(status:ContributionSheetRowStatus) {
+  if(status==='attended')return 0;
+  if(status==='checked_in')return 1;
+  if(status==='no_record')return 2;
+  if(status==='absent')return 3;
+  return 4;
+}
+
+function participationStatusBadge(status:ContributionSheetRowStatus) {
+  if(status==='attended')return <Badge color="green" variant="light">Present</Badge>;
+  if(status==='checked_in')return <Badge color="blue" variant="light">Checked in</Badge>;
+  if(status==='absent')return <Badge color="red" variant="light">Absent</Badge>;
+  if(status==='withdrawn')return <Badge color="gray" variant="light">Withdrawn</Badge>;
+  return <Badge color="orange" variant="light">No attendance record</Badge>;
 }
 
 function dateTimeLocalValue(value:string|null|undefined) {
@@ -291,6 +326,24 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
   });
 
   const eventId=event.keluarga_event_id||event.id.replace(/^keluarga:/,'');
+  const participation=useQuery({
+    queryKey:['event-participation',eventId],
+    queryFn:()=>fetchContributionEventSheet(eventId),
+  });
+  const participationRows=useMemo(()=>[...(participation.data?.rows||[])].sort((a,b)=>
+    participationStatusRank(a.status)-participationStatusRank(b.status)
+      || a.volunteer_name.localeCompare(b.volunteer_name)
+  ),[participation.data?.rows]);
+  const participationShiftById=useMemo(
+    ()=>new Map((participation.data?.shifts||[]).map((shift)=>[shift.id,shift])),
+    [participation.data?.shifts],
+  );
+  const attendanceBySessionId=useMemo(
+    ()=>new Map((people.data?.attendance||[])
+      .filter((row)=>row.record_source==='keluarga')
+      .map((row)=>[row.id.replace(/^keluarga:/,''),row])),
+    [people.data?.attendance],
+  );
   const pending=(people.data?.staged||[]).filter((row)=>row.decision==='pending');
 
   const pairProposals=useMemo(()=>{
@@ -331,6 +384,8 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
     await Promise.all([
       qc.invalidateQueries({queryKey:['event-people',event.id]}),
       qc.invalidateQueries({queryKey:['event-audit',event.id]}),
+      qc.invalidateQueries({queryKey:['event-participation',eventId]}),
+      qc.invalidateQueries({queryKey:['contribution-event-sheet',eventId]}),
       onRefresh(),
     ]);
   }
@@ -424,11 +479,55 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
           <Text size="xs" c="dimmed" mt={4}>MakLom is the staff operations surface. Publishing details remain owned by Keluarga; operational actions below use governed commands and audit logging.</Text>
         </div>
         <Group gap="xs">
-          <Badge variant="light">{people.data?.roster.length||0} rostered</Badge>
-          <Badge variant="light" color="green">{people.data?.attendance.length||0} attendance</Badge>
+          <Badge variant="light">{participationRows.length} roster rows</Badge>
+          <Badge variant="light" color="green">{participationRows.filter((row)=>row.status==='attended').length} present</Badge>
+          <Badge variant="light" color="red">{participationRows.filter((row)=>row.status==='absent').length} absent</Badge>
           <Badge variant="light" color={reviewRequiredCount?'orange':'gray'}>{reviewRequiredCount} review required</Badge>
         </Group>
       </Group>
+    </Paper>
+
+    <Paper withBorder radius="lg" p="md">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Title order={4}>Roster & attendance</Title>
+          <Text size="sm" c="dimmed">Full event roster with attendance outcome, scheduled shift, reported sign-in/out and contributed time. Present volunteers are shown first; absent, withdrawn and unresolved rows remain visible below.</Text>
+        </div>
+        <Badge variant="light">{participationRows.length} rows</Badge>
+      </Group>
+      {participation.isError&&<Alert color="red" mt="md">{participation.error instanceof Error?participation.error.message:'Event participation could not be loaded.'}</Alert>}
+      <ScrollArea mt="sm">
+        <Table striped highlightOnHover miw={1180} verticalSpacing="xs">
+          <Table.Thead><Table.Tr>
+            <Table.Th>Volunteer</Table.Th><Table.Th>Status</Table.Th><Table.Th>Shift</Table.Th>
+            <Table.Th>Scheduled</Table.Th><Table.Th>Sign in</Table.Th><Table.Th>Sign out</Table.Th>
+            <Table.Th>Hours</Table.Th><Table.Th></Table.Th>
+          </Table.Tr></Table.Thead>
+          <Table.Tbody>{participationRows.map((row)=>{
+            const shift=participationShiftById.get(row.timeslot_id);
+            const isPrimary=!row.session_id||row.session_origin_roster_id===row.roster_id;
+            const attendanceRecord=row.session_id?attendanceBySessionId.get(row.session_id)||null:null;
+            return <Table.Tr key={row.roster_id}>
+              <Table.Td>
+                <Text fw={600} size="sm">{row.volunteer_name}</Text>
+                <Text size="xs" c="dimmed">{row.volunteer_code||row.email||row.mobile||'—'}</Text>
+              </Table.Td>
+              <Table.Td>{participationStatusBadge(row.status)}</Table.Td>
+              <Table.Td><Text size="sm">{shift?.label?.trim()||'General'}</Text></Table.Td>
+              <Table.Td><Text size="sm">{shift?sgTime(shift.starts_at)+'–'+sgTime(shift.ends_at):'—'}</Text></Table.Td>
+              <Table.Td><Text size="sm">{sgTime(row.sign_in_at)}</Text></Table.Td>
+              <Table.Td><Text size="sm">{sgTime(row.sign_out_at)}</Text></Table.Td>
+              <Table.Td>
+                {isPrimary
+                  ? <Text size="sm" fw={row.operational_minutes!=null?600:400}>{durationLabel(row.operational_minutes)}</Text>
+                  : <Text size="xs" c="dimmed">Included in shared session</Text>}
+              </Table.Td>
+              <Table.Td>{canWrite&&attendanceRecord&&<Button size="xs" variant="subtle" onClick={()=>setAttendanceRow(attendanceRecord)}>Correct</Button>}</Table.Td>
+            </Table.Tr>;
+          })}</Table.Tbody>
+        </Table>
+      </ScrollArea>
+      {!participation.isLoading&&!participation.isError&&!participationRows.length&&<Text c="dimmed" size="sm" mt="sm">No roster rows are linked to this event.</Text>}
     </Paper>
 
     <Paper withBorder radius="lg" p="md">
@@ -519,7 +618,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
 
     <Paper withBorder radius="lg" p="md">
       <Group justify="space-between">
-        <div><Title order={4}>Roster</Title><Text size="sm" c="dimmed">Operational assignments and event-scoped logistics.</Text></div>
+        <div><Title order={4}>Roster logistics</Title><Text size="sm" c="dimmed">Event-specific contact, T-shirt and dietary overrides. Attendance status is shown in the roster & attendance sheet above.</Text></div>
         <Badge variant="light">{people.data?.roster.length||0}</Badge>
       </Group>
       <ScrollArea mt="sm">
@@ -542,34 +641,6 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
           </Table.Tr>)}</Table.Tbody>
         </Table>
       </ScrollArea>
-    </Paper>
-
-    <Paper withBorder radius="lg" p="md">
-      <Group justify="space-between">
-        <div><Title order={4}>Attendance</Title><Text size="sm" c="dimmed">Canonical sessions. Staff corrections require reason category, note, version check and audit entry.</Text></div>
-        <Badge color="green" variant="light">{people.data?.attendance.length||0}</Badge>
-      </Group>
-      <ScrollArea mt="sm">
-        <Table striped highlightOnHover miw={1050} verticalSpacing="xs">
-          <Table.Thead><Table.Tr>
-            <Table.Th>Volunteer</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Check-in</Table.Th><Table.Th>Check-out</Table.Th>
-            <Table.Th>Operational</Table.Th><Table.Th>Credited</Table.Th><Table.Th>Contribution</Table.Th><Table.Th></Table.Th>
-          </Table.Tr></Table.Thead>
-          <Table.Tbody>{(people.data?.attendance||[]).map((row)=><Table.Tr key={row.id}>
-            <Table.Td><Text fw={600} size="sm">{row.name}</Text><Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text></Table.Td>
-            <Table.Td>{row.shift_label||'General'}</Table.Td>
-            <Table.Td>{sgDateTime(row.sign_in_at)}</Table.Td>
-            <Table.Td>{sgDateTime(row.sign_out_at)}</Table.Td>
-            <Table.Td>{row.duration_minutes??0} min</Table.Td>
-            <Table.Td>{row.staff_credited_duration_minutes!==null&&row.staff_credited_duration_minutes!==undefined
-              ? row.staff_credited_duration_minutes+' min'
-              : <Text size="xs" c="dimmed">Not approved</Text>}</Table.Td>
-            <Table.Td><Badge size="xs" variant="light">{row.contribution_status||'—'}</Badge></Table.Td>
-            <Table.Td>{canWrite&&row.record_source==='keluarga'&&<Button size="xs" variant="subtle" onClick={()=>setAttendanceRow(row)}>Correct</Button>}</Table.Td>
-          </Table.Tr>)}</Table.Tbody>
-        </Table>
-      </ScrollArea>
-      {!people.isLoading&&!people.data?.attendance.length&&<Text c="dimmed" size="sm" mt="sm">No committed attendance yet.</Text>}
     </Paper>
 
     <Paper withBorder radius="lg" p="md">
@@ -1032,22 +1103,36 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefr
         <Badge variant="light">{people.data?.attendance.length||0} assignment{(people.data?.attendance.length||0)===1?'':'s'}</Badge>
       </Group>
       <ScrollArea mt="sm">
-        <Table striped highlightOnHover miw={900} verticalSpacing="xs">
+        <Table striped highlightOnHover miw={1000} verticalSpacing="xs">
           <Table.Thead><Table.Tr>
-            <Table.Th>Volunteer</Table.Th><Table.Th>Shift</Table.Th><Table.Th>Status</Table.Th>
-            <Table.Th>Sign in</Table.Th><Table.Th>Sign out</Table.Th><Table.Th>Credited</Table.Th>
+            <Table.Th>Volunteer</Table.Th><Table.Th>Status</Table.Th><Table.Th>Shift</Table.Th>
+            <Table.Th>Scheduled</Table.Th><Table.Th>Sign in</Table.Th><Table.Th>Sign out</Table.Th><Table.Th>Hours</Table.Th>
           </Table.Tr></Table.Thead>
-          <Table.Tbody>{(people.data?.attendance||[]).map((row)=><Table.Tr key={row.id}>
-            <Table.Td>
-              <Text fw={600} size="sm">{row.name}</Text>
-              <Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text>
-            </Table.Td>
-            <Table.Td><Text size="sm">{(shifts as EventShiftRow[]).find((shift)=>shift.id===row.shift_id)?.name||row.shift_label||'General'}</Text></Table.Td>
-            <Table.Td><Badge size="xs" variant="light" color={row.attended?'green':'gray'}>{row.attended?'Attended':'Not attended'}</Badge></Table.Td>
-            <Table.Td><Text size="sm">{sgDateTime(row.sign_in_at)}</Text></Table.Td>
-            <Table.Td><Text size="sm">{sgDateTime(row.sign_out_at)}</Text></Table.Td>
-            <Table.Td><Text size="sm">{row.duration_minutes??0} min</Text></Table.Td>
-          </Table.Tr>)}</Table.Tbody>
+          <Table.Tbody>{[...(people.data?.attendance||[])].sort((a,b)=>
+            Number(b.attended)-Number(a.attended)||a.name.localeCompare(b.name)
+          ).map((row)=>{
+            const shift=(shifts as EventShiftRow[]).find((item)=>item.id===row.shift_id);
+            const observedMinutes=row.calculated_duration_minutes??(
+              row.sign_in_at&&row.sign_out_at
+                ? Math.max(0,Math.floor((Date.parse(row.sign_out_at)-Date.parse(row.sign_in_at))/60000))
+                : null
+            );
+            return <Table.Tr key={row.id}>
+              <Table.Td>
+                <Text fw={600} size="sm">{row.name}</Text>
+                <Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text>
+              </Table.Td>
+              <Table.Td><Badge size="xs" variant="light" color={row.attended?'green':'red'}>{row.attended?'Present':'Absent'}</Badge></Table.Td>
+              <Table.Td><Text size="sm">{shift?.name||row.shift_label||'General'}</Text></Table.Td>
+              <Table.Td><Text size="sm">{shift?.start_time?String(shift.start_time).slice(0,5)+'–'+String(shift.end_time||'').slice(0,5):'—'}</Text></Table.Td>
+              <Table.Td><Text size="sm">{sgTime(row.sign_in_at)}</Text></Table.Td>
+              <Table.Td><Text size="sm">{sgTime(row.sign_out_at)}</Text></Table.Td>
+              <Table.Td>
+                <Text size="sm" fw={row.attended?600:400}>{row.attended?durationLabel(observedMinutes??row.duration_minutes):'—'}</Text>
+                {row.attended&&observedMinutes!=null&&row.duration_minutes!==observedMinutes&&<Text size="xs" c="dimmed">Recorded credit: {durationLabel(row.duration_minutes)}</Text>}
+              </Table.Td>
+            </Table.Tr>;
+          })}</Table.Tbody>
         </Table>
       </ScrollArea>
       {!people.isLoading&&!people.data?.attendance.length&&<Text c="dimmed" size="sm" mt="sm">No assignment or attendance records are linked to this event yet.</Text>}
