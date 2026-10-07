@@ -157,11 +157,7 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
       .select('id,event_id,volunteer_id,volunteer_key,volunteer_name,email,mobile,timeslot_id,attendance_person_key')
       .eq('event_id',eventId)
       .limit(10000),
-    supabase
-      .from('phaseone_attendance_effective')
-      .select('roster_id,signed_in_at,signed_out_at,non_attendance_status,session_id,session_checked_in_at,session_checked_out_at,continuation_type')
-      .eq('event_id',eventId)
-      .limit(10000),
+    Promise.resolve({data:[] as RawEffectiveAttendance[],error:null}),
     supabase
       .from('phaseone_attendance_sessions')
       .select('id,event_id,attendance_date,person_key,origin_roster_id,checked_in_at,checked_out_at,updated_at')
