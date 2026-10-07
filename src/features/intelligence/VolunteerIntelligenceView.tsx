@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Badge, Button, Group, NumberInput, Pagination, Paper, ScrollArea, Select, SimpleGrid, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { fetchAllVolunteerIntelligence, fetchImpactSummary, fetchIntelligenceSummary, fetchMonthlyParticipation, fetchRetentionSummary, fetchVolunteerIntelligence } from './api';
+import { fetchAllVolunteerIntelligence, fetchImpactSummary, fetchIntelligenceSummary, fetchMonthlyParticipation, fetchProgrammeBreakdown, fetchRetentionSummary, fetchVolunteerIntelligence } from './api';
 import type { IntelligenceFilters, VolunteerIntelligenceRow } from '../../lib/types';
 import { minutesLabel } from '../../lib/utils';
 
@@ -24,6 +24,7 @@ export function VolunteerIntelligenceView(){
   const summary=useQuery({queryKey:['intelligence-summary'],queryFn:fetchIntelligenceSummary});
   const retention=useQuery({queryKey:['intelligence-retention'],queryFn:fetchRetentionSummary});
   const monthly=useQuery({queryKey:['intelligence-monthly'],queryFn:fetchMonthlyParticipation});
+  const programmes=useQuery({queryKey:['intelligence-programmes'],queryFn:fetchProgrammeBreakdown});
   const impact=useQuery({queryKey:['intelligence-impact'],queryFn:fetchImpactSummary});
   const volunteers=useQuery({queryKey:['volunteer-intelligence',filters],queryFn:()=>fetchVolunteerIntelligence(filters),placeholderData:keepPreviousData});
   const totalPages=Math.max(1,Math.ceil((volunteers.data?.count||0)/PAGE_SIZE));
@@ -33,6 +34,8 @@ export function VolunteerIntelligenceView(){
   return <Stack gap="lg">
     <Group justify="space-between" align="flex-end"><div><Title order={2}>Volunteer Intelligence</Title><Text c="dimmed" size="sm">Cross-event engagement, retention, recognised hours and reviewed Volunteer Management signals.</Text></div><Button variant="light" loading={exporting} onClick={()=>void doExport()}>Export filtered CSV</Button></Group>
     <SimpleGrid cols={{base:2,md:3,xl:6}}>
+      <Metric label="Unique volunteers" value={Number(programmes.data?.total_unique_volunteers??s?.total_volunteers??0).toLocaleString()} note="deduplicated canonical volunteer identities"/>
+      <Metric label="Programme-tagged" value={Number(programmes.data?.tagged_unique_volunteers||0).toLocaleString()} note="tagged to at least one programme"/>
       <Metric label="Deployed volunteers" value={Number(s?.deployed_volunteers||0).toLocaleString()} note="at least one attended event"/>
       <Metric label="Repeat engagement" value={rate(s?.repeat_engagement_rate??null)} note={`${Number(s?.repeat_volunteers||0)} volunteers with 2+ events`}/>
       <Metric label="Active in last 90d" value={Number(s?.active_last_90d||0).toLocaleString()} note="deduplicated attended events"/>
@@ -50,6 +53,24 @@ export function VolunteerIntelligenceView(){
         <Text size="xs" c="dimmed" mt="md">Only MakLom-accepted observations appear here; event source records remain contextual and retain provenance.</Text>
       </Paper>
     </SimpleGrid>
+    <Paper withBorder radius="lg" p="lg">
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Title order={4}>Volunteers by programme</Title>
+          <Text c="dimmed" size="sm">Unique volunteers tagged to each programme. A volunteer tagged to multiple programmes appears once in each relevant programme.</Text>
+        </div>
+        <Badge variant="light">{Number(programmes.data?.total_unique_volunteers||0).toLocaleString()} unique volunteers</Badge>
+      </Group>
+      <SimpleGrid cols={{base:1,sm:2,lg:4}} mt="md">
+        {(programmes.data?.rows||[]).map((r)=><Paper key={r.programme} withBorder radius="md" p="md"><Text size="xs" c="dimmed">{r.programme}</Text><Text fz={28} fw={800}>{r.unique_volunteers.toLocaleString()}</Text><Text size="xs" c="dimmed">unique volunteers</Text></Paper>)}
+      </SimpleGrid>
+      {!programmes.isLoading&&!programmes.data?.rows.length&&<Text c="dimmed" size="sm" mt="md">No programme tags have been recorded yet.</Text>}
+      <Group gap="lg" mt="md">
+        <Text size="sm"><strong>{Number(programmes.data?.untagged_unique_volunteers||0).toLocaleString()}</strong> not tagged to a programme</Text>
+        <Text size="sm"><strong>{Number(programmes.data?.multi_programme_volunteers||0).toLocaleString()}</strong> tagged to multiple programmes</Text>
+      </Group>
+    </Paper>
+
     <Paper withBorder radius="lg" p="lg"><Title order={4}>Monthly participation</Title><ScrollArea><Table mt="sm" miw={720}>
       <Table.Thead><Table.Tr><Table.Th>Month</Table.Th><Table.Th ta="right">Unique volunteers</Table.Th><Table.Th ta="right">Participations</Table.Th><Table.Th ta="right">2+ events in month</Table.Th><Table.Th ta="right">Historical time</Table.Th><Table.Th ta="right">Approved KELUARGA</Table.Th></Table.Tr></Table.Thead>
       <Table.Tbody>{(monthly.data||[]).map((r)=><Table.Tr key={r.month}><Table.Td>{new Date(r.month+'T00:00:00').toLocaleDateString('en-SG',{month:'short',year:'numeric'})}</Table.Td><Table.Td ta="right">{r.unique_volunteers}</Table.Td><Table.Td ta="right">{r.event_participations}</Table.Td><Table.Td ta="right">{r.repeat_volunteers}</Table.Td><Table.Td ta="right">{minutesLabel(Number(r.historical_credited_minutes))}</Table.Td><Table.Td ta="right">{minutesLabel(Number(r.approved_keluarga_minutes))}</Table.Td></Table.Tr>)}</Table.Tbody>
