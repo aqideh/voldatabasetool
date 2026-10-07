@@ -82,7 +82,7 @@ export async function fetchWorkSummary():Promise<WorkSummary>{
       count:0,
       unresolvedIdentities:0,
       reviewRows:0,
-      rowIds:[],
+      rowIds:[] as string[],
     };
     current.count+=1;
     current.rowIds.push(row.id);
