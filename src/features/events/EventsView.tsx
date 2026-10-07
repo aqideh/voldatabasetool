@@ -29,6 +29,7 @@ import {
 import type { AttendanceRow, EventRow, EventShiftRow, HistoricalAttendanceImportRow } from '../../lib/types';
 import { fetchContributionEventSheet, type ContributionSheetRowStatus } from '../contributions/api';
 import type { EventRosterDetailRow, StagedIdentityCandidate } from './api';
+import { resolveHistoricalAttendanceTimes } from '../historical-attendance/api';
 
 interface Props {
   canWrite: boolean;
@@ -134,6 +135,7 @@ export function EventsView({ canWrite, canDelete, requestedEventId=null, request
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['events-bundle'] }),
       qc.invalidateQueries({ queryKey: ['event-people'] }),
+      qc.invalidateQueries({ queryKey: ['event-focused-staged'] }),
       qc.invalidateQueries({ queryKey: ['event-audit'] }),
       qc.invalidateQueries({ queryKey: ['attendance'] }),
       qc.invalidateQueries({ queryKey: ['historical-attendance'] }),
@@ -348,6 +350,127 @@ function resolveStagedShift(
   return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'No event shift contains the source sign-in time.'};
 }
 
+function shiftBoundaryLocal(shift:EventShiftRow|null|undefined,kind:'start'|'end') {
+  if(!shift)return '';
+  const time=kind==='start'?shift.start_time:shift.end_time;
+  if(!time)return '';
+  return shift.shift_date+'T'+String(time).slice(0,5);
+}
+
+function sameTimestamp(a:string|null,b:string|null) {
+  if(!a&&!b)return true;
+  if(!a||!b)return false;
+  const left=Date.parse(a),right=Date.parse(b);
+  return Number.isFinite(left)&&Number.isFinite(right)&&left===right;
+}
+
+function StagedAttendanceTimingEditor({
+  row,
+  shift,
+  disabled,
+  onSaved,
+}:{
+  row:HistoricalAttendanceImportRow;
+  shift:EventShiftRow|null;
+  disabled:boolean;
+  onSaved:()=>Promise<void>;
+}) {
+  const persistedSignIn=row.effective_sign_in_at||row.source_sign_in_at;
+  const persistedSignOut=row.effective_sign_out_at||row.source_check_out_at;
+  const [signIn,setSignIn]=useState(dateTimeLocalValue(persistedSignIn));
+  const [signOut,setSignOut]=useState(dateTimeLocalValue(persistedSignOut));
+  const [signOutEvidence,setSignOutEvidence]=useState<string>(
+    row.sign_out_evidence_type
+      ||(row.source_check_out_at?'SOURCE_CAPTURED':'STAFF_CONFIRMED')
+  );
+  const [saving,setSaving]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+
+  const effectiveIn=fromSingaporeLocal(signIn);
+  const effectiveOut=fromSingaporeLocal(signOut);
+  const dirty=!sameTimestamp(effectiveIn,persistedSignIn)
+    ||!sameTimestamp(effectiveOut,persistedSignOut);
+
+  async function saveTiming() {
+    if(!effectiveIn){setError('Enter an effective sign-in time.');return;}
+    if(effectiveOut&&Date.parse(effectiveOut)<Date.parse(effectiveIn)){
+      setError('Effective sign-out cannot be before sign-in.');
+      return;
+    }
+    setSaving(true);setError(null);
+    try{
+      const signInChanged=!sameTimestamp(effectiveIn,persistedSignIn);
+      await resolveHistoricalAttendanceTimes({
+        row,
+        effectiveSignIn:effectiveIn,
+        effectiveSignOut:effectiveOut,
+        signInEvidenceType:(signInChanged?'ADMIN_CORRECTED':(row.sign_in_evidence_type||'SOURCE_CAPTURED')) as any,
+        signOutEvidenceType:effectiveOut?(signOutEvidence as any):null,
+        reasonCode:'STAFF_CONFIRMED_ATTENDANCE',
+        reasonNote:'Attendance timing corrected from the event Needs attention workspace.',
+        batchId:row.batch_id||null,
+      });
+      await onSaved();
+    }catch(err){
+      setError(err instanceof Error?err.message:'Attendance timing could not be saved.');
+    }finally{
+      setSaving(false);
+    }
+  }
+
+  return <Paper withBorder radius="sm" p="xs" mt="sm" bg="gray.0">
+    <Group align="flex-end" gap="xs" wrap="wrap">
+      <TextInput
+        type="datetime-local"
+        size="xs"
+        w={210}
+        label="Effective sign-in"
+        value={signIn}
+        disabled={disabled||saving}
+        onChange={(event)=>setSignIn(event.currentTarget.value)}
+      />
+      <TextInput
+        type="datetime-local"
+        size="xs"
+        w={210}
+        label="Effective sign-out"
+        value={signOut}
+        disabled={disabled||saving}
+        onChange={(event)=>{
+          setSignOut(event.currentTarget.value);
+          if(event.currentTarget.value&&!row.source_check_out_at)setSignOutEvidence('STAFF_CONFIRMED');
+          else if(event.currentTarget.value)setSignOutEvidence('ADMIN_CORRECTED');
+        }}
+      />
+      <Select
+        size="xs"
+        w={175}
+        label="Sign-out evidence"
+        value={signOutEvidence}
+        disabled={disabled||saving||!signOut}
+        onChange={(value)=>setSignOutEvidence(value||'STAFF_CONFIRMED')}
+        data={[
+          {value:'SOURCE_CAPTURED',label:'Source captured'},
+          {value:'STAFF_CONFIRMED',label:'Staff confirmed'},
+          {value:'ADMIN_CORRECTED',label:'Admin corrected'},
+          {value:'SHIFT_END_ESTIMATE',label:'Shift end estimate'},
+        ]}
+      />
+      {shift?.end_time&&<Button size="xs" variant="light" disabled={disabled||saving} onClick={()=>{
+        setSignOut(shiftBoundaryLocal(shift,'end'));
+        setSignOutEvidence('SHIFT_END_ESTIMATE');
+      }}>Use shift end</Button>}
+      <Button size="xs" loading={saving} disabled={disabled||saving||!dirty||!effectiveIn} onClick={()=>void saveTiming()}>
+        Save timing
+      </Button>
+    </Group>
+    {error&&<Text size="xs" c="red" mt={6}>{error}</Text>}
+    {!row.source_check_out_at&&!row.effective_sign_out_at&&<Text size="xs" c="dimmed" mt={6}>
+      No captured sign-out exists. Enter a confirmed time or use the selected shift end; the original source evidence remains unchanged.
+    </Text>}
+  </Paper>;
+}
+
 function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}:any) {
   const qc=useQueryClient();
   const [message,setMessage]=useState<{kind:'error'|'success';text:string}|null>(null);
@@ -446,6 +569,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
   async function reload() {
     await Promise.all([
       qc.invalidateQueries({queryKey:['event-people',event.id]}),
+      qc.invalidateQueries({queryKey:['event-focused-staged']}),
       qc.invalidateQueries({queryKey:['event-audit',event.id]}),
       qc.invalidateQueries({queryKey:['event-participation',eventId]}),
       qc.invalidateQueries({queryKey:['contribution-event-sheet',eventId]}),
@@ -1096,6 +1220,7 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, focuse
   async function reloadLegacyReview() {
     await Promise.all([
       qc.invalidateQueries({queryKey:['event-people',event.id]}),
+      qc.invalidateQueries({queryKey:['event-focused-staged']}),
       qc.invalidateQueries({queryKey:['work-summary']}),
       qc.invalidateQueries({queryKey:['attendance']}),
       onRefresh(),
