@@ -319,17 +319,86 @@ function isBlocking(flag:string) {
   ].includes(flag);
 }
 
+function singaporeParts(value:string|null|undefined) {
+  if(!value)return {date:'',time:''};
+  const date=new Date(value);
+  const parts=new Intl.DateTimeFormat('en-CA',{
+    timeZone:'Asia/Singapore',year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',hourCycle:'h23',
+  }).formatToParts(date);
+  const get=(type:string)=>parts.find((part)=>part.type===type)?.value||'';
+  return {date:`${get('year')}-${get('month')}-${get('day')}`,time:`${get('hour')}:${get('minute')}:00`};
+}
+
 export async function fetchHistoricalContext():Promise<HistoricalContext> {
-  const [volunteers,events,shifts]=await Promise.all([
+  const [volunteers,events,shifts,keluargaEvents,keluargaTimeslots]=await Promise.all([
     supabase.from('volunteers').select('id,core_volunteer_id,name,email,phone').limit(10000),
     supabase.from('events').select('id,name,start_date,end_date,venue').order('start_date',{ascending:false}),
     supabase.from('event_shifts').select('id,event_id,name,shift_date,start_time,end_time').order('shift_date',{ascending:false}),
+    supabase.from('phaseone_events')
+      .select('id,title,reporting_at,venue')
+      .eq('operations_scope','canonical')
+      .order('reporting_at',{ascending:false}),
+    supabase.from('phaseone_event_timeslots')
+      .select('id,event_id,label,starts_at,ends_at,status')
+      .neq('status','cancelled')
+      .order('starts_at'),
   ]);
-  if(volunteers.error)throw volunteers.error;if(events.error)throw events.error;if(shifts.error)throw shifts.error;
+  if(volunteers.error)throw volunteers.error;
+  if(events.error)throw events.error;
+  if(shifts.error)throw shifts.error;
+  if(keluargaEvents.error)throw keluargaEvents.error;
+  if(keluargaTimeslots.error)throw keluargaTimeslots.error;
+
+  const slotsByEvent=new Map<string,any[]>();
+  for(const slot of keluargaTimeslots.data||[]){
+    const list=slotsByEvent.get(slot.event_id)||[];
+    list.push(slot);
+    slotsByEvent.set(slot.event_id,list);
+  }
+
+  const projectedKeluargaEvents:HistoricalAttendanceContextEvent[]=(keluargaEvents.data||[]).map((event:any)=>{
+    const eventSlots=slotsByEvent.get(event.id)||[];
+    const dates=eventSlots.map((slot:any)=>singaporeParts(slot.starts_at).date).filter(Boolean).sort();
+    const fallback=singaporeParts(event.reporting_at).date;
+    return {
+      id:'keluarga:'+event.id,
+      name:event.title,
+      start_date:dates[0]||fallback,
+      end_date:dates.at(-1)||fallback,
+      venue:event.venue||null,
+      source:'keluarga',
+      keluarga_event_id:event.id,
+    };
+  });
+
+  const projectedLegacyEvents:HistoricalAttendanceContextEvent[]=(events.data||[]).map((event:any)=>({
+    ...event,source:'maklom' as const,keluarga_event_id:null,
+  }));
+
+  const projectedKeluargaShifts:HistoricalAttendanceContextShift[]=(keluargaTimeslots.data||[]).map((slot:any)=>{
+    const start=singaporeParts(slot.starts_at);
+    const end=singaporeParts(slot.ends_at);
+    return {
+      id:'keluarga:'+slot.id,
+      event_id:'keluarga:'+slot.event_id,
+      name:slot.label?.trim()||'General',
+      shift_date:start.date,
+      start_time:start.time,
+      end_time:end.time||null,
+      source:'keluarga',
+      keluarga_timeslot_id:slot.id,
+    };
+  });
+
+  const projectedLegacyShifts:HistoricalAttendanceContextShift[]=(shifts.data||[]).map((shift:any)=>({
+    ...shift,source:'maklom' as const,keluarga_timeslot_id:null,
+  }));
+
   return {
     volunteers:(volunteers.data||[]) as HistoricalAttendanceContextVolunteer[],
-    events:(events.data||[]) as HistoricalAttendanceContextEvent[],
-    shifts:(shifts.data||[]) as HistoricalAttendanceContextShift[],
+    events:[...projectedKeluargaEvents,...projectedLegacyEvents].sort((a,b)=>b.start_date.localeCompare(a.start_date)||a.name.localeCompare(b.name)),
+    shifts:[...projectedKeluargaShifts,...projectedLegacyShifts],
   };
 }
 
@@ -521,6 +590,39 @@ export async function createHistoricalVolunteerFromRow(input:{
   };
 }
 
+export async function reviewHistoricalRow(input:{
+  row:HistoricalAttendanceImportRow;
+  event:HistoricalAttendanceContextEvent;
+  shift:HistoricalAttendanceContextShift|null;
+  volunteer:HistoricalAttendanceContextVolunteer;
+  decision:'accept'|'reject';
+  reasonNote:string|null;
+}) {
+  if(input.event.source==='keluarga'){
+    const {data,error}=await supabase.rpc('maklom_event_review_staged_attendance',{
+      p_row_id:input.row.id,
+      p_expected_version:input.row.row_version,
+      p_decision:input.decision,
+      p_keluarga_event_id:input.event.keluarga_event_id,
+      p_keluarga_timeslot_id:input.shift?.keluarga_timeslot_id||null,
+      p_target_core_volunteer_id:input.volunteer.core_volunteer_id,
+      p_reason_note:input.reasonNote,
+    });
+    if(error)throw error;
+    return data as Record<string,unknown>;
+  }
+
+  const {data,error}=await supabase.rpc('maklom_event_review_legacy_staged_attendance',{
+    p_row_id:input.row.id,
+    p_expected_version:input.row.row_version,
+    p_decision:input.decision,
+    p_shift_id:input.shift?.id||null,
+    p_reason_note:input.reasonNote,
+  });
+  if(error)throw error;
+  return data as Record<string,unknown>;
+}
+
 export async function updateHistoricalRow(row:HistoricalAttendanceImportRow,patch:Partial<HistoricalAttendanceImportRow>) {
   const {data,error}=await supabase.from('historical_attendance_import_rows')
     .update(patch).eq('id',row.id).eq('row_version',row.row_version).select('*').maybeSingle();
@@ -536,7 +638,68 @@ export async function approveAllSafeHistoricalRows(batchId:string) {
 }
 
 export async function commitHistoricalBatch(batchId:string) {
-  const {data,error}=await supabase.rpc('maklom_commit_historical_attendance_batch',{p_batch_id:batchId});
-  if(error)throw error;
-  return data as {batch_id:string;inserted:number;duplicates:number;pending:number;status:string};
+  const rowsRes=await supabase.from('historical_attendance_import_rows')
+    .select('*')
+    .eq('batch_id',batchId)
+    .eq('decision','approved')
+    .is('committed_attendance_id',null)
+    .is('committed_keluarga_session_id',null)
+    .order('source_row_number');
+  if(rowsRes.error)throw rowsRes.error;
+
+  let inserted=0;
+  let duplicates=0;
+  const failures:string[]=[];
+
+  for(const row of (rowsRes.data||[]) as HistoricalAttendanceImportRow[]){
+    try{
+      if(row.matched_keluarga_event_id){
+        const {data,error}=await supabase.rpc('maklom_event_review_staged_attendance',{
+          p_row_id:row.id,
+          p_expected_version:row.row_version,
+          p_decision:'accept',
+          p_keluarga_event_id:row.matched_keluarga_event_id,
+          p_keluarga_timeslot_id:row.matched_keluarga_timeslot_id,
+          p_target_core_volunteer_id:row.matched_core_volunteer_id,
+          p_reason_note:'Finalized from Historical Attendance review',
+        });
+        if(error)throw error;
+        if((data as any)?.existing_session)duplicates+=1; else inserted+=1;
+      }else if(row.matched_event_id){
+        const {error}=await supabase.rpc('maklom_event_review_legacy_staged_attendance',{
+          p_row_id:row.id,
+          p_expected_version:row.row_version,
+          p_decision:'accept',
+          p_shift_id:row.matched_shift_id,
+          p_reason_note:'Finalized from Historical Attendance review',
+        });
+        if(error)throw error;
+        const verified=await supabase.from('historical_attendance_import_rows')
+          .select('match_status')
+          .eq('id',row.id)
+          .single();
+        if(verified.error)throw verified.error;
+        if(verified.data.match_status==='duplicate')duplicates+=1; else inserted+=1;
+      }else{
+        failures.push('Row '+row.source_row_number+': no canonical event is selected.');
+      }
+    }catch(error){
+      failures.push('Row '+row.source_row_number+': '+(error instanceof Error?error.message:'Could not finalize row.'));
+    }
+  }
+
+  const remaining=await supabase.from('historical_attendance_import_rows')
+    .select('id',{count:'exact',head:true})
+    .eq('batch_id',batchId)
+    .eq('decision','pending');
+  if(remaining.error)throw remaining.error;
+
+  return {
+    batch_id:batchId,
+    inserted,
+    duplicates,
+    pending:remaining.count||0,
+    status:(remaining.count||0)>0?'partial':'committed',
+    failures,
+  };
 }

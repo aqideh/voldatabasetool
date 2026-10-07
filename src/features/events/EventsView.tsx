@@ -377,7 +377,8 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
 
   const safePending=standalonePending.flatMap((row)=>{
     const resolution=shiftResolutionByRow.get(row.id);
-    return resolution?.safe?[{row,timeslotId:resolution.timeslotId}]:[];
+    const blockingFeedback=(row.review_flags||[]).some((flag)=>['feedback_event_mismatch','feedback_ambiguous'].includes(flag));
+    return resolution?.safe&&!blockingFeedback?[{row,timeslotId:resolution.timeslotId}]:[];
   });
 
   async function reload() {
@@ -586,7 +587,8 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
                 <Text size="sm" mt={4}>{row.event_name}</Text>
                 <Text size="xs" c="dimmed">
                   Source sign-in: {sgDateTime(row.source_sign_in_at)}
-                  {' · '}Source check-out (feedback): {sgDateTime(row.source_feedback_at)}
+                  {' · '}Source sign-out / feedback: {sgDateTime(row.source_check_out_at||row.source_feedback_at)}
+                  {' · '}{row.source_check_out_at?'explicit check-out':row.source_feedback_at?'feedback timestamp':'no sign-out evidence'}
                   {' · '}{row.review_flags?.map((x)=>x.replaceAll('_',' ')).join(' · ')||'No review flags'}
                 </Text>
                 {row.matched_core_volunteer_id&&!resolution?.safe&&<Text size="xs" c="orange" mt={4}>{resolution?.reason}</Text>}

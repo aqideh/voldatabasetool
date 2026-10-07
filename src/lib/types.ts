@@ -88,10 +88,12 @@ export interface HistoricalAttendanceImportRow {
 
 export interface HistoricalAttendanceContextEvent {
   id:string; name:string; start_date:string; end_date:string; venue:string|null;
+  source:'maklom'|'keluarga'; keluarga_event_id:string|null;
 }
 
 export interface HistoricalAttendanceContextShift {
   id:string; event_id:string; name:string; shift_date:string; start_time:string|null; end_time:string|null;
+  source:'maklom'|'keluarga'; keluarga_timeslot_id:string|null;
 }
 
 export interface HistoricalAttendanceContextVolunteer {
