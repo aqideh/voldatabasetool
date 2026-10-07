@@ -272,15 +272,45 @@ function resolveStagedShift(
     .map(singaporeShiftWindow)
     .filter((window):window is NonNullable<ReturnType<typeof singaporeShiftWindow>>=>Boolean(window));
 
-  if(row.source_feedback_at){
-    const checkOut=new Date(row.source_feedback_at).getTime();
+  const sourceCheckOut=row.source_check_out_at||row.source_feedback_at;
+  if(sourceCheckOut){
+    const checkOut=new Date(sourceCheckOut).getTime();
     if(!Number.isFinite(checkOut)||checkOut<signIn){
       return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'The source check-out is before the sign-in time.'};
     }
     const overlapping=windows.filter((window)=>window.start<checkOut&&window.end>signIn);
-    return overlapping.length
-      ? {safe:true,timeslotId:null,candidateTimeslotIds:overlapping.map((window)=>window.timeslotId),reason:'Source sign-in/check-out interval resolves to the event shifts.'}
-      : {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'No event shift overlaps the source attendance interval.'};
+    if(overlapping.length===0){
+      return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'No event shift overlaps the source attendance interval.'};
+    }
+    if(overlapping.length===1){
+      return {
+        safe:true,
+        timeslotId:overlapping[0].timeslotId,
+        candidateTimeslotIds:[overlapping[0].timeslotId],
+        reason:'Source attendance resolves to one event shift.',
+      };
+    }
+    const rostered=overlapping.filter((window)=>roster.some((assignment)=>
+      assignment.volunteer_id===row.matched_core_volunteer_id
+      &&assignment.timeslot_id===window.timeslotId
+      &&assignment.source_assignment_status!=='invalidated_historical_shift_match'
+    ));
+    if(rostered.length===1){
+      return {
+        safe:true,
+        timeslotId:rostered[0].timeslotId,
+        candidateTimeslotIds:overlapping.map((window)=>window.timeslotId),
+        reason:'Overlapping attendance interval resolved from the existing roster assignment.',
+      };
+    }
+    return {
+      safe:false,
+      timeslotId:null,
+      candidateTimeslotIds:overlapping.map((window)=>window.timeslotId),
+      reason:rostered.length>1
+        ? 'The attendance interval overlaps multiple shifts and the volunteer is rostered to more than one. Choose the correct shift.'
+        : 'The attendance interval overlaps multiple shifts. Choose the correct shift.',
+    };
   }
 
   const containing=windows.filter((window)=>window.start<=signIn&&signIn<window.end);
