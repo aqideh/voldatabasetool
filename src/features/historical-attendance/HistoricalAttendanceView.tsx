@@ -273,7 +273,7 @@ export function HistoricalAttendanceView({
             <Table.Td><Text size="sm">{row.event_name}</Text><Text size="xs" c="dimmed">{row.matched_event_id?'Canonical event linked':'No canonical event'}</Text></Table.Td>
             <Table.Td><Text size="sm">{row.event_date}</Text><Text size="xs" c="dimmed">{safeDateTime(row.source_sign_in_at)}</Text></Table.Td>
             <Table.Td>
-              <Badge color={statusColor(row.match_status)} variant="light">{row.match_status.replaceAll('_',' ')}</Badge>
+              <Badge color={statusColor(row.match_status)} variant="light">{row.match_status==='duplicate'&&row.duplicate_of_attendance_id?'matched existing attendance':row.match_status.replaceAll('_',' ')}</Badge>
               {row.review_flags.length>0&&<Text size="xs" c="dimmed" mt={4}>{row.review_flags.slice(0,2).map((x)=>x.replaceAll('_',' ')).join(' · ')}{row.review_flags.length>2?' …':''}</Text>}
             </Table.Td>
             <Table.Td><Badge color={decisionColor(row.decision)} variant="light">{row.decision}</Badge></Table.Td>
