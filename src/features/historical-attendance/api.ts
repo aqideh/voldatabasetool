@@ -492,6 +492,35 @@ export async function fetchHistoricalAttendanceRowsByIds(rowIds:string[]) {
   return rows.sort((a,b)=>(order.get(a.id)??Number.MAX_SAFE_INTEGER)-(order.get(b.id)??Number.MAX_SAFE_INTEGER));
 }
 
+export async function createHistoricalVolunteerFromRow(input:{
+  rowId:string;
+  expectedVersion:number;
+  name:string;
+  email:string|null;
+  phone:string|null;
+}) {
+  const {data,error}=await supabase.rpc('maklom_event_resolve_staged_identity',{
+    p_row_id:input.rowId,
+    p_expected_version:input.expectedVersion,
+    p_existing_core_volunteer_id:null,
+    p_create_new:true,
+    p_name:input.name,
+    p_email:input.email,
+    p_phone:input.phone,
+  });
+  if(error)throw error;
+  return data as {
+    row_id:string;
+    core_volunteer_id:string;
+    profile_id:string|null;
+    volunteer_code:string|null;
+    display_name:string|null;
+    email:string|null;
+    phone:string|null;
+    created:boolean;
+  };
+}
+
 export async function updateHistoricalRow(row:HistoricalAttendanceImportRow,patch:Partial<HistoricalAttendanceImportRow>) {
   const {data,error}=await supabase.from('historical_attendance_import_rows')
     .update(patch).eq('id',row.id).eq('row_version',row.row_version).select('*').maybeSingle();
