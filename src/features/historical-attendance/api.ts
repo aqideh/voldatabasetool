@@ -333,7 +333,7 @@ function singaporeParts(value:string|null|undefined) {
 export async function fetchHistoricalContext():Promise<HistoricalContext> {
   const [volunteers,events,shifts,keluargaEvents,keluargaTimeslots]=await Promise.all([
     supabase.from('volunteers').select('id,core_volunteer_id,name,email,phone').limit(10000),
-    supabase.from('events').select('id,name,start_date,end_date,venue').order('start_date',{ascending:false}),
+    supabase.from('events').select('id,name,start_date,end_date,venue,keluarga_event_id').is('keluarga_event_id',null).order('start_date',{ascending:false}),
     supabase.from('event_shifts').select('id,event_id,name,shift_date,start_time,end_time').order('shift_date',{ascending:false}),
     supabase.from('phaseone_events')
       .select('id,title,reporting_at,venue')

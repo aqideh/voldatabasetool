@@ -110,7 +110,20 @@ export async function importEventReportCsv(file: File) {
     let event = events.find((item) => lower(item.name) === lower(sample.event_title) && item.start_date === start && item.end_date === end && (!sample.event_venue || lower(item.venue) === lower(sample.event_venue)));
     if (!event) {
       const payload = { id:`event_report_event_${hashString(eventKey+'|'+start+'|'+end)}`, name:sample.event_title.trim(), start_date:start, end_date:end, programme:null, venue:sample.event_venue.trim()||null, notes:`Created from event report CSV (${file.name}).`, status:'active' };
-      const { data, error } = await supabase.from('events').insert(payload).select('*').single(); if(error) throw error; event=data;events.push(event);counters.events++;
+      const { data, error } = await supabase.rpc('maklom_resolve_or_create_legacy_event', {
+        p_id:payload.id,
+        p_name:payload.name,
+        p_start_date:payload.start_date,
+        p_end_date:payload.end_date,
+        p_programme:payload.programme,
+        p_venue:payload.venue,
+        p_notes:payload.notes,
+        p_status:payload.status,
+      });
+      if(error) throw error;
+      event=data;
+      events.push(event);
+      if(event.id===payload.id)counters.events++;
     }
     const eventShiftMap = new Map<string, any>();
     for (const row of eventRows) {
