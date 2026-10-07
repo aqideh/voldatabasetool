@@ -104,7 +104,7 @@ export default function App(){
       {primarySections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{setSection(item);close();}}/>)}
       <Box mt="md">
         <Text size="xs" c="dimmed" fw={700} tt="uppercase" px="sm" py={6}>Review tools</Text>
-        {reviewSections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{setSection(item);close();}}/>)}
+        {reviewSections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{if(item==='Historical Attendance')setHistoricalFocus(null);setSection(item);close();}}/>)}
       </Box>
     </Stack></AppShell.Navbar>
     <AppShell.Main bg="gray.0"><Box maw={1600} mx="auto">
