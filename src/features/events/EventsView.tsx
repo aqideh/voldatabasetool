@@ -16,6 +16,7 @@ import {
   fetchEventAudit,
   fetchEventPeople,
   fetchEventsBundle,
+  fetchHistoricalAttendanceRowsByIds,
   fetchStagedIdentityCandidates,
   pairStagedAttendance,
   resolveStagedIdentity,
@@ -34,6 +35,7 @@ interface Props {
   canDelete: boolean;
   requestedEventId?:string|null;
   requestedEventName?:string|null;
+  requestedRowIds?:string[];
   onRequestedEventHandled?:()=>void;
 }
 
@@ -97,10 +99,11 @@ function fromSingaporeLocal(value:string) {
   return value+':00+08:00';
 }
 
-export function EventsView({ canWrite, canDelete, requestedEventId=null, requestedEventName=null, onRequestedEventHandled }: Props) {
+export function EventsView({ canWrite, canDelete, requestedEventId=null, requestedEventName=null, requestedRowIds=[], onRequestedEventHandled }: Props) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ['events-bundle'], queryFn: fetchEventsBundle });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedRowIds,setSelectedRowIds]=useState<string[]>([]);
   const [opened, { open, close }] = useDisclosure(false);
   const [message, setMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -112,12 +115,18 @@ export function EventsView({ canWrite, canDelete, requestedEventId=null, request
       ||(requestedName?query.data.events.find((event)=>event.name.trim().toLowerCase()===requestedName):null);
     if(match){
       setSelectedId(match.id);
+      setSelectedRowIds(requestedRowIds);
       open();
     }
     onRequestedEventHandled?.();
-  },[query.data?.events,requestedEventId,requestedEventName,onRequestedEventHandled,open]);
+  },[query.data?.events,requestedEventId,requestedEventName,requestedRowIds,onRequestedEventHandled,open]);
 
   const selected = query.data?.events.find((event) => event.id === selectedId) || null;
+  const focusedRows=useQuery({
+    queryKey:['event-focused-staged',selectedRowIds],
+    queryFn:()=>fetchHistoricalAttendanceRowsByIds(selectedRowIds),
+    enabled:selectedRowIds.length>0,
+  });
   const shifts = useMemo(() => query.data?.shifts.filter((shift) => shift.event_id === selectedId) || [], [query.data, selectedId]);
   const metrics = useMemo(() => query.data?.metrics.filter((metric) => metric.event_id === selectedId) || [], [query.data, selectedId]);
 
@@ -198,7 +207,7 @@ export function EventsView({ canWrite, canDelete, requestedEventId=null, request
       <Table striped highlightOnHover verticalSpacing="sm">
         <Table.Thead><Table.Tr><Table.Th>Event</Table.Th><Table.Th>Dates</Table.Th><Table.Th>Programme</Table.Th><Table.Th>Venue</Table.Th><Table.Th>Shifts</Table.Th></Table.Tr></Table.Thead>
         <Table.Tbody>
-          {(query.data?.events || []).map((event) => <Table.Tr key={event.id} onClick={() => { setSelectedId(event.id); open(); }} style={{ cursor: 'pointer' }}>
+          {(query.data?.events || []).map((event) => <Table.Tr key={event.id} onClick={() => { setSelectedId(event.id); setSelectedRowIds([]); open(); }} style={{ cursor: 'pointer' }}>
             <Table.Td>
               <Group gap="xs">
                 <Text fw={700}>{event.name}</Text>
@@ -218,13 +227,14 @@ export function EventsView({ canWrite, canDelete, requestedEventId=null, request
 
     <Modal opened={opened} onClose={close} title={selected?.name || 'Event'} size="calc(100vw - 40px)">
       {selected && (selected.source==='keluarga'
-        ? <KeluargaEventWorkspace event={selected} shifts={shifts} canWrite={canWrite} onRefresh={refresh}/>
+        ? <KeluargaEventWorkspace event={selected} shifts={shifts} canWrite={canWrite} onRefresh={refresh} focusedRows={focusedRows.data||[]}/>
         : <LegacyEventEditor
             event={selected}
             shifts={shifts}
             metrics={metrics}
             canWrite={canWrite}
             canDelete={canDelete}
+            focusedRows={focusedRows.data||[]}
             onRefresh={refresh}
             onDeleted={() => { setSelectedId(null); close(); void refresh(); }}
           />)}
@@ -338,7 +348,7 @@ function resolveStagedShift(
   return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'No event shift contains the source sign-in time.'};
 }
 
-function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
+function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}:any) {
   const qc=useQueryClient();
   const [message,setMessage]=useState<{kind:'error'|'success';text:string}|null>(null);
   const [busy,setBusy]=useState(false);
@@ -390,7 +400,13 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh}:any) {
       .map((row)=>[row.id.replace(/^keluarga:/,''),row])),
     [people.data?.attendance],
   );
-  const pending=(people.data?.staged||[]).filter((row)=>row.decision==='pending');
+  const stagedRows=useMemo(()=>{
+    const byId=new Map<string,HistoricalAttendanceImportRow>();
+    for(const row of people.data?.staged||[])byId.set(row.id,row);
+    for(const row of focusedRows as HistoricalAttendanceImportRow[])if(row.decision==='pending')byId.set(row.id,row);
+    return [...byId.values()];
+  },[people.data?.staged,focusedRows]);
+  const pending=stagedRows.filter((row)=>row.decision==='pending');
 
   const pairProposals=useMemo(()=>{
     const grouped=new Map<string,HistoricalAttendanceImportRow[]>();
@@ -1038,7 +1054,7 @@ function legacyShiftContains(row:HistoricalAttendanceImportRow,shift:EventShiftR
   return Number.isFinite(signIn)&&Number.isFinite(start)&&start<=signIn&&signIn<end;
 }
 
-function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefresh, onDeleted }: any) {
+function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, focusedRows=[], onRefresh, onDeleted }: any) {
   const qc=useQueryClient();
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1050,13 +1066,19 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefr
     queryKey:['event-people',event.id],
     queryFn:()=>fetchEventPeople(event),
   });
-  const pending=(people.data?.staged||[]).filter((row)=>row.decision==='pending');
+  const stagedRows=useMemo(()=>{
+    const byId=new Map<string,HistoricalAttendanceImportRow>();
+    for(const row of people.data?.staged||[])byId.set(row.id,row);
+    for(const row of focusedRows as HistoricalAttendanceImportRow[])if(row.decision==='pending')byId.set(row.id,row);
+    return [...byId.values()];
+  },[people.data?.staged,focusedRows]);
+  const pending=stagedRows.filter((row)=>row.decision==='pending');
 
   useEffect(()=>{
-    if(!people.data?.staged)return;
+    if(!stagedRows.length)return;
     setShiftByRow((current)=>{
       const next={...current};
-      for(const row of people.data!.staged){
+      for(const row of stagedRows){
         if(next[row.id])continue;
         if(row.matched_shift_id){
           next[row.id]=row.matched_shift_id;
@@ -1069,7 +1091,7 @@ function LegacyEventEditor({ event, shifts, metrics, canWrite, canDelete, onRefr
       }
       return next;
     });
-  },[people.data?.staged,shifts]);
+  },[stagedRows,shifts]);
 
   async function reloadLegacyReview() {
     await Promise.all([
