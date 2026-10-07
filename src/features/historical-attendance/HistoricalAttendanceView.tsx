@@ -359,6 +359,14 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
   const selectedVolunteer=volunteers.find((volunteer:any)=>volunteer.id===volunteerId);
   const selectedEvent=events.find((event:any)=>event.id===eventId);
   const selectedShift=shifts.find((shift:any)=>shift.id===shiftId)||null;
+  const savedEventId=row.matched_keluarga_event_id?'keluarga:'+row.matched_keluarga_event_id:row.matched_event_id;
+  const savedShiftId=row.matched_keluarga_timeslot_id?'keluarga:'+row.matched_keluarga_timeslot_id:row.matched_shift_id;
+  const hasUnsavedMappingChanges=
+    volunteerId!==row.matched_volunteer_id
+    ||eventId!==savedEventId
+    ||shiftId!==savedShiftId
+    ||Math.max(0,Number(minutes)||0)!==Number(row.reported_minutes||0)
+    ||note.trim()!==(row.decision_note||'');
 
   useEffect(()=>{
     if(!eventId||shiftId)return;
@@ -457,32 +465,28 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
         decision:'pending',
         decision_note:note.trim()||null,
       });
-      setMessage('Mapping saved.');
+      setMessage('Progress saved. You can now commit attendance.');
       await onSaved(updated);
     }catch(error){setMessage(error instanceof Error?error.message:'Mapping could not be saved.');}
     finally{setSaving(false);}
   }
 
   async function confirm(){
-    if(!selectedVolunteer||!selectedEvent){setMessage('Select a volunteer and a canonical event before confirming this row.');return;}
+    if(hasUnsavedMappingChanges){setMessage('Save progress before committing attendance.');return;}
+    if(!selectedVolunteer||!selectedEvent){setMessage('Select a volunteer and a canonical event before committing this row.');return;}
     setSaving(true);setMessage(null);
     try{
-      const mapped=await updateHistoricalRow(row,{
-        ...mappingPatch(),
-        decision:'pending',
-        decision_note:note.trim()||null,
-      });
       await reviewHistoricalRow({
-        row:mapped,
+        row,
         event:selectedEvent,
         shift:selectedShift,
         volunteer:selectedVolunteer,
         decision:'accept',
-        reasonNote:note.trim()||'Confirmed in Historical Attendance review',
+        reasonNote:note.trim()||'Committed from Historical Attendance review',
       });
-      setMessage('Attendance confirmed and committed.');
-      await onSaved({...mapped,decision:'approved',row_version:mapped.row_version+1});
-    }catch(error){setMessage(error instanceof Error?error.message:'Attendance could not be confirmed.');}
+      setMessage('Attendance committed.');
+      await onSaved({...row,decision:'approved',row_version:row.row_version+1});
+    }catch(error){setMessage(error instanceof Error?error.message:'Attendance could not be committed.');}
     finally{setSaving(false);}
   }
 
@@ -619,9 +623,23 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
     </Paper>}
 
     {canWrite&&<Group justify="flex-end">
-      <Button variant="default" loading={saving} onClick={()=>void saveMapping()}>Save mapping</Button>
+      <Button
+        variant="default"
+        loading={saving}
+        disabled={!hasUnsavedMappingChanges}
+        onClick={()=>void saveMapping()}
+      >
+        Save progress
+      </Button>
       <Button color="red" variant="light" loading={saving} onClick={()=>void reject()}>Reject row</Button>
-      <Button loading={saving} disabled={!selectedVolunteer||!selectedEvent} onClick={()=>void confirm()}>Confirm & commit</Button>
+      <Button
+        loading={saving}
+        disabled={!selectedVolunteer||!selectedEvent||hasUnsavedMappingChanges}
+        title={hasUnsavedMappingChanges?'Save progress before committing attendance.':undefined}
+        onClick={()=>void confirm()}
+      >
+        Commit attendance
+      </Button>
     </Group>}
   </Stack>;
 }
