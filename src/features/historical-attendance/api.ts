@@ -478,6 +478,19 @@ export async function fetchHistoricalAttendance(batchId?:string|null) {
   return {batches,rows:(rowsRes.data||[]) as HistoricalAttendanceImportRow[],selected};
 }
 
+export async function fetchHistoricalAttendanceRowsByIds(rowIds:string[]) {
+  if(!rowIds.length)return [] as HistoricalAttendanceImportRow[];
+  const {data,error}=await supabase.from('historical_attendance_import_rows')
+    .select('*')
+    .in('id',rowIds)
+    .order('event_date')
+    .order('source_row_number');
+  if(error)throw error;
+  const rows=(data||[]) as HistoricalAttendanceImportRow[];
+  const order=new Map(rowIds.map((id,index)=>[id,index]));
+  return rows.sort((a,b)=>(order.get(a.id)??Number.MAX_SAFE_INTEGER)-(order.get(b.id)??Number.MAX_SAFE_INTEGER));
+}
+
 export async function updateHistoricalRow(row:HistoricalAttendanceImportRow,patch:Partial<HistoricalAttendanceImportRow>) {
   const {data,error}=await supabase.from('historical_attendance_import_rows')
     .update(patch).eq('id',row.id).eq('row_version',row.row_version).select('*').maybeSingle();
