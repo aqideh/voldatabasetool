@@ -15,6 +15,7 @@ import {
   fetchHistoricalAttendance,
   fetchHistoricalAttendanceRowsByIds,
   fetchHistoricalContext,
+  reviewHistoricalRow,
   stageHistoricalWorkbook,
   updateHistoricalRow,
 } from './api';
@@ -138,8 +139,9 @@ export function HistoricalAttendanceView({
     try{
       const result=await commitHistoricalBatch(activeBatchId);
       setMessage({
-        kind:'success',
-        text:'Committed '+result.inserted+' attendance rows. '+result.duplicates+' duplicate(s) were linked instead of re-created. '+result.pending+' row(s) remain pending review.',
+        kind:result.failures.length?'error':'success',
+        text:'Finalized '+result.inserted+' attendance row'+(result.inserted===1?'':'s')+'. '+result.duplicates+' existing attendance record'+(result.duplicates===1?' was':'s were')+' linked. '+result.pending+' row'+(result.pending===1?' remains':'s remain')+' pending review.'
+          +(result.failures.length?' '+result.failures.length+' approved row'+(result.failures.length===1?' could':'s could')+' not be finalized: '+result.failures.slice(0,3).join(' · ')+(result.failures.length>3?' · …':''):''),
       });
       await refresh();
     }catch(error){setMessage({kind:'error',text:error instanceof Error?error.message:'Attendance commit failed.'});}
@@ -263,7 +265,7 @@ export function HistoricalAttendanceView({
         <Table striped highlightOnHover verticalSpacing="sm" miw={1200}>
           <Table.Thead><Table.Tr>
             <Table.Th>Source</Table.Th><Table.Th>Volunteer</Table.Th><Table.Th>Source event</Table.Th>
-            <Table.Th>Date / time</Table.Th><Table.Th>Match</Table.Th><Table.Th>Decision</Table.Th><Table.Th>Feedback</Table.Th>
+            <Table.Th>Sign in</Table.Th><Table.Th>Sign out / feedback</Table.Th><Table.Th>Match</Table.Th><Table.Th>Decision</Table.Th><Table.Th>Feedback</Table.Th>
           </Table.Tr></Table.Thead>
           <Table.Tbody>{visible.map((row)=><Table.Tr
             key={row.id}
@@ -272,8 +274,9 @@ export function HistoricalAttendanceView({
           >
             <Table.Td><Text size="sm">Row {row.source_row_number}</Text><Text size="xs" c="dimmed">{row.source_volunteer_identifier||'No response ID'}</Text></Table.Td>
             <Table.Td><Text fw={700} size="sm">{row.full_name}</Text><Text size="xs" c="dimmed">{row.email||row.phone||'No identifier'}</Text></Table.Td>
-            <Table.Td><Text size="sm">{row.event_name}</Text><Text size="xs" c="dimmed">{row.matched_event_id?'Canonical event linked':'No canonical event'}</Text></Table.Td>
-            <Table.Td><Text size="sm">{row.event_date}</Text><Text size="xs" c="dimmed">{safeDateTime(row.source_sign_in_at)}</Text></Table.Td>
+            <Table.Td><Text size="sm">{row.event_name}</Text><Text size="xs" c="dimmed">{row.matched_keluarga_event_id?'Keluarga event linked':row.matched_event_id?'MakLom event linked':'No canonical event'}</Text></Table.Td>
+            <Table.Td><Text size="sm">{safeDateTime(row.source_sign_in_at)}</Text></Table.Td>
+            <Table.Td><Text size="sm">{safeDateTime(row.source_check_out_at||row.source_feedback_at)}</Text><Text size="xs" c="dimmed">{row.source_check_out_at?'Explicit check-out':row.source_feedback_at?'Feedback timestamp':'No sign-out evidence'}</Text></Table.Td>
             <Table.Td>
               <Badge color={statusColor(row.match_status)} variant="light">{row.match_status==='duplicate'&&row.duplicate_of_attendance_id?'matched existing attendance':row.match_status.replaceAll('_',' ')}</Badge>
               {row.review_flags.length>0&&<Text size="xs" c="dimmed" mt={4}>{row.review_flags.slice(0,2).map((x)=>x.replaceAll('_',' ')).join(' · ')}{row.review_flags.length>2?' …':''}</Text>}
@@ -312,8 +315,8 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
   const [newName,setNewName]=useState(row.full_name||'');
   const [newEmail,setNewEmail]=useState(row.email||'');
   const [newPhone,setNewPhone]=useState(row.phone||'');
-  const [eventId,setEventId]=useState<string|null>(row.matched_event_id);
-  const [shiftId,setShiftId]=useState<string|null>(row.matched_shift_id);
+  const [eventId,setEventId]=useState<string|null>(row.matched_keluarga_event_id?'keluarga:'+row.matched_keluarga_event_id:row.matched_event_id);
+  const [shiftId,setShiftId]=useState<string|null>(row.matched_keluarga_timeslot_id?'keluarga:'+row.matched_keluarga_timeslot_id:row.matched_shift_id);
   const [minutes,setMinutes]=useState<number|string>(row.reported_minutes||0);
   const [note,setNote]=useState(row.decision_note||'');
   const [saving,setSaving]=useState(false);
@@ -322,6 +325,7 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
   const eventShifts=shifts.filter((shift:any)=>shift.event_id===eventId&&shift.shift_date===row.event_date);
   const selectedVolunteer=volunteers.find((volunteer:any)=>volunteer.id===volunteerId);
   const selectedEvent=events.find((event:any)=>event.id===eventId);
+  const selectedShift=shifts.find((shift:any)=>shift.id===shiftId)||null;
 
   async function createVolunteer(){
     if(!newName.trim()){setMessage('Volunteer name is required.');return;}
@@ -343,29 +347,76 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
     finally{setSaving(false);}
   }
 
-  async function save(decision?:'approved'|'rejected'|'pending'){
+  function mappingPatch(){
+    const clearable=new Set(['volunteer_unmatched','volunteer_ambiguous','identity_conflict','event_unmatched','event_ambiguous','shift_ambiguous']);
+    const remainingFlags=(row.review_flags||[]).filter((flag:string)=>!clearable.has(flag));
+    const blocking=new Set(['event_date_missing','feedback_event_mismatch','feedback_ambiguous']);
+    const safe=Boolean(selectedVolunteer&&selectedEvent)&&!remainingFlags.some((flag:string)=>blocking.has(flag));
+    return {
+      matched_volunteer_id:selectedVolunteer?.id??null,
+      matched_core_volunteer_id:selectedVolunteer?.core_volunteer_id??null,
+      matched_event_id:selectedEvent?.source==='maklom'?selectedEvent.id:null,
+      matched_keluarga_event_id:selectedEvent?.source==='keluarga'?selectedEvent.keluarga_event_id:null,
+      matched_shift_id:selectedShift?.source==='maklom'?selectedShift.id:null,
+      matched_keluarga_timeslot_id:selectedShift?.source==='keluarga'?selectedShift.keluarga_timeslot_id:null,
+      reported_minutes:Math.max(0,Number(minutes)||0),
+      match_status:safe&&row.match_status!=='duplicate'&&row.match_status!=='invalid'?'matched':row.match_status,
+      review_flags:remainingFlags,
+      match_reason:selectedVolunteer&&selectedEvent
+        ? 'Staff-confirmed mapping to '+selectedVolunteer.name+' · '+selectedEvent.name
+        : row.match_reason,
+    };
+  }
+
+  async function saveMapping(){
     setSaving(true);setMessage(null);
     try{
-      const safe=Boolean(selectedVolunteer&&selectedEvent);
-      const nextDecision=decision??row.decision;
-      if(nextDecision==='approved'&&!safe)throw new Error('Select an existing MakLom volunteer and a canonical event before approving this row.');
       const updated=await updateHistoricalRow(row,{
-        matched_volunteer_id:selectedVolunteer?.id??null,
-        matched_core_volunteer_id:selectedVolunteer?.core_volunteer_id??null,
-        matched_event_id:selectedEvent?.id??null,
-        matched_shift_id:shiftId||null,
-        reported_minutes:Math.max(0,Number(minutes)||0),
-        match_status:nextDecision==='approved'?'matched':safe&&row.match_status!=='duplicate'&&row.match_status!=='invalid'?'matched':row.match_status,
-        decision:nextDecision,
+        ...mappingPatch(),
+        decision:'pending',
         decision_note:note.trim()||null,
-        reviewed_at:nextDecision!=='pending'?new Date().toISOString():row.reviewed_at,
-        match_reason:safe
-          ? 'Staff-confirmed mapping to '+selectedVolunteer.name+' · '+selectedEvent.name
-          : row.match_reason,
       });
-      setMessage(nextDecision==='approved'?'Row approved.':nextDecision==='rejected'?'Row rejected.':'Mapping saved.');
+      setMessage('Mapping saved.');
       await onSaved(updated);
-    }catch(error){setMessage(error instanceof Error?error.message:'Review update failed.');}
+    }catch(error){setMessage(error instanceof Error?error.message:'Mapping could not be saved.');}
+    finally{setSaving(false);}
+  }
+
+  async function confirm(){
+    if(!selectedVolunteer||!selectedEvent){setMessage('Select a volunteer and a canonical event before confirming this row.');return;}
+    setSaving(true);setMessage(null);
+    try{
+      const mapped=await updateHistoricalRow(row,{
+        ...mappingPatch(),
+        decision:'pending',
+        decision_note:note.trim()||null,
+      });
+      await reviewHistoricalRow({
+        row:mapped,
+        event:selectedEvent,
+        shift:selectedShift,
+        volunteer:selectedVolunteer,
+        decision:'accept',
+        reasonNote:note.trim()||'Confirmed in Historical Attendance review',
+      });
+      setMessage('Attendance confirmed and committed.');
+      await onSaved({...mapped,decision:'approved',row_version:mapped.row_version+1});
+    }catch(error){setMessage(error instanceof Error?error.message:'Attendance could not be confirmed.');}
+    finally{setSaving(false);}
+  }
+
+  async function reject(){
+    setSaving(true);setMessage(null);
+    try{
+      const updated=await updateHistoricalRow(row,{
+        ...mappingPatch(),
+        decision:'rejected',
+        decision_note:note.trim()||'Rejected in Historical Attendance review',
+        reviewed_at:new Date().toISOString(),
+      });
+      setMessage('Row rejected.');
+      await onSaved(updated);
+    }catch(error){setMessage(error instanceof Error?error.message:'Row could not be rejected.');}
     finally{setSaving(false);}
   }
 
@@ -425,7 +476,7 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
       searchable clearable disabled={!canWrite}
       value={eventId} onChange={(value)=>{setEventId(value);setShiftId(null);}}
       data={events.map((event:any)=>({
-        value:event.id,label:event.name+' · '+event.start_date+(event.end_date!==event.start_date?'–'+event.end_date:''),
+        value:event.id,label:event.name+' · '+event.start_date+(event.end_date!==event.start_date?'–'+event.end_date:'')+' · '+(event.source==='keluarga'?'Keluarga':'MakLom'),
       }))}
     />
     <Select
@@ -462,9 +513,9 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
     </Paper>}
 
     {canWrite&&<Group justify="flex-end">
-      <Button variant="default" loading={saving} onClick={()=>void save('pending')}>Save mapping</Button>
-      <Button color="red" variant="light" loading={saving} onClick={()=>void save('rejected')}>Reject row</Button>
-      <Button loading={saving} disabled={!selectedVolunteer||!selectedEvent} onClick={()=>void save('approved')}>Confirm & approve</Button>
+      <Button variant="default" loading={saving} onClick={()=>void saveMapping()}>Save mapping</Button>
+      <Button color="red" variant="light" loading={saving} onClick={()=>void reject()}>Reject row</Button>
+      <Button loading={saving} disabled={!selectedVolunteer||!selectedEvent} onClick={()=>void confirm()}>Confirm & commit</Button>
     </Group>}
   </Stack>;
 }
