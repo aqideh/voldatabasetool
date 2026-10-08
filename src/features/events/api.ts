@@ -51,6 +51,7 @@ export type EventPeopleBundle = {
   roster:EventRosterDetailRow[];
   attendance:AttendanceRow[];
   staged:HistoricalAttendanceImportRow[];
+  legacyShifts:EventShiftRow[];
 };
 
 function singaporeParts(value:string) {
@@ -191,6 +192,7 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
   }
 
   let staged:HistoricalAttendanceImportRow[] = [];
+  let legacyShifts:EventShiftRow[] = [];
   if (event.source !== 'keluarga') {
     const stagedRes = await supabase.from('historical_attendance_import_rows').select('*')
       .eq('matched_event_id', event.id)
@@ -215,6 +217,15 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
       })
       .map((legacy) => legacy.id);
 
+    if (legacyIds.length) {
+      const legacyShiftsRes = await supabase.from('event_shifts').select('*')
+        .in('event_id', legacyIds)
+        .order('shift_date')
+        .order('start_time');
+      if (legacyShiftsRes.error) throw legacyShiftsRes.error;
+      legacyShifts = (legacyShiftsRes.data || []) as EventShiftRow[];
+    }
+
     const stagedRes = await supabase.from('historical_attendance_import_rows').select('*')
       .gte('event_date', event.start_date)
       .lte('event_date', event.end_date)
@@ -236,6 +247,7 @@ export async function fetchEventPeople(event: EventRow):Promise<EventPeopleBundl
     roster,
     attendance:(attendanceRes.data || []) as AttendanceRow[],
     staged,
+    legacyShifts,
   };
 }
 
