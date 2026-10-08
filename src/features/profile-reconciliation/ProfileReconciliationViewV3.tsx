@@ -4,7 +4,7 @@ import {
 } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  fetchReconciliationBatches, fetchReconciliationRows, parseReconciliationWorkbook,
+  fetchReconciliationBatches, fetchReconciliationRows, parseReconciliationWorkbook, fetchReconciliationMatchKeys,
   reviewReconciliationChange, reviewReconciliationMatch, stageReconciliationWorkbook,
   type ReconciliationChange, type ReconciliationPreview, type ReconciliationRow,
 } from './api';
@@ -93,6 +93,45 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
     }catch(error){
       setFile(null);
       setMessage({kind:'error',text:error instanceof Error?error.message:'The workbook could not be parsed.'});
+    }finally{setBusy(false);}
+  }
+
+  async function checkNewVolunteers(next:File|null){
+    if(!next||!canWrite||!activeBatch)return;
+    setBusy(true);setMessage(null);
+    try{
+      const original=activeBatch.source_filename.replace(/ \[new matches .*\]$/,'');
+      if(next.name!==original)throw new Error('Select the original workbook ('+original+') for a safe recheck.');
+      const parsed=await parseReconciliationWorkbook(next);
+      if(parsed.sourceRows!==activeBatch.source_row_count)throw new Error('The workbook row count differs from the selected batch. Use the original workbook.');
+      const related=(batches.data||[]).filter((batch)=>batch.source_filename===original||batch.source_filename.startsWith(original+' [new matches '));
+      const previous=await Promise.all(related.map((batch)=>fetchReconciliationRows(batch.id)));
+      const staged=new Set(previous.flat().map((row)=>row.source_row_number));
+      const keys=await fetchReconciliationMatchKeys();
+      const emails=new Set(keys.emails.map((value)=>value.trim().toLowerCase()));
+      const mobiles=new Set(keys.mobiles.map((value)=>value.replace(/\D/g,'')));
+      const codes=new Set(keys.legacy_codes.map((value)=>value.trim().toUpperCase()));
+      const candidates=parsed.allRows.filter((row)=>{
+        if(staged.has(row.source_row_number))return false;
+        const email=row.source_email?.trim().toLowerCase();
+        const mobile=row.source_mobile?.replace(/\D/g,'');
+        const code=row.source_volunteer_code?.trim().toUpperCase();
+        return Boolean((email&&emails.has(email))||(mobile&&mobiles.has(mobile))||(code&&codes.has(code)));
+      });
+      if(!candidates.length){
+        setMessage({kind:'info',text:'Checked '+parsed.sourceRows.toLocaleString()+' workbook rows against current MakLom volunteers. No new matches were found. Existing review decisions remain unchanged.'});
+        return;
+      }
+      if(candidates.length>2000)throw new Error('More than 2,000 new candidates found. Split the workbook before staging.');
+      const result=await stageReconciliationWorkbook(next,{
+        sourceRows:parsed.sourceRows,candidateRows:candidates.length,
+        prefilteredUnmatched:parsed.sourceRows-candidates.length,rows:candidates,allRows:parsed.allRows,
+      },original+' [new matches '+new Date().toISOString()+']');
+      setSelectedBatchId(result.batch_id);setSelectedRowId(null);
+      await refresh();
+      setMessage({kind:'success',text:'Checked '+parsed.sourceRows.toLocaleString()+' rows. '+result.matched_rows.toLocaleString()+' newly matching volunteer(s) staged for review; '+result.conflict_rows.toLocaleString()+' conflict(s) excluded. No existing decisions or profiles were changed.'});
+    }catch(error){
+      setMessage({kind:'error',text:error instanceof Error?error.message:'Could not check for new volunteers.'});
     }finally{setBusy(false);}
   }
 
@@ -288,6 +327,21 @@ export function ProfileReconciliationView({canWrite}:{canWrite:boolean}){
           <Badge variant="light" color="orange">{activeBatch.pending_match_count.toLocaleString()} matches to confirm</Badge>
           <Badge variant="light" color="gray">{activeBatch.change_count.toLocaleString()} field proposals</Badge>
         </Group>}
+      </Group>
+    </Paper>
+
+    <Paper withBorder radius="lg" p="sm">
+      <Group justify="space-between" align="center" wrap="wrap">
+        <div>
+          <Text fw={700} size="sm">Refresh and check new volunteers</Text>
+          <Text size="xs" c="dimmed">Refresh the review queue, or select the original workbook to check previously unmatched records against newly registered Keluarga volunteers. No automatic merges.</Text>
+        </div>
+        <Group gap="xs">
+          <Button size="xs" variant="default" disabled={busy} loading={batches.isFetching||rows.isFetching} onClick={()=>void refresh()}>Refresh queue</Button>
+          {canWrite&&activeBatch&&<FileButton key={activeBatchId} accept=".xlsx,.xls" onChange={(next)=>void checkNewVolunteers(next)}>
+            {(props)=><Button {...props} variant="light" size="xs" loading={busy}>Check new volunteers</Button>}
+          </FileButton>}
+        </Group>
       </Group>
     </Paper>
 
