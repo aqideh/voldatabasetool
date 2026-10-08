@@ -66,7 +66,7 @@ interface CandidateChange {
   transformation:string|null;
 }
 
-interface CandidateRow {
+export interface CandidateRow {
   source_row_number:number;
   source_record_id:string|null;
   source_volunteer_code:string|null;
@@ -82,6 +82,7 @@ export interface ReconciliationPreview {
   candidateRows:number;
   prefilteredUnmatched:number;
   rows:CandidateRow[];
+  allRows:CandidateRow[];
 }
 
 export interface StageResult {
@@ -293,9 +294,11 @@ export async function parseReconciliationWorkbook(file:File):Promise<Reconciliat
   if(missing.length)throw new Error('Missing required column(s): '+missing.join(', '));
 
   const rows:CandidateRow[]=[];
+  const allRows:CandidateRow[]=[];
   let prefilteredUnmatched=0;
   raw.forEach((source,index)=>{
     const candidate=makeCandidate(source,index+2);
+    allRows.push(candidate);
     const email=emailKey(candidate.source_email);
     const mobile=digits(candidate.source_mobile);
     const code=codeKey(candidate.source_volunteer_code);
@@ -304,12 +307,12 @@ export async function parseReconciliationWorkbook(file:File):Promise<Reconciliat
     else prefilteredUnmatched+=1;
   });
 
-  return{sourceRows:raw.length,candidateRows:rows.length,prefilteredUnmatched,rows};
+  return{sourceRows:raw.length,candidateRows:rows.length,prefilteredUnmatched,rows,allRows};
 }
 
-export async function stageReconciliationWorkbook(file:File,preview:ReconciliationPreview):Promise<StageResult>{
+export async function stageReconciliationWorkbook(file:File,preview:ReconciliationPreview,sourceFilename=file.name):Promise<StageResult>{
   const{data,error}=await (supabase as any).rpc('stage_maklom_profile_reconciliation',{
-    p_source_filename:file.name,
+    p_source_filename:sourceFilename,
     p_source_row_count:preview.sourceRows,
     p_prefiltered_unmatched_count:preview.prefilteredUnmatched,
     p_rows:preview.rows,
