@@ -245,23 +245,30 @@ function personKey(row:{email:string;phone:string;name:string}) {
 }
 
 function identityCandidates(row:ParsedWorkbookRow,volunteers:HistoricalAttendanceContextVolunteer[]) {
-  const email=lower(row.email), phone=normalisePhone(row.phone);
-  const emailMatches=email?volunteers.filter((v)=>lower(v.email)===email):[];
-  const phoneMatches=phone?volunteers.filter((v)=>normalisePhone(v.phone)===phone):[];
-  const emailIds=new Set(emailMatches.map((v)=>v.id));
-  const both=phoneMatches.filter((v)=>emailIds.has(v.id));
-  if(email&&phone&&both.length===1)return {match:both[0],reason:'Exact email and mobile',flags:[] as string[]};
-  if(emailMatches.length===1&&phoneMatches.length===1&&emailMatches[0].id!==phoneMatches[0].id)return {match:null,reason:'Email and mobile point to different volunteers',flags:['identity_conflict']};
-  if(emailMatches.length===1){
-    const flags=normaliseName(emailMatches[0].name)!==normaliseName(row.name)?['name_differs']:[];
-    return {match:emailMatches[0],reason:'Exact email',flags};
+  // Historical email/mobile are source evidence only. They must not be used to
+  // establish canonical identity or to create contactable volunteer records.
+  const name=normaliseName(row.name);
+  const nameMatches=name?volunteers.filter((v)=>normaliseName(v.name)===name):[];
+  const evidenceFlag=(row.email||normalisePhone(row.phone))?['contact_evidence_unverified']:[];
+  if(nameMatches.length===1){
+    return {
+      match:nameMatches[0],
+      reason:'Unique exact name match; source email/mobile were not used',
+      flags:evidenceFlag,
+    };
   }
-  if(phoneMatches.length===1){
-    const flags=normaliseName(phoneMatches[0].name)!==normaliseName(row.name)?['name_differs']:[];
-    return {match:phoneMatches[0],reason:'Exact mobile',flags};
+  if(nameMatches.length>1){
+    return {
+      match:null,
+      reason:'Exact name matches multiple volunteers; source contact evidence is not trusted for disambiguation',
+      flags:['volunteer_ambiguous',...evidenceFlag],
+    };
   }
-  if(emailMatches.length>1||phoneMatches.length>1)return {match:null,reason:'Identifier matches multiple volunteers',flags:['volunteer_ambiguous']};
-  return {match:null,reason:'No existing volunteer matched email or mobile',flags:['volunteer_unmatched']};
+  return {
+    match:null,
+    reason:'No unique exact-name volunteer match; source contact evidence is retained only as evidence',
+    flags:['volunteer_unmatched',...evidenceFlag],
+  };
 }
 
 function eventCandidates(row:ParsedWorkbookRow,events:HistoricalAttendanceContextEvent[]) {
@@ -567,8 +574,6 @@ export async function createHistoricalVolunteerFromRow(input:{
   rowId:string;
   expectedVersion:number;
   name:string;
-  email:string|null;
-  phone:string|null;
 }) {
   const {data,error}=await supabase.rpc('maklom_event_resolve_staged_identity',{
     p_row_id:input.rowId,
@@ -576,8 +581,8 @@ export async function createHistoricalVolunteerFromRow(input:{
     p_existing_core_volunteer_id:null,
     p_create_new:true,
     p_name:input.name,
-    p_email:input.email,
-    p_phone:input.phone,
+    p_email:null,
+    p_phone:null,
   });
   if(error)throw error;
   return data as {

@@ -60,7 +60,18 @@ export function AttendanceView({ canWrite, canDelete }: { canWrite: boolean; can
                 {row.record_source === 'keluarga' && <Badge size="xs" variant="light">Keluarga</Badge>}
                 {row.record_source === 'keluarga' && !row.volunteer_id && <Badge size="xs" color="orange" variant="light">Unmatched</Badge>}
               </Group>
-              <Text size="xs" c="dimmed">{row.email || row.contact || '-'}</Text>
+              <Group gap={6}>
+                <Text size="xs" c="dimmed">{row.email || row.contact || '-'}</Text>
+                {row.record_source === 'maklom' && row.contact_evidence_status && row.contact_evidence_status !== 'verified' && (
+                  <Badge
+                    size="xs"
+                    color={row.contact_evidence_status === 'disputed' ? 'red' : 'orange'}
+                    variant="light"
+                  >
+                    {row.contact_evidence_status === 'disputed' ? 'Contact disputed' : 'Contact evidence only'}
+                  </Badge>
+                )}
+              </Group>
             </Table.Td>
             <Table.Td>{row.event_name}</Table.Td><Table.Td>{row.event_date}</Table.Td><Table.Td>{row.shift_label || '-'}</Table.Td>
             <Table.Td><Badge color={row.attended ? 'green' : 'gray'} variant="light">{row.attended ? 'Attended' : 'Not attended'}</Badge></Table.Td>
@@ -144,6 +155,9 @@ function AttendanceEditor({ row, canWrite, canDelete, onSaved, onResolved, onDel
 
   return <Stack>
     {isKeluarga && <Alert variant="light">This is a canonical Keluarga attendance record. MakLom corrections write back to the same record and are audit-logged.</Alert>}
+    {!isKeluarga && row.contact_evidence_status && row.contact_evidence_status !== 'verified' && <Alert color={row.contact_evidence_status === 'disputed' ? 'red' : 'orange'} variant="light">
+      The email/mobile shown on this historical attendance row is source evidence only{row.contact_evidence_status === 'disputed' ? ' and has been marked disputed' : ''}. Do not use it to identify or contact the volunteer.
+    </Alert>}
     {isKeluarga && !row.volunteer_id && canWrite && <VolunteerResolver
       source={{kind:'attendance',attendanceId:row.id}}
       initialName={row.name}
