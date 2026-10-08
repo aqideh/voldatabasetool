@@ -363,8 +363,6 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
   const [volunteerId,setVolunteerId]=useState<string|null>(row.matched_volunteer_id);
   const [identityMode,setIdentityMode]=useState<'existing'|'create'>('existing');
   const [newName,setNewName]=useState(row.full_name||'');
-  const [newEmail,setNewEmail]=useState(row.email||'');
-  const [newPhone,setNewPhone]=useState(row.phone||'');
   const [eventId,setEventId]=useState<string|null>(row.matched_keluarga_event_id?'keluarga:'+row.matched_keluarga_event_id:row.matched_event_id);
   const [shiftId,setShiftId]=useState<string|null>(row.matched_keluarga_timeslot_id?'keluarga:'+row.matched_keluarga_timeslot_id:row.matched_shift_id);
   const [minutes,setMinutes]=useState<number|string>(row.reported_minutes||0);
@@ -454,19 +452,16 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
 
   async function createVolunteer(){
     if(!newName.trim()){setMessage('Volunteer name is required.');return;}
-    if(!newEmail.trim()&&!newPhone.trim()){setMessage('Email or mobile number is required to create a volunteer.');return;}
     setSaving(true);setMessage(null);
     try{
       const result=await createHistoricalVolunteerFromRow({
         rowId:row.id,
         expectedVersion:row.row_version,
         name:newName.trim(),
-        email:newEmail.trim()||null,
-        phone:newPhone.trim()||null,
       });
       setVolunteerId(result.profile_id);
       const refreshed={...row,matched_volunteer_id:result.profile_id,matched_core_volunteer_id:result.core_volunteer_id,row_version:row.row_version+1};
-      setMessage('New volunteer created and linked.');
+      setMessage('New volunteer created and linked without copying source contact details.');
       await onSaved(refreshed);
     }catch(error){setMessage(error instanceof Error?error.message:'Could not create volunteer.');}
     finally{setSaving(false);}
@@ -567,8 +562,11 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
       <Paper withBorder radius="md" p="md">
         <Text fw={700}>Source evidence</Text>
         <Text size="sm" mt="xs"><b>Name:</b> {row.full_name}</Text>
-        <Text size="sm"><b>Email:</b> {row.email||'—'}</Text>
-        <Text size="sm"><b>Mobile:</b> {row.phone||'—'}</Text>
+        <Text size="sm"><b>Source email:</b> {row.email||'—'} <Badge size="xs" color="orange" variant="light">evidence only</Badge></Text>
+        <Text size="sm"><b>Source mobile:</b> {row.phone||'—'} <Badge size="xs" color="orange" variant="light">evidence only</Badge></Text>
+        <Text size="xs" c="dimmed" mt={4}>
+          Historical contact details are unverified source evidence. They are not used to establish canonical identity or copied into a new volunteer record.
+        </Text>
         <Text size="sm"><b>Event:</b> {row.event_name}</Text>
         <Text size="sm"><b>Canonical date:</b> {row.event_date}</Text>
         <Text size="sm"><b>Original source sign-in:</b> {safeDateTime(row.source_sign_in_original_at||row.source_sign_in_at)}</Text>
@@ -603,10 +601,10 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
       description="Match this source row to an existing canonical MakLom volunteer."
     />:<Paper withBorder radius="md" p="md">
       <Stack gap="sm">
-        <Alert color="orange" variant="light">Create a new volunteer only after confirming this person does not already exist in MakLom. Duplicate email or mobile numbers are blocked.</Alert>
+        <Alert color="orange" variant="light">
+          Create a new volunteer only after confirming this person does not already exist in MakLom. Source email and mobile are retained as evidence only and will not be copied into the canonical volunteer record.
+        </Alert>
         <TextInput label="Full name" value={newName} onChange={(event)=>setNewName(event.currentTarget.value)} disabled={!canWrite}/>
-        <TextInput label="Email" value={newEmail} onChange={(event)=>setNewEmail(event.currentTarget.value)} disabled={!canWrite}/>
-        <TextInput label="Mobile" value={newPhone} onChange={(event)=>setNewPhone(event.currentTarget.value)} disabled={!canWrite}/>
         {canWrite&&<Group justify="flex-end"><Button loading={saving} onClick={()=>void createVolunteer()}>Create volunteer & link</Button></Group>}
       </Stack>
     </Paper>}
