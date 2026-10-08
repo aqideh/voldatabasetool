@@ -517,6 +517,17 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
     return participationStatusRank(a.status)-participationStatusRank(b.status)
       || a.volunteer_name.localeCompare(b.volunteer_name);
   }),[participation.data?.rows,participationShiftById,participationSort]);
+  const legacyAttendanceRows=useMemo(
+    ()=>[...(people.data?.attendance||[])]
+      .filter((row)=>row.record_source==='maklom')
+      .sort((a,b)=>Number(b.attended)-Number(a.attended)||a.event_date.localeCompare(b.event_date)||a.name.localeCompare(b.name)),
+    [people.data?.attendance],
+  );
+  const displayedRowCount=participationRows.length+legacyAttendanceRows.length;
+  const displayedPresentCount=participationRows.filter((row)=>row.status==='attended').length
+    +legacyAttendanceRows.filter((row)=>row.attended).length;
+  const displayedAbsentCount=participationRows.filter((row)=>row.status==='absent').length
+    +legacyAttendanceRows.filter((row)=>!row.attended).length;
   const attendanceBySessionId=useMemo(
     ()=>new Map((people.data?.attendance||[])
       .filter((row)=>row.record_source==='keluarga')
@@ -700,9 +711,9 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
             setEventCorrectionNote('');
             setEditingEventDetails(true);
           }}>Edit details</Button>}
-          <Badge variant="light">{participationRows.length} roster rows</Badge>
-          <Badge variant="light" color="green">{participationRows.filter((row)=>row.status==='attended').length} present</Badge>
-          <Badge variant="light" color="red">{participationRows.filter((row)=>row.status==='absent').length} absent</Badge>
+          <Badge variant="light">{displayedRowCount} attendance rows</Badge>
+          <Badge variant="light" color="green">{displayedPresentCount} present</Badge>
+          <Badge variant="light" color="red">{displayedAbsentCount} absent</Badge>
           <Badge variant="light" color={reviewRequiredCount?'orange':'gray'}>{reviewRequiredCount} review required</Badge>
         </Group>
       </Group>
@@ -714,7 +725,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
           <Title order={4}>Roster & attendance</Title>
           <Text size="sm" c="dimmed">Full event roster with attendance outcome, scheduled shift, reported sign-in/out and contributed time. Present volunteers are shown first by default; use the Shift heading to group the roster by deployment. Absent, withdrawn and unresolved rows remain visible.</Text>
         </div>
-        <Badge variant="light">{participationRows.length} rows</Badge>
+        <Badge variant="light">{displayedRowCount} rows</Badge>
       </Group>
       {participation.isError&&<Alert color="red" mt="md">{participation.error instanceof Error?participation.error.message:'Event participation could not be loaded.'}</Alert>}
       <ScrollArea mt="sm">
@@ -755,10 +766,44 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
               </Table.Td>
               <Table.Td>{canWrite&&attendanceRecord&&<Button size="xs" variant="subtle" onClick={()=>setAttendanceRow(attendanceRecord)}>Correct</Button>}</Table.Td>
             </Table.Tr>;
+          })}
+          {legacyAttendanceRows.map((row)=>{
+            const legacyShift=(people.data?.legacyShifts||[]).find((shift)=>shift.id===row.shift_id);
+            const observedMinutes=row.calculated_duration_minutes??(
+              row.sign_in_at&&row.sign_out_at
+                ? Math.max(0,Math.floor((Date.parse(row.sign_out_at)-Date.parse(row.sign_in_at))/60000))
+                : null
+            );
+            const scheduled=legacyShift?.start_time
+              ? String(legacyShift.start_time).slice(0,5)+'–'+String(legacyShift.end_time||'').slice(0,5)
+              : '—';
+            return <Table.Tr key={'legacy:'+row.id}>
+              <Table.Td>
+                <Group gap="xs" wrap="nowrap">
+                  <Text fw={600} size="sm">{row.name}</Text>
+                  <Badge size="xs" variant="light" color="gray">Historical</Badge>
+                </Group>
+                <Text size="xs" c="dimmed">{row.email||row.contact||'—'}</Text>
+              </Table.Td>
+              <Table.Td><Badge size="xs" variant="light" color={row.attended?'green':'red'}>{row.attended?'Present':'Absent'}</Badge></Table.Td>
+              <Table.Td><Text size="sm">{legacyShift?.name||row.shift_label||'General'}</Text></Table.Td>
+              <Table.Td><Text size="sm">{scheduled}</Text></Table.Td>
+              <Table.Td><Text size="sm">{sgTime(row.sign_in_at)}</Text></Table.Td>
+              <Table.Td><Text size="sm">{sgTime(row.sign_out_at)}</Text></Table.Td>
+              <Table.Td>
+                <Text size="sm" fw={row.attended?600:400}>
+                  {row.attended?durationLabel(observedMinutes??row.duration_minutes):'—'}
+                </Text>
+                {row.attended&&observedMinutes!=null&&row.duration_minutes!==observedMinutes
+                  ? <Text size="xs" c="dimmed">Recorded credit: {durationLabel(row.duration_minutes)}</Text>
+                  : null}
+              </Table.Td>
+              <Table.Td><Text size="xs" c="dimmed">{row.event_date}</Text></Table.Td>
+            </Table.Tr>;
           })}</Table.Tbody>
         </Table>
       </ScrollArea>
-      {!participation.isLoading&&!participation.isError&&!participationRows.length&&<Text c="dimmed" size="sm" mt="sm">No roster rows are linked to this event.</Text>}
+      {!participation.isLoading&&!participation.isError&&!people.isLoading&&!displayedRowCount&&<Text c="dimmed" size="sm" mt="sm">No roster or historical attendance rows are linked to this event.</Text>}
     </Paper>
 
     <Paper withBorder radius="lg" p="md">
