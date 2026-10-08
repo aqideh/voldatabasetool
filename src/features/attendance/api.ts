@@ -7,7 +7,7 @@ export async function fetchAttendance(filters: AttendanceFilters) {
   const from = filters.page * filters.pageSize;
   const to = from + filters.pageSize - 1;
   let query = supabase.from('maklom_attendance_feed').select(
-    'id,volunteer_id,name,email,contact,attended,event_name,event_date,duration_minutes,sign_in_at,sign_out_at,calculated_duration_minutes,staff_credited_duration_minutes,staff_credit_note,event_id,shift_id,shift_label,row_version,record_source,contribution_status',
+    'id,volunteer_id,name,email,contact,attended,event_name,event_date,duration_minutes,sign_in_at,sign_out_at,calculated_duration_minutes,staff_credited_duration_minutes,staff_credit_note,event_id,shift_id,shift_label,row_version,record_source,contribution_status,contact_evidence_status',
     { count: 'exact' },
   );
   const search = safe(filters.search);
