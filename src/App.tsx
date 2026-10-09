@@ -102,7 +102,7 @@ export default function App(){
   const allowed=(p:Parameters<typeof hasAccess>[1])=>hasAccess(access,p);
   const permitted=access?.active||member?.active;
   const superadmin=allowed('staff.manage');
-  const canWrite=allowed('volunteers.write')||allowed('ops.write')||allowed('data.write')||allowed('leads.write'),canDelete=superadmin;
+  const canDelete=superadmin;
   const menuSections:Section[]=permitted?[
     ...(allowed('ops.read')?(['Work','Events','Attendance','Contribution Review','Insights & Reviews','Form Attendance','Historical Attendance'] as Section[]):[]),
     ...(allowed('leads.read')?(['Volunteer Leads'] as Section[]):[]),
@@ -131,17 +131,17 @@ export default function App(){
         onResolveEventMatch={(eventName,eventDate,rowIds)=>{setHistoricalFocus({eventName,eventDate,rowIds});setSection('Historical Attendance');close();}}
       />}
       {effectiveSection==='Data Dashboard'&&allowed('analytics.read')&&<VolunteerIntelligenceView/>}
-      {effectiveSection==='Volunteer Leads'&&allowed('leads.read')&&<LeadsView canWrite={canWrite}/>}
-      {effectiveSection==='Volunteers'&&allowed('volunteers.read')&&<VolunteersView canWrite={canWrite} canDelete={canDelete}/>}
-      {effectiveSection==='Events'&&allowed('ops.read')&&<EventsView canWrite={canWrite} canDelete={canDelete} requestedEventId={requestedEventId} requestedEventName={requestedEventName} requestedRowIds={requestedEventRowIds} onRequestedEventHandled={()=>{setRequestedEventId(null);setRequestedEventName(null);setRequestedEventRowIds([]);}}/>}
-      {effectiveSection==='Attendance'&&allowed('ops.read')&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}
-      {effectiveSection==='Contribution Review'&&allowed('ops.read')&&<ContributionReviewView canWrite={canWrite}/>}
-      {effectiveSection==='Profile Change Review'&&allowed('data.read')&&<ProfileChangeReviewView canWrite={canWrite}/>}
-      {effectiveSection==='Insights & Reviews'&&allowed('ops.read')&&<ProfileInboxView canWrite={canWrite}/>}
-      {effectiveSection==='Form Attendance'&&allowed('ops.read')&&<FormAttendanceView canWrite={canWrite} canDelete={canDelete}/>}
-      {effectiveSection==='Historical Attendance'&&allowed('ops.read')&&<HistoricalAttendanceView canWrite={canWrite} focus={historicalFocus} onClearFocus={()=>setHistoricalFocus(null)}/>}
-      {effectiveSection==='Profile Reconciliation'&&allowed('data.read')&&<ProfileReconciliationView canWrite={canWrite}/>}
-      {effectiveSection==='Data Operations'&&allowed('data.read')&&<DataOperationsView canWrite={canWrite}/>}
+      {effectiveSection==='Volunteer Leads'&&allowed('leads.read')&&<LeadsView canWrite={allowed('leads.write')}/>}
+      {effectiveSection==='Volunteers'&&allowed('volunteers.read')&&<VolunteersView canWrite={allowed('volunteers.write')} canDelete={canDelete}/>}
+      {effectiveSection==='Events'&&allowed('ops.read')&&<EventsView canWrite={allowed('ops.write')} canDelete={canDelete} requestedEventId={requestedEventId} requestedEventName={requestedEventName} requestedRowIds={requestedEventRowIds} onRequestedEventHandled={()=>{setRequestedEventId(null);setRequestedEventName(null);setRequestedEventRowIds([]);}}/>}
+      {effectiveSection==='Attendance'&&allowed('ops.read')&&<AttendanceView canWrite={allowed('ops.write')} canDelete={canDelete}/>}
+      {effectiveSection==='Contribution Review'&&allowed('ops.read')&&<ContributionReviewView canWrite={allowed('ops.write')}/>}
+      {effectiveSection==='Profile Change Review'&&allowed('data.read')&&<ProfileChangeReviewView canWrite={allowed('data.write')}/>}
+      {effectiveSection==='Insights & Reviews'&&allowed('ops.read')&&<ProfileInboxView canWrite={allowed('ops.write')}/>}
+      {effectiveSection==='Form Attendance'&&allowed('ops.read')&&<FormAttendanceView canWrite={allowed('ops.write')} canDelete={canDelete}/>}
+      {effectiveSection==='Historical Attendance'&&allowed('ops.read')&&<HistoricalAttendanceView canWrite={allowed('ops.write')} focus={historicalFocus} onClearFocus={()=>setHistoricalFocus(null)}/>}
+      {effectiveSection==='Profile Reconciliation'&&allowed('data.read')&&<ProfileReconciliationView canWrite={allowed('data.write')}/>}
+      {effectiveSection==='Data Operations'&&allowed('data.read')&&<DataOperationsView canWrite={allowed('data.write')}/>}
     </Box></AppShell.Main>
   </AppShell>;
 }
