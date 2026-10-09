@@ -12,8 +12,9 @@ const roleOptions=[
  {value:'operations_staff',label:'Operations Staff'},
  {value:'reporting_viewer',label:'Reporting Viewer'}
 ];
-export function AccessManagementView(){
+export function AccessManagementView({isSuperadmin}:{isSuperadmin:boolean}){
  const qc=useQueryClient();
+ const availableRoles=isSuperadmin?roleOptions:roleOptions.filter(r=>r.value!=='platform_admin');
  const [email,setEmail]=useState('');
  const [role,setRole]=useState<string>('volunteer_manager');
  const [active,setActive]=useState(true);
@@ -33,31 +34,31 @@ export function AccessManagementView(){
    change.mutate(v);
  }
  return <Stack gap="md">
-   <div><Title order={2}>Access Management</Title><Text c="dimmed" size="sm">MakLom permissions are independent of Keluarga roles. Only Superadmin can change them.</Text></div>
+   <div><Title order={2}>Access Management</Title><Text c="dimmed" size="sm">MakLom permissions are independent of Keluarga roles. Superadmin controls platform privileges. Platform Admin can manage subordinate roles.</Text></div>
    <Paper withBorder p="lg" radius="lg"><Stack>
      <Title order={4}>Grant access to an existing MENDAKI account</Title>
      <TextInput label="Staff email" placeholder="colleague@mendaki.org.sg" value={email} onChange={e=>setEmail(e.currentTarget.value)} />
-     <Select label="MakLom role" data={roleOptions} value={role} onChange={value=>setRole(value||'volunteer_manager')}/>
+     <Select label="MakLom role" data={availableRoles} value={role} onChange={value=>setRole(value||'volunteer_manager')}/>
      <Switch label="Active access" checked={active} onChange={e=>setActive(e.currentTarget.checked)}/>
      <Button loading={change.isPending} disabled={!email.trim()} onClick={()=>apply({email:email.trim(),role,active})}>Review and grant access</Button>
    </Stack></Paper>
-   <EventAssignments staff={(roster.data||[]).filter(person=>person.active&&person.role==='operations_staff')}/>
+   {isSuperadmin&&<EventAssignments staff={(roster.data||[]).filter(person=>person.active&&person.role==='operations_staff')}/>}
    {error&&<Text c="red" size="sm">{error}</Text>}
    {roster.error&&<Text c="red">{(roster.error as Error).message}</Text>}
    <Paper withBorder p="md" radius="lg"><Title order={4} mb="sm">Staff accounts</Title>
      {roster.isLoading?<Text>Loading staff…</Text>:
      <Table striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>Account</Table.Th><Table.Th>Role</Table.Th><Table.Th>Status</Table.Th><Table.Th>Action</Table.Th></Table.Tr></Table.Thead>
-       <Table.Tbody>{(roster.data||[]).map(person=><StaffRow key={person.user_id} person={person} disabled={change.isPending} onSave={apply}/>)}</Table.Tbody>
+       <Table.Tbody>{(roster.data||[]).map(person=><StaffRow key={person.user_id} person={person} disabled={change.isPending} isSuperadmin={isSuperadmin} onSave={apply}/>)}</Table.Tbody>
      </Table>}
    </Paper>
  </Stack>;
 }
-function StaffRow({person,disabled,onSave}:{person:Staff;disabled:boolean;onSave:(v:{email:string;role:string;active:boolean})=>void}){
+function StaffRow({person,disabled,isSuperadmin,onSave}:{person:Staff;disabled:boolean;isSuperadmin:boolean;onSave:(v:{email:string;role:string;active:boolean})=>void}){
  const [role,setRole]=useState(person.role);
  const [active,setActive]=useState(person.active);
- const locked=person.role==='superadmin';
+ const locked=person.role==='superadmin'||(!isSuperadmin&&person.role==='platform_admin');
  return <Table.Tr><Table.Td><Text size="sm">{person.email}</Text></Table.Td>
-   <Table.Td>{locked?<Badge>Superadmin</Badge>:<Select size="xs" w={200} data={roleOptions} value={role} onChange={v=>setRole(v as MaklomRole)}/>}</Table.Td>
+   <Table.Td>{locked?<Badge>Superadmin</Badge>:<Select size="xs" w={200} data={isSuperadmin?roleOptions:roleOptions.filter(r=>r.value!=='platform_admin')} value={role} onChange={v=>setRole(v as MaklomRole)}/>}</Table.Td>
    <Table.Td>{locked?<Badge color="green">Active</Badge>:<Switch checked={active} onChange={e=>setActive(e.currentTarget.checked)}/>}</Table.Td>
    <Table.Td><Group><Button size="xs" variant="light" disabled={locked||disabled||(role===person.role&&active===person.active)} onClick={()=>onSave({email:person.email,role,active})}>Save</Button></Group></Table.Td>
  </Table.Tr>;
