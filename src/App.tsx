@@ -102,8 +102,9 @@ export default function App(){
   if(!access?.active&&!member?.active)return <Center mih="100vh" p="md"><Paper withBorder radius="xl" p="xl" maw={520}><Stack><Title order={2}>Access not authorised</Title><Text c="dimmed">This account is signed in but is not an active MakLom member.</Text><Button variant="light" onClick={()=>void signOut()}>Sign out</Button></Stack></Paper></Center>;
   const allowed=(p:Parameters<typeof hasAccess>[1])=>hasAccess(access,p);
   const permitted=access?.active||member?.active;
-  const superadmin=allowed('staff.manage');
-  const canDelete=superadmin;
+  const superadmin=access?.active&&access.role==='superadmin';
+  const canManageStaff=allowed('staff.manage');
+  const canDelete=!!superadmin;
   const menuSections:Section[]=permitted?[
     ...(access?.role==='operations_staff'?(['My assigned events'] as Section[]):[]),
     ...(allowed('ops.read')?(['Work','Events','Attendance','Contribution Review','Insights & Reviews','Form Attendance','Historical Attendance'] as Section[]):[]),
@@ -112,7 +113,7 @@ export default function App(){
     ...(allowed('data.read')?(['Profile Change Review','Profile Reconciliation','Data Operations'] as Section[]):[]),
     ...(allowed('analytics.read')?(['Reporting Overview'] as Section[]):[]),
     ...(allowed('volunteers.read')&&allowed('analytics.read')?(['Data Dashboard'] as Section[]):[]),
-    ...(superadmin?(['Access Management'] as Section[]):[])
+    ...(canManageStaff?(['Access Management'] as Section[]):[])
   ]:[];
   const effectiveSection=menuSections.includes(section)?section:menuSections[0]||'Reporting Overview';
   return <AppShell header={{height:64}} navbar={{width:245,breakpoint:'sm',collapsed:{mobile:!opened}}} padding="lg">
@@ -126,7 +127,7 @@ export default function App(){
       </Box>
     </Stack></AppShell.Navbar>
     <AppShell.Main bg="gray.0"><Box maw={1600} mx="auto">
-      {effectiveSection==='Access Management'&&superadmin&&<AccessManagementView/>}
+      {effectiveSection==='Access Management'&&canManageStaff&&<AccessManagementView isSuperadmin={!!superadmin}/>}
       {effectiveSection==='My assigned events'&&access?.role==='operations_staff'&&<AssignedEventsView/>}
       {effectiveSection==='Reporting Overview'&&allowed('analytics.read')&&<AggregateReportingView/>}
       {effectiveSection==='Work'&&allowed('ops.read')&&<WorkView
