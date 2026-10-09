@@ -19,12 +19,16 @@ import { DataOperationsView } from './features/data-operations/DataOperationsVie
 import { VolunteerIntelligenceView } from './features/intelligence/VolunteerIntelligenceView';
 import { ProfileReconciliationView } from './features/profile-reconciliation/ProfileReconciliationView';
 import { WorkView, type WorkTarget } from './features/work/WorkView';
+import {fetchMaklomAccess,hasAccess,type MaklomAccess} from './lib/maklom-access';
+import {AccessManagementView} from './features/access/AccessManagementView';
+import {AggregateReportingView} from './features/access/AggregateReportingView';
+import {AssignedEventsView} from './features/access/AssignedEventsView';
 
 const primarySections=['Work','Data Dashboard','Events','Volunteer Leads','Volunteers'] as const;
 const reviewSections=['Contribution Review','Profile Change Review','Insights & Reviews','Form Attendance','Historical Attendance','Profile Reconciliation','Data Operations','Attendance'] as const;
 type PrimarySection=(typeof primarySections)[number];
 type ReviewSection=(typeof reviewSections)[number];
-type Section=PrimarySection|ReviewSection;
+type Section=PrimarySection|ReviewSection|'Access Management'|'Reporting Overview'|'My assigned events';
 
 function sectionLabel(section:Section){return section;}
 
@@ -48,15 +52,15 @@ function LoadingScreen({label}:{label:string}){
 }
 
 export default function App(){
-  const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[memberLoading,setMemberLoading]=useState(false);const[memberError,setMemberError]=useState('');const[section,setSection]=useState<Section>('Work');const[requestedEventId,setRequestedEventId]=useState<string|null>(null);const[requestedEventName,setRequestedEventName]=useState<string|null>(null);const[historicalFocus,setHistoricalFocus]=useState<{eventName:string;eventDate:string|null;rowIds:string[]}|null>(null);const[requestedEventRowIds,setRequestedEventRowIds]=useState<string[]>([]);const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();const memberRequest=useRef(0);
+  const[access,setAccess]=useState<MaklomAccess|null>(null);const[session,setSession]=useState<Session|null>(null);const[member,setMember]=useState<AppMember|null>(null);const[initialising,setInitialising]=useState(true);const[memberLoading,setMemberLoading]=useState(false);const[memberError,setMemberError]=useState('');const[section,setSection]=useState<Section>('Work');const[requestedEventId,setRequestedEventId]=useState<string|null>(null);const[requestedEventName,setRequestedEventName]=useState<string|null>(null);const[historicalFocus,setHistoricalFocus]=useState<{eventName:string;eventDate:string|null;rowIds:string[]}|null>(null);const[requestedEventRowIds,setRequestedEventRowIds]=useState<string[]>([]);const[opened,{toggle,close}]=useDisclosure(false);const qc=useQueryClient();const memberRequest=useRef(0);
 
   const loadCurrentMember=useCallback(async(current:Session)=>{
     const request=++memberRequest.current;
     setMember(null);setMemberLoading(true);setMemberError('');
     try{
-      const nextMember=await loadMember(current);
+      const [nextMember,nextAccess]=await Promise.all([loadMember(current),fetchMaklomAccess(current)]);
       if(request!==memberRequest.current)return;
-      setMember(nextMember);
+      setMember(nextMember);setAccess(nextAccess);
     }catch(err){
       if(request!==memberRequest.current)return;
       setMemberError(err instanceof Error?err.message:'MakLom access could not be loaded.');
@@ -95,36 +99,54 @@ export default function App(){
     <Text c="red" size="sm">{memberError}</Text>
     <Group><Button onClick={()=>void loadCurrentMember(session)}>Try again</Button><Button variant="subtle" onClick={()=>void signOut()}>Sign out</Button></Group>
   </Stack></Paper></Center>;
-  if(!member?.active)return <Center mih="100vh" p="md"><Paper withBorder radius="xl" p="xl" maw={520}><Stack><Title order={2}>Access not authorised</Title><Text c="dimmed">This account is signed in but is not an active MakLom member.</Text><Button variant="light" onClick={()=>void signOut()}>Sign out</Button></Stack></Paper></Center>;
-  const canWrite=member.role==='editor'||member.role==='admin',canDelete=member.role==='admin';
+  if(!access?.active&&!member?.active)return <Center mih="100vh" p="md"><Paper withBorder radius="xl" p="xl" maw={520}><Stack><Title order={2}>Access not authorised</Title><Text c="dimmed">This account is signed in but is not an active MakLom member.</Text><Button variant="light" onClick={()=>void signOut()}>Sign out</Button></Stack></Paper></Center>;
+  const allowed=(p:Parameters<typeof hasAccess>[1])=>hasAccess(access,p);
+  const permitted=access?.active||member?.active;
+  const superadmin=access?.active&&access.role==='superadmin';
+  const canManageStaff=allowed('staff.manage');
+  const canDelete=!!superadmin;
+  const menuSections:Section[]=permitted?[
+    ...(access?.role==='operations_staff'?(['My assigned events'] as Section[]):[]),
+    ...(allowed('ops.read')?(['Work','Events','Attendance','Contribution Review','Insights & Reviews','Form Attendance','Historical Attendance'] as Section[]):[]),
+    ...(allowed('leads.read')?(['Volunteer Leads'] as Section[]):[]),
+    ...(allowed('volunteers.read')?(['Volunteers'] as Section[]):[]),
+    ...(allowed('data.read')?(['Profile Change Review','Profile Reconciliation','Data Operations'] as Section[]):[]),
+    ...(allowed('analytics.read')?(['Reporting Overview'] as Section[]):[]),
+    ...(allowed('volunteers.read')&&allowed('analytics.read')?(['Data Dashboard'] as Section[]):[]),
+    ...(canManageStaff?(['Access Management'] as Section[]):[])
+  ]:[];
+  const effectiveSection=menuSections.includes(section)?section:menuSections[0]||'Reporting Overview';
   return <AppShell header={{height:64}} navbar={{width:245,breakpoint:'sm',collapsed:{mobile:!opened}}} padding="lg">
-    <AppShell.Header px="md"><Group h="100%" justify="space-between"><Group><Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm"/><div className="maklom-brand"><img src="/maklom-logo.svg" alt=""/><div><Text fw={800} fz="lg">MakLom</Text><Text size="xs" c="dimmed">Volunteer operations database</Text></div></div></Group><Group gap="xs"><Badge variant="light">{member.role}</Badge><Text size="sm" visibleFrom="sm">{session.user.email}</Text><Button size="xs" variant="subtle" onClick={()=>void signOut()}>Sign out</Button></Group></Group></AppShell.Header>
+    <AppShell.Header px="md"><Group h="100%" justify="space-between"><Group><Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm"/><div className="maklom-brand"><img src="/maklom-logo.svg" alt=""/><div><Text fw={800} fz="lg">MakLom</Text><Text size="xs" c="dimmed">Volunteer operations database</Text></div></div></Group><Group gap="xs"><Badge variant="light">{access?.role||member?.role||'No access'}</Badge><Text size="sm" visibleFrom="sm">{session.user.email}</Text><Button size="xs" variant="subtle" onClick={()=>void signOut()}>Sign out</Button></Group></Group></AppShell.Header>
     <AppShell.Navbar p="sm"><Stack gap={4}>
       <Text size="xs" c="dimmed" fw={700} tt="uppercase" px="sm" py={6}>MakLom</Text>
-      {primarySections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{setSection(item);close();}}/>)}
+      {menuSections.filter(item=>!['Contribution Review','Insights & Reviews','Form Attendance','Historical Attendance','Profile Change Review','Profile Reconciliation','Data Operations','Attendance'].includes(item)).map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{setSection(item);close();}}/>)}
       <Box mt="md">
         <Text size="xs" c="dimmed" fw={700} tt="uppercase" px="sm" py={6}>Review tools</Text>
-        {reviewSections.map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{if(item==='Historical Attendance')setHistoricalFocus(null);setSection(item);close();}}/>)}
+        {menuSections.filter(item=>['Contribution Review','Insights & Reviews','Form Attendance','Historical Attendance','Profile Change Review','Profile Reconciliation','Data Operations','Attendance'].includes(item)).map((item)=><NavLink key={item} label={sectionLabel(item)} active={section===item} onClick={()=>{if(item==='Historical Attendance')setHistoricalFocus(null);setSection(item);close();}}/>)}
       </Box>
     </Stack></AppShell.Navbar>
     <AppShell.Main bg="gray.0"><Box maw={1600} mx="auto">
-      {section==='Work'&&<WorkView
+      {effectiveSection==='Access Management'&&canManageStaff&&<AccessManagementView isSuperadmin={!!superadmin}/>}
+      {effectiveSection==='My assigned events'&&access?.role==='operations_staff'&&<AssignedEventsView/>}
+      {effectiveSection==='Reporting Overview'&&allowed('analytics.read')&&<AggregateReportingView/>}
+      {effectiveSection==='Work'&&allowed('ops.read')&&<WorkView
         onNavigate={(target:WorkTarget)=>{setSection(target as Section);close();}}
         onOpenEvent={(eventId,eventName,rowIds)=>{setRequestedEventId(eventId);setRequestedEventName(eventName);setRequestedEventRowIds(rowIds);setSection('Events');close();}}
         onResolveEventMatch={(eventName,eventDate,rowIds)=>{setHistoricalFocus({eventName,eventDate,rowIds});setSection('Historical Attendance');close();}}
       />}
-      {section==='Data Dashboard'&&<VolunteerIntelligenceView/>}
-      {section==='Volunteer Leads'&&<LeadsView canWrite={canWrite}/>}
-      {section==='Volunteers'&&<VolunteersView canWrite={canWrite} canDelete={canDelete}/>}
-      {section==='Events'&&<EventsView canWrite={canWrite} canDelete={canDelete} requestedEventId={requestedEventId} requestedEventName={requestedEventName} requestedRowIds={requestedEventRowIds} onRequestedEventHandled={()=>{setRequestedEventId(null);setRequestedEventName(null);setRequestedEventRowIds([]);}}/>}
-      {section==='Attendance'&&<AttendanceView canWrite={canWrite} canDelete={canDelete}/>}
-      {section==='Contribution Review'&&<ContributionReviewView canWrite={canWrite}/>}
-      {section==='Profile Change Review'&&<ProfileChangeReviewView canWrite={canWrite}/>}
-      {section==='Insights & Reviews'&&<ProfileInboxView canWrite={canWrite}/>}
-      {section==='Form Attendance'&&<FormAttendanceView canWrite={canWrite} canDelete={canDelete}/>}
-      {section==='Historical Attendance'&&<HistoricalAttendanceView canWrite={canWrite} focus={historicalFocus} onClearFocus={()=>setHistoricalFocus(null)}/>}
-      {section==='Profile Reconciliation'&&<ProfileReconciliationView canWrite={canWrite}/>}
-      {section==='Data Operations'&&<DataOperationsView canWrite={canWrite}/>}
+      {effectiveSection==='Data Dashboard'&&allowed('analytics.read')&&<VolunteerIntelligenceView/>}
+      {effectiveSection==='Volunteer Leads'&&allowed('leads.read')&&<LeadsView canWrite={allowed('leads.write')}/>}
+      {effectiveSection==='Volunteers'&&allowed('volunteers.read')&&<VolunteersView canWrite={allowed('volunteers.write')} canDelete={canDelete}/>}
+      {effectiveSection==='Events'&&allowed('ops.read')&&<EventsView canWrite={allowed('ops.write')} canDelete={canDelete} requestedEventId={requestedEventId} requestedEventName={requestedEventName} requestedRowIds={requestedEventRowIds} onRequestedEventHandled={()=>{setRequestedEventId(null);setRequestedEventName(null);setRequestedEventRowIds([]);}}/>}
+      {effectiveSection==='Attendance'&&allowed('ops.read')&&<AttendanceView canWrite={allowed('ops.write')} canDelete={canDelete}/>}
+      {effectiveSection==='Contribution Review'&&allowed('ops.read')&&<ContributionReviewView canWrite={allowed('ops.write')}/>}
+      {effectiveSection==='Profile Change Review'&&allowed('data.read')&&<ProfileChangeReviewView canWrite={allowed('data.write')}/>}
+      {effectiveSection==='Insights & Reviews'&&allowed('ops.read')&&<ProfileInboxView canWrite={allowed('ops.write')}/>}
+      {effectiveSection==='Form Attendance'&&allowed('ops.read')&&<FormAttendanceView canWrite={allowed('ops.write')} canDelete={canDelete}/>}
+      {effectiveSection==='Historical Attendance'&&allowed('ops.read')&&<HistoricalAttendanceView canWrite={allowed('ops.write')} focus={historicalFocus} onClearFocus={()=>setHistoricalFocus(null)}/>}
+      {effectiveSection==='Profile Reconciliation'&&allowed('data.read')&&<ProfileReconciliationView canWrite={allowed('data.write')}/>}
+      {effectiveSection==='Data Operations'&&allowed('data.read')&&<DataOperationsView canWrite={allowed('data.write')}/>}
     </Box></AppShell.Main>
   </AppShell>;
 }
