@@ -5,7 +5,7 @@ export interface MaklomAccess {user_id:string;role:MaklomRole;active:boolean;}
 export type Permission='staff.manage'|'analytics.read'|'volunteers.read'|'volunteers.write'|'leads.read'|'leads.write'|'data.read'|'data.write'|'ops.read'|'ops.write'|'audit.read';
 const permissions:Record<MaklomRole,Permission[]>={
   superadmin:['staff.manage','analytics.read','volunteers.read','volunteers.write','leads.read','leads.write','data.read','data.write','ops.read','ops.write','audit.read'],
-  platform_admin:['analytics.read','volunteers.read','volunteers.write','leads.read','leads.write','data.read','data.write','ops.read','ops.write','audit.read'],
+  platform_admin:['staff.manage','analytics.read','volunteers.read','volunteers.write','leads.read','leads.write','data.read','data.write','ops.read','ops.write','audit.read'],
   volunteer_manager:['analytics.read','volunteers.read','volunteers.write','leads.read','leads.write','data.read','data.write','ops.read','ops.write'],
   data_steward:['analytics.read','volunteers.read','volunteers.write','leads.read','leads.write','data.read','data.write'],
   operations_staff:['analytics.read'],
