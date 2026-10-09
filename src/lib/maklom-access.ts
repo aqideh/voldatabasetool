@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
-export type MaklomRole='superadmin'|'platform_admin'|'data_steward'|'operations_staff'|'reporting_viewer';
+export type MaklomRole='superadmin'|'platform_admin'|'volunteer_manager'|'data_steward'|'operations_staff'|'reporting_viewer';
 export interface MaklomAccess {user_id:string;role:MaklomRole;active:boolean;}
 export type Permission='staff.manage'|'analytics.read'|'volunteers.read'|'volunteers.write'|'leads.read'|'leads.write'|'data.read'|'data.write'|'ops.read'|'ops.write'|'audit.read';
 const permissions:Record<MaklomRole,Permission[]>={
