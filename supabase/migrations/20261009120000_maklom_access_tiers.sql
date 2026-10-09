@@ -4,7 +4,7 @@ begin;
 
 create table public.maklom_staff_access (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  role text not null check (role in ('superadmin','administrator','data_steward','operations_officer','reporting_analyst','viewer')),
+  role text not null check (role in ('superadmin','platform_admin','volunteer_manager','data_steward','operations_staff','reporting_viewer')),
   active boolean not null default true,
   granted_by uuid references auth.users(id) on delete set null,
   granted_at timestamptz not null default now(),
@@ -16,13 +16,13 @@ grant select on public.maklom_staff_access to authenticated;
 create policy maklom_access_self on public.maklom_staff_access
   for select to authenticated using (user_id = (select auth.uid()));
 
--- Bootstrap only the sole existing MakLom administrator; do not infer
+-- Bootstrap only the sole existing MakLom platform_admin; do not infer
 -- superadmin from Keluarga staff/VolTeam/admin roles or email domain.
 do $bootstrap$
 declare v_id uuid;
 begin
   if (select count(*) from public.app_members where role='admin' and active) <> 1 then
-    raise exception 'Expected exactly one active legacy MakLom administrator. Bootstrap stopped.';
+    raise exception 'Expected exactly one active legacy MakLom platform_admin. Bootstrap stopped.';
   end if;
   select user_id into v_id from public.app_members where role='admin' and active;
   insert into public.maklom_staff_access(user_id,role,active,granted_by)
@@ -36,15 +36,17 @@ as $fn$
     select 1 from public.maklom_staff_access a
     where a.user_id = auth.uid() and a.active and (
       a.role = 'superadmin'
-      or (a.role = 'administrator' and p_permission = any(array[
+      or (a.role = 'platform_admin' and p_permission = any(array[
         'analytics.read','volunteers.read','volunteers.write','leads.read','leads.write',
         'data.read','data.write','ops.read','ops.write','audit.read']))
-      or (a.role = 'data_steward' and p_permission = any(array[
+      or (a.role = 'volunteer_manager' and p_permission = any(array[
         'analytics.read','volunteers.read','volunteers.write','leads.read','leads.write',
-        'data.read','data.write']))
-      or (a.role = 'operations_officer' and p_permission = any(array[
+        'data.read','data.write','ops.read','ops.write']))
+      or (a.role = 'data_steward' and p_permission = any(array[
+        'analytics.read','volunteers.read','volunteers.write','data.read','data.write']))
+      or (a.role = 'operations_staff' and p_permission = any(array[
         'analytics.read','ops.read','ops.write']))
-      or (a.role in ('reporting_analyst','viewer') and p_permission = 'analytics.read')
+      or (a.role in ('reporting_viewer') and p_permission = 'analytics.read')
     )
   );
 $fn$;
@@ -93,7 +95,7 @@ begin
   if not public.maklom_can('staff.manage') then
     raise exception 'Superadmin access required' using errcode='42501';
   end if;
-  if p_role not in ('administrator','data_steward','operations_officer','reporting_analyst','viewer')
+  if p_role not in ('platform_admin','volunteer_manager','data_steward','operations_staff','reporting_viewer')
     or p_role is null or p_active is null then
     raise exception 'Invalid MakLom role or status' using errcode='22023';
   end if;
