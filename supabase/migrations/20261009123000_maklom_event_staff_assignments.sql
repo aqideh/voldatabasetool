@@ -74,10 +74,12 @@ begin
  ) then raise exception 'Not assigned to this event' using errcode='42501'; end if;
  return query
  select r.id,r.volunteer_name,
-   (select min(s.checked_in_at) from public.phaseone_attendance_sessions s
-     where s.event_id=p_event_id and s.origin_roster_id=r.id),
-   (select max(s.checked_out_at) from public.phaseone_attendance_sessions s
-     where s.event_id=p_event_id and s.origin_roster_id=r.id)
+   (select min(s.checked_in_at) from public.phaseone_attendance_session_shifts link
+     join public.phaseone_attendance_sessions s on s.id=link.session_id
+     where link.event_id=p_event_id and link.roster_id=r.id),
+   (select max(s.checked_out_at) from public.phaseone_attendance_session_shifts link
+     join public.phaseone_attendance_sessions s on s.id=link.session_id
+     where link.event_id=p_event_id and link.roster_id=r.id)
  from public.phaseone_roster r
  where r.event_id=p_event_id
  order by r.volunteer_name;
