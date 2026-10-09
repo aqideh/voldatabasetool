@@ -66,7 +66,7 @@ alter table public.maklom_staff_access_audit enable row level security;
 revoke all on public.maklom_staff_access_audit from anon,authenticated;
 grant select on public.maklom_staff_access_audit to authenticated;
 create policy maklom_access_audit_superadmin_read on public.maklom_staff_access_audit
-  for select to authenticated using ((select public.maklom_can('staff.manage')));
+  for select to authenticated using (exists(select 1 from public.maklom_staff_access a where a.user_id=(select auth.uid()) and a.role='superadmin' and a.active));
 
 create or replace function public.maklom_list_staff_access()
 returns table(user_id uuid,email text,role text,active boolean,updated_at timestamptz)
