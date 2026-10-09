@@ -211,7 +211,6 @@ begin
       ('public','form_import_batches','update','ops.write'),
       ('public','form_submissions','select','ops.read'),
       ('public','form_submissions','insert','ops.write'),
-      ('public','reporting_metrics','select','analytics.read'),
       ('public','maklom_profile_reconciliation_batches','select','data.read'),
       ('public','maklom_profile_reconciliation_rows','select','data.read'),
       ('public','maklom_profile_reconciliation_changes','select','data.read'),
