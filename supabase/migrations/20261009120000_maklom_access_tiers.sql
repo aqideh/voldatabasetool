@@ -16,13 +16,13 @@ grant select on public.maklom_staff_access to authenticated;
 create policy maklom_access_self on public.maklom_staff_access
   for select to authenticated using (user_id = (select auth.uid()));
 
--- Bootstrap only the sole existing MakLom platform_admin; do not infer
+-- Bootstrap only the sole existing MakLom administrator; do not infer
 -- superadmin from Keluarga staff/VolTeam/admin roles or email domain.
 do $bootstrap$
 declare v_id uuid;
 begin
   if (select count(*) from public.app_members where role='admin' and active) <> 1 then
-    raise exception 'Expected exactly one active legacy MakLom platform_admin. Bootstrap stopped.';
+    raise exception 'Expected exactly one active legacy MakLom administrator. Bootstrap stopped.';
   end if;
   select user_id into v_id from public.app_members where role='admin' and active;
   insert into public.maklom_staff_access(user_id,role,active,granted_by)
@@ -98,7 +98,7 @@ begin
     or p_role is null or p_active is null then
     raise exception 'Invalid MakLom role or status' using errcode='22023';
   end if;
-  if p_email is null or lower(btrim(p_email)) !~ '^[a-z0-9._%+-]+@mendaki[.]org[.]sg then
+  if p_email is null or lower(btrim(p_email)) !~ '^[a-z0-9._%+-]+@mendaki[.]org[.]sg
     raise exception 'A registered MENDAKI staff email address is required' using errcode='22023';
   end if;
   select u.id into v_target from auth.users u where lower(u.email)=lower(btrim(p_email));
