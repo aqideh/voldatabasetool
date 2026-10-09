@@ -41,6 +41,7 @@ export function AccessManagementView(){
      <Switch label="Active access" checked={active} onChange={e=>setActive(e.currentTarget.checked)}/>
      <Button loading={change.isPending} disabled={!email.trim()} onClick={()=>apply({email:email.trim(),role,active})}>Review and grant access</Button>
    </Stack></Paper>
+   <EventAssignments staff={(roster.data||[]).filter(person=>person.active&&person.role==='operations_staff')}/>
    {error&&<Text c="red" size="sm">{error}</Text>}
    {roster.error&&<Text c="red">{(roster.error as Error).message}</Text>}
    <Paper withBorder p="md" radius="lg"><Title order={4} mb="sm">Staff accounts</Title>
@@ -60,4 +61,42 @@ function StaffRow({person,disabled,onSave}:{person:Staff;disabled:boolean;onSave
    <Table.Td>{locked?<Badge color="green">Active</Badge>:<Switch checked={active} onChange={e=>setActive(e.currentTarget.checked)}/>}</Table.Td>
    <Table.Td><Group><Button size="xs" variant="light" disabled={locked||disabled||(role===person.role&&active===person.active)} onClick={()=>onSave({email:person.email,role,active})}>Save</Button></Group></Table.Td>
  </Table.Tr>;
+}
+
+type AssignedEvent={id:string;title:string;reporting_at:string};
+type Assignment={event_id:string;user_id:string};
+function EventAssignments({staff}:{staff:Staff[]}){
+ const qc=useQueryClient();
+ const [selectedStaff,setSelectedStaff]=useState<string|null>(null);
+ const [selectedEvent,setSelectedEvent]=useState<string|null>(null);
+ const events=useQuery({queryKey:['maklom-assignable-events'],queryFn:async()=>{
+  const {data,error}=await supabase.from('phaseone_events').select('id,title,reporting_at').order('reporting_at',{ascending:false}).limit(300);
+  if(error)throw error;return (data||[]) as AssignedEvent[];
+ }});
+ const assignments=useQuery({queryKey:['maklom-event-staff-assignments'],queryFn:async()=>{
+  const {data,error}=await supabase.from('maklom_event_staff_assignments').select('event_id,user_id');
+  if(error)throw error;return (data||[]) as Assignment[];
+ }});
+ const mutation=useMutation({mutationFn:async({userId,eventId,assign}:{userId:string;eventId:string;assign:boolean})=>{
+  const {error}=await supabase.rpc('maklom_assign_event_staff',{p_user_id:userId,p_event_id:eventId,p_assign:assign});
+  if(error)throw error;
+ },onSuccess:()=>{void qc.invalidateQueries({queryKey:['maklom-event-staff-assignments']});}});
+ return <Paper withBorder p="lg" radius="lg"><Stack>
+  <Title order={4}>Operations Staff event assignments</Title>
+  <Text c="dimmed" size="sm">Grant access to individual events only. Revoking an assignment immediately removes the staff member's ability to retrieve that roster.</Text>
+  <Select label="Operations Staff" searchable data={staff.map(s=>({value:s.user_id,label:s.email}))} value={selectedStaff} onChange={setSelectedStaff} placeholder="Choose staff member"/>
+  <Select label="Event" searchable data={(events.data||[]).map(e=>({value:e.id,label:e.title+' · '+new Date(e.reporting_at).toLocaleDateString('en-SG')}))} value={selectedEvent} onChange={setSelectedEvent} placeholder="Choose event"/>
+  <Button disabled={!selectedStaff||!selectedEvent||mutation.isPending} loading={mutation.isPending} onClick={()=>{
+   if(selectedStaff&&selectedEvent&&window.confirm('Assign this event to selected Operations Staff?'))mutation.mutate({userId:selectedStaff,eventId:selectedEvent,assign:true});
+  }}>Assign event</Button>
+  {mutation.error&&<Text c="red">{(mutation.error as Error).message}</Text>}
+  {assignments.error&&<Text c="red">{(assignments.error as Error).message}</Text>}
+  {staff.length===0&&<Text size="sm">Grant the Operations Staff role to a colleague before assigning an event.</Text>}
+  {selectedStaff&&(assignments.data||[]).filter(a=>a.user_id===selectedStaff).map(a=><Group key={a.event_id} justify="space-between">
+   <Text size="sm">{events.data?.find(e=>e.id===a.event_id)?.title||a.event_id}</Text>
+   <Button size="xs" color="red" variant="subtle" disabled={mutation.isPending} onClick={()=>{
+    if(window.confirm('Revoke this event assignment?'))mutation.mutate({userId:selectedStaff,eventId:a.event_id,assign:false});
+   }}>Revoke</Button>
+  </Group>)}
+ </Stack></Paper>;
 }
