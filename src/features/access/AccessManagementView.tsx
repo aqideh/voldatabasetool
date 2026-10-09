@@ -71,7 +71,7 @@ function EventAssignments({staff}:{staff:Staff[]}){
  const [selectedStaff,setSelectedStaff]=useState<string|null>(null);
  const [selectedEvent,setSelectedEvent]=useState<string|null>(null);
  const events=useQuery({queryKey:['maklom-assignable-events'],queryFn:async()=>{
-  const {data,error}=await supabase.from('phaseone_events').select('id,title,reporting_at').order('reporting_at',{ascending:false}).limit(300);
+  const {data,error}=await supabase.rpc('maklom_assignable_events');
   if(error)throw error;return (data||[]) as AssignedEvent[];
  }});
  const assignments=useQuery({queryKey:['maklom-event-staff-assignments'],queryFn:async()=>{
