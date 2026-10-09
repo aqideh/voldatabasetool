@@ -14,6 +14,24 @@ grant select on public.maklom_event_staff_assignments to authenticated;
 create policy maklom_event_staff_own on public.maklom_event_staff_assignments
 for select to authenticated using (user_id=(select auth.uid()) or exists(select 1 from public.maklom_staff_access a where a.user_id=(select auth.uid()) and a.role='superadmin' and a.active));
 
+create or replace function public.maklom_assignable_events()
+returns table(id uuid,title text,reporting_at timestamptz)
+language plpgsql stable security definer set search_path=''
+as $fn$
+begin
+ if not public.maklom_can('staff.manage') then
+   raise exception 'Access management permission required' using errcode='42501';
+ end if;
+ return query select e.id,e.title,e.reporting_at
+ from public.phaseone_events e
+ where e.operations_scope='canonical'
+ order by e.reporting_at desc
+ limit 500;
+end;
+$fn$;
+revoke all on function public.maklom_assignable_events() from public,anon;
+grant execute on function public.maklom_assignable_events() to authenticated;
+
 create or replace function public.maklom_assign_event_staff(p_user_id uuid,p_event_id uuid,p_assign boolean)
 returns void language plpgsql security definer set search_path=''
 as $fn$
