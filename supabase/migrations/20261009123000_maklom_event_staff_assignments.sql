@@ -12,13 +12,13 @@ alter table public.maklom_event_staff_assignments enable row level security;
 revoke all on public.maklom_event_staff_assignments from anon,authenticated;
 grant select on public.maklom_event_staff_assignments to authenticated;
 create policy maklom_event_staff_own on public.maklom_event_staff_assignments
-for select to authenticated using (user_id=(select auth.uid()) or (select public.maklom_can('staff.manage')));
+for select to authenticated using (user_id=(select auth.uid()) or exists(select 1 from public.maklom_staff_access a where a.user_id=(select auth.uid()) and a.role='superadmin' and a.active));
 
 create or replace function public.maklom_assign_event_staff(p_user_id uuid,p_event_id uuid,p_assign boolean)
 returns void language plpgsql security definer set search_path=''
 as $fn$
 begin
- if not public.maklom_can('staff.manage') then
+ if not exists(select 1 from public.maklom_staff_access a where a.user_id=auth.uid() and a.role='superadmin' and a.active) then
   raise exception 'Superadmin access required' using errcode='42501';
  end if;
  if not exists(select 1 from public.maklom_staff_access a
