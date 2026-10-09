@@ -44,8 +44,7 @@ as $fn$
         'data.read','data.write','ops.read','ops.write']))
       or (a.role = 'data_steward' and p_permission = any(array[
         'analytics.read','volunteers.read','volunteers.write','data.read','data.write']))
-      or (a.role = 'operations_staff' and p_permission = any(array[
-        'analytics.read','ops.read','ops.write']))
+      or (a.role = 'operations_staff' and p_permission = 'analytics.read')
       or (a.role in ('reporting_viewer') and p_permission = 'analytics.read')
     )
   );
