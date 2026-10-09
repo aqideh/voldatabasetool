@@ -109,6 +109,7 @@ export default function App(){
     ...(allowed('volunteers.read')?(['Volunteers'] as Section[]):[]),
     ...(allowed('data.read')?(['Profile Change Review','Profile Reconciliation','Data Operations'] as Section[]):[]),
     ...(allowed('analytics.read')?(['Reporting Overview'] as Section[]):[]),
+    ...(allowed('volunteers.read')&&allowed('analytics.read')?(['Data Dashboard'] as Section[]):[]),
     ...(superadmin?(['Access Management'] as Section[]):[])
   ]:[];
   const effectiveSection=menuSections.includes(section)?section:menuSections[0]||'Reporting Overview';
