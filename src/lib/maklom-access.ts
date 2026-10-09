@@ -8,7 +8,7 @@ const permissions:Record<MaklomRole,Permission[]>={
   platform_admin:['analytics.read','volunteers.read','volunteers.write','leads.read','leads.write','data.read','data.write','ops.read','ops.write','audit.read'],
   volunteer_manager:['analytics.read','volunteers.read','volunteers.write','leads.read','leads.write','data.read','data.write','ops.read','ops.write'],
   data_steward:['analytics.read','volunteers.read','volunteers.write','leads.read','leads.write','data.read','data.write'],
-  operations_staff:['analytics.read','ops.read','ops.write'],
+  operations_staff:['analytics.read'],
   reporting_viewer:['analytics.read']
 };
 export function hasAccess(access:MaklomAccess|null,permission:Permission){return !!access?.active&&permissions[access.role]?.includes(permission);}
