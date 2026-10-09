@@ -22,12 +22,13 @@ import { WorkView, type WorkTarget } from './features/work/WorkView';
 import {fetchMaklomAccess,hasAccess,type MaklomAccess} from './lib/maklom-access';
 import {AccessManagementView} from './features/access/AccessManagementView';
 import {AggregateReportingView} from './features/access/AggregateReportingView';
+import {AssignedEventsView} from './features/access/AssignedEventsView';
 
 const primarySections=['Work','Data Dashboard','Events','Volunteer Leads','Volunteers'] as const;
 const reviewSections=['Contribution Review','Profile Change Review','Insights & Reviews','Form Attendance','Historical Attendance','Profile Reconciliation','Data Operations','Attendance'] as const;
 type PrimarySection=(typeof primarySections)[number];
 type ReviewSection=(typeof reviewSections)[number];
-type Section=PrimarySection|ReviewSection|'Access Management'|'Reporting Overview';
+type Section=PrimarySection|ReviewSection|'Access Management'|'Reporting Overview'|'My assigned events';
 
 function sectionLabel(section:Section){return section;}
 
@@ -104,6 +105,7 @@ export default function App(){
   const superadmin=allowed('staff.manage');
   const canDelete=superadmin;
   const menuSections:Section[]=permitted?[
+    ...(access?.role==='operations_staff'?(['My assigned events'] as Section[]):[]),
     ...(allowed('ops.read')?(['Work','Events','Attendance','Contribution Review','Insights & Reviews','Form Attendance','Historical Attendance'] as Section[]):[]),
     ...(allowed('leads.read')?(['Volunteer Leads'] as Section[]):[]),
     ...(allowed('volunteers.read')?(['Volunteers'] as Section[]):[]),
@@ -125,6 +127,7 @@ export default function App(){
     </Stack></AppShell.Navbar>
     <AppShell.Main bg="gray.0"><Box maw={1600} mx="auto">
       {effectiveSection==='Access Management'&&superadmin&&<AccessManagementView/>}
+      {effectiveSection==='My assigned events'&&access?.role==='operations_staff'&&<AssignedEventsView/>}
       {effectiveSection==='Reporting Overview'&&allowed('analytics.read')&&<AggregateReportingView/>}
       {effectiveSection==='Work'&&allowed('ops.read')&&<WorkView
         onNavigate={(target:WorkTarget)=>{setSection(target as Section);close();}}
