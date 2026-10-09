@@ -37,7 +37,7 @@ as $fn$
     where a.user_id = auth.uid() and a.active and (
       a.role = 'superadmin'
       or (a.role = 'platform_admin' and p_permission = any(array[
-        'analytics.read','volunteers.read','volunteers.write','leads.read','leads.write',
+        'staff.manage','analytics.read','volunteers.read','volunteers.write','leads.read','leads.write',
         'data.read','data.write','ops.read','ops.write','audit.read']))
       or (a.role = 'volunteer_manager' and p_permission = any(array[
         'analytics.read','volunteers.read','volunteers.write','leads.read','leads.write',
@@ -74,7 +74,7 @@ language plpgsql stable security definer set search_path=''
 as $fn$
 begin
   if not public.maklom_can('staff.manage') then
-    raise exception 'Superadmin access required' using errcode='42501';
+    raise exception 'Access management permission required' using errcode='42501';
   end if;
   return query
     select a.user_id,u.email::text,a.role,a.active,a.updated_at
@@ -104,6 +104,17 @@ begin
   select u.id into v_target from auth.users u where lower(u.email)=lower(btrim(p_email));
   if v_target is null then
     raise exception 'This email does not have an account yet. Ask the colleague to complete sign-in first.' using errcode='22023';
+  end if;
+  -- Platform Admin may administer colleagues below their own tier only.
+  if exists(select 1 from public.maklom_staff_access actor
+            where actor.user_id=auth.uid() and actor.active
+              and actor.role='platform_admin')
+     and (p_role='platform_admin'
+          or exists(select 1 from public.maklom_staff_access target
+                    where target.user_id=v_target
+                      and target.role in ('superadmin','platform_admin'))) then
+    raise exception 'Only Superadmin can manage Platform Admin access'
+      using errcode='42501';
   end if;
   if v_target = auth.uid() then
     raise exception 'Superadmin access cannot be changed here' using errcode='42501';
