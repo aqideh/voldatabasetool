@@ -6,16 +6,16 @@ import type {MaklomRole} from '../../lib/maklom-access';
 
 type Staff={user_id:string;email:string;role:MaklomRole;active:boolean;updated_at:string};
 const roleOptions=[
- {value:'administrator',label:'MakLom Administrator'},
+ {value:'platform_admin',label:'Platform Admin'},
+ {value:'volunteer_manager',label:'Volunteer Manager'},
  {value:'data_steward',label:'Data Steward'},
- {value:'operations_officer',label:'Operations Officer'},
- {value:'reporting_analyst',label:'Reporting Analyst'},
- {value:'viewer',label:'Viewer'}
+ {value:'operations_staff',label:'Operations Staff'},
+ {value:'reporting_viewer',label:'Reporting Viewer'}
 ];
 export function AccessManagementView(){
  const qc=useQueryClient();
  const [email,setEmail]=useState('');
- const [role,setRole]=useState<string>('operations_officer');
+ const [role,setRole]=useState<string>('volunteer_manager');
  const [active,setActive]=useState(true);
  const [error,setError]=useState('');
  const roster=useQuery({queryKey:['maklom-staff-access'],queryFn:async()=>{
@@ -37,7 +37,7 @@ export function AccessManagementView(){
    <Paper withBorder p="lg" radius="lg"><Stack>
      <Title order={4}>Grant access to an existing MENDAKI account</Title>
      <TextInput label="Staff email" placeholder="colleague@mendaki.org.sg" value={email} onChange={e=>setEmail(e.currentTarget.value)} />
-     <Select label="MakLom role" data={roleOptions} value={role} onChange={value=>setRole(value||'operations_officer')}/>
+     <Select label="MakLom role" data={roleOptions} value={role} onChange={value=>setRole(value||'volunteer_manager')}/>
      <Switch label="Active access" checked={active} onChange={e=>setActive(e.currentTarget.checked)}/>
      <Button loading={change.isPending} disabled={!email.trim()} onClick={()=>apply({email:email.trim(),role,active})}>Review and grant access</Button>
    </Stack></Paper>
