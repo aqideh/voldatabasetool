@@ -59,6 +59,14 @@ create index if not exists volunteer_leads_pathway_submitted_idx
 create index if not exists volunteer_leads_responsible_idx
  on public.volunteer_leads(responsible_user_id) where responsible_user_id is not null;
 
+-- Extend the existing role CHECK as well as the permission function.
+alter table public.maklom_staff_access
+  drop constraint maklom_staff_access_role_check;
+alter table public.maklom_staff_access
+  add constraint maklom_staff_access_role_check check
+  (role in ('superadmin','platform_admin','volunteer_manager','recruitment_staff',
+            'data_steward','operations_staff','reporting_viewer'));
+
 -- Recruitment staff see all streams but have no other MakLom operational powers.
 create or replace function public.maklom_can(p_permission text)
 returns boolean language sql stable security definer set search_path=''
