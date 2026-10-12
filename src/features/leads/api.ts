@@ -12,7 +12,7 @@ export async function fetchVolunteerLeads(filters: LeadFilters) {
   let query = supabase
     .from('volunteer_leads')
     .select(
-      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,raw_payload,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
+      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,raw_payload,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version,pathway,contributor_type,responsible_user_id,next_action,next_action_due,handover_state,handover_approved_by,handover_approved_at',
       { count: 'exact' },
     );
 
@@ -29,6 +29,7 @@ export async function fetchVolunteerLeads(filters: LeadFilters) {
   }
 
   if (filters.status) query = query.eq('status', filters.status);
+  if (filters.pathway) query = query.eq('pathway',filters.pathway);
 
   query = query.order('submitted_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
@@ -53,7 +54,7 @@ export async function updateVolunteerLead(
     .eq('id', id)
     .eq('row_version', expectedVersion)
     .select(
-      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,raw_payload,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version',
+      'id,source,source_form_id,source_submission_id,submitted_at,status,full_name,email,phone,interest_area,motivation,skills_experience,availability_notes,referral_source,raw_payload,staff_notes,converted_volunteer_id,converted_at,created_at,updated_at,row_version,pathway,contributor_type,responsible_user_id,next_action,next_action_due,handover_state,handover_approved_by,handover_approved_at',
     )
     .maybeSingle();
 
@@ -132,4 +133,34 @@ export async function importFormSgLeads(rows: Array<Record<string, string>>) {
 
   if (error) throw error;
   return normalized.length;
+}
+
+export type LeadAction = 'note'|'assign'|'next_action'|'contact_attempt'|'contacted'|'status_update'|'handover_approve'|'handover_clarification'|'handover_decline'|'handover_sent'|'handover_acknowledge';
+export type LeadActivity = {id:number;lead_id:string;actor_user_id:string;action:LeadAction;note:string|null;before_state:Record<string,unknown>;after_state:Record<string,unknown>;occurred_at:string};
+export type LeadStaff = {user_id:string;email:string};
+
+export async function fetchLeadActivities(leadId:string):Promise<LeadActivity[]> {
+  const {data,error}=await supabase.from('volunteer_lead_activities')
+    .select('id,lead_id,actor_user_id,action,note,before_state,after_state,occurred_at')
+    .eq('lead_id',leadId).order('occurred_at',{ascending:false}).limit(100);
+  if(error)throw error;
+  return (data||[]) as LeadActivity[];
+}
+export async function fetchLeadStaff():Promise<LeadStaff[]> {
+  const {data,error}=await supabase.rpc('maklom_list_lead_staff');
+  if(error)throw error;
+  return (data||[]) as LeadStaff[];
+}
+export async function takeLeadAction(args:{
+  leadId:string;version:number;action:LeadAction;note?:string;assignee?:string|null;
+  nextAction?:string;due?:string|null;status?:VolunteerLeadStatus;
+}):Promise<VolunteerLead> {
+  const {data,error}=await supabase.rpc('maklom_lead_take_action',{
+    p_lead_id:args.leadId,p_expected_version:args.version,p_action:args.action,
+    p_note:args.note||null,p_assignee:args.assignee||null,
+    p_next_action:args.nextAction||null,p_due:args.due||null,p_status:args.status||null,
+  });
+  if(error)throw error;
+  if(!data)throw new Error('Lead action did not return an updated record.');
+  return data as VolunteerLead;
 }
