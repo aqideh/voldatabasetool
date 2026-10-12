@@ -29,6 +29,7 @@ export async function fetchVolunteerLeads(filters: LeadFilters) {
   }
 
   if (filters.status) query = query.eq('status', filters.status);
+  if (filters.pathway) query = query.eq('pathway',filters.pathway);
 
   query = query.order('submitted_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
