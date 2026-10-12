@@ -9,14 +9,14 @@ interface Props{volunteer:VolunteerRow|null;canWrite:boolean;canDelete:boolean;o
 const n=(value:string)=>value.trim()||null;
 
 export function VolunteerDrawer({volunteer,canWrite,canDelete,onClose,onSaved,onDeleted}:Props){
-  const[form,setForm]=useState<Record<string,any>>({});const[saving,setSaving]=useState(false);const[message,setMessage]=useState<{kind:'error'|'success';text:string}|null>(null);
+  const[form,setForm]=useState<Record<string,any>>({});const[editing,setEditing]=useState(false);const[saving,setSaving]=useState(false);const[message,setMessage]=useState<{kind:'error'|'success';text:string}|null>(null);
   const[checkingRemoval,setCheckingRemoval]=useState(false);const[removing,setRemoving]=useState(false);const[removal,setRemoval]=useState<VolunteerRemovalPreflight|null>(null);const[confirmation,setConfirmation]=useState('');
-  useEffect(()=>{if(!volunteer)return;setForm({...volunteer,tags:volunteer.tags||[],programmes_registered:volunteer.programmes_registered||[]});setMessage(null);setRemoval(null);setConfirmation('');},[volunteer]);
+  useEffect(()=>{if(!volunteer)return;setForm({...volunteer,tags:volunteer.tags||[],programmes_registered:volunteer.programmes_registered||[]});setMessage(null);setRemoval(null);setConfirmation('');setEditing(false);},[volunteer]);
   const set=(key:string,value:any)=>setForm((prev)=>({...prev,[key]:value}));
   async function save(){
     if(!volunteer||!canWrite)return;
     const update:VolunteerUpdate={nric:n(form.nric||''),gender:n(form.gender||''),address:n(form.address||''),recruited_year:typeof form.recruited_year==='number'?form.recruited_year:null,chat_session:n(form.chat_session||''),chat_session_date:n(form.chat_session_date||''),interests:n(form.interests||''),languages_spoken:n(form.languages_spoken||''),programmes_registered:(form.programmes_registered||[]).map((v:string)=>v.trim()).filter(Boolean),tags:(form.tags||[]).map((v:string)=>v.trim()).filter(Boolean),emergency_name:n(form.emergency_name||''),emergency_phone:n(form.emergency_phone||''),shirt_size:n(form.shirt_size||''),dietary:n(form.dietary||''),notes:n(form.notes||'')};
-    setSaving(true);setMessage(null);try{const updated=await updateVolunteer(volunteer.id,volunteer.row_version,update);setMessage({kind:'success',text:'Volunteer updated.'});onSaved(updated);}catch(error){setMessage({kind:'error',text:error instanceof Error?error.message:'Could not update volunteer.'});}finally{setSaving(false);}
+    setSaving(true);setMessage(null);try{const updated=await updateVolunteer(volunteer.id,volunteer.row_version,update);setMessage({kind:'success',text:'Volunteer updated.'});setEditing(false);onSaved(updated);}catch(error){setMessage({kind:'error',text:error instanceof Error?error.message:'Could not update volunteer.'});}finally{setSaving(false);}
   }
   async function checkRemoval(){
     if(!volunteer||!canDelete)return;
@@ -35,10 +35,9 @@ export function VolunteerDrawer({volunteer,canWrite,canDelete,onClose,onSaved,on
   const disabled=!canWrite;
   return <Drawer opened={!!volunteer} onClose={onClose} title="Volunteer profile" position="right" size="min(960px, 100vw)">{volunteer&&<VolunteerProfileTabs volunteer={volunteer} adminContent={<Stack gap="md">
     {!canWrite&&<Alert color="blue">Read-only access.</Alert>}{message&&<Alert color={message.kind==='error'?'red':'green'}>{message.text}</Alert>}
-    <Paper withBorder radius="md" p="md"><SimpleGrid cols={{base:1,md:2}}>
-      <div><Text size="xs" c="dimmed">Date of birth</Text><Text fw={600}>{volunteer.date_of_birth?new Date(volunteer.date_of_birth+'T00:00:00').toLocaleDateString('en-SG'):'Not recorded'}</Text></div>
-      <div><Text size="xs" c="dimmed">Age</Text><Text fw={600}>{volunteer.age??'Not recorded'}</Text>{volunteer.age_source==='staff_recorded'&&<Text size="xs" c="dimmed">Staff recorded; not recalculated from DOB</Text>}</div>
-    </SimpleGrid></Paper>
+
+    {canWrite&&<Group justify="flex-end"><Button variant="light" onClick={()=>setEditing((value)=>!value)}>{editing?'Close editor':'Edit MakLom details'}</Button></Group>}
+    {editing&&<Stack gap="md">
     <Text size="sm" c="dimmed">Canonical name, email and mobile are managed through Keluarga's identity and profile-review workflow. Other staff-maintained details can be edited below.</Text>
     <SimpleGrid cols={{base:1,md:2}}>
       <TextInput label="NRIC / FIN" value={form.nric||''} onChange={(e)=>set('nric',e.currentTarget.value)} disabled={disabled}/>
@@ -68,7 +67,8 @@ export function VolunteerDrawer({volunteer,canWrite,canDelete,onClose,onSaved,on
     <TagsInput label="Tags" value={form.tags||[]} onChange={(v)=>set('tags',v)} disabled={disabled}/>
     <Textarea label="Dietary requirements" autosize minRows={2} value={form.dietary||''} onChange={(e)=>set('dietary',e.currentTarget.value)} disabled={disabled}/>
     <Textarea label="Notes" autosize minRows={4} value={form.notes||''} onChange={(e)=>set('notes',e.currentTarget.value)} disabled={disabled}/>
-    {canWrite&&<Group justify="flex-end"><Button variant="default" onClick={onClose}>Cancel</Button><Button loading={saving} onClick={()=>void save()}>Save changes</Button></Group>}
+    {canWrite&&<Group justify="flex-end"><Button variant="default" onClick={()=>setEditing(false)}>Cancel</Button><Button loading={saving} onClick={()=>void save()}>Save changes</Button></Group>}
+    </Stack>}
     {canDelete&&<>
       <Divider my="xs"/>
       <Paper withBorder radius="md" p="md">
