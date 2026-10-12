@@ -8,10 +8,13 @@ export interface VolunteerRow {
   recruited_year:number|null; chat_session:string|null; chat_session_date:string|null;
   interests:string|null; languages_spoken:string|null; programmes_registered:string[]; tags:string[];
   emergency_name:string|null; emergency_phone:string|null; shirt_size:string|null; dietary:string|null;
+  notes:string|null; skills?:string[]; profile_interests?:string[]; availability_slots?:string[]; preferred_commitment?:string|null;
+  highest_qualification?:string|null; institution?:string|null; field_of_study?:string|null; postal_code?:string|null;
+  maklom_stored_name?:string|null; maklom_stored_phone?:string|null; maklom_stored_email?:string|null; mobile_needs_review?:boolean;
   notes:string|null; date_of_birth?:string|null; age?:number|null; age_source?:'date_of_birth'|'staff_recorded'|null; updated_at:string; row_version:number;
   attendance_rows?:number; total_credited_minutes?:number; last_active?:string|null; first_tag?:string; search_text?:string;
 }
-export type VolunteerUpdate = Omit<VolunteerRow,'id'|'core_volunteer_id'|'volunteer_code'|'neighbourhood'|'planning_area'|'electoral_division'|'updated_at'|'row_version'|'attendance_rows'|'total_credited_minutes'|'last_active'|'first_tag'|'search_text'|'date_of_birth'|'age'|'age_source'>;
+export type VolunteerUpdate = Pick<VolunteerRow, 'nric'|'gender'|'address'|'recruited_year'|'chat_session'|'chat_session_date'|'interests'|'languages_spoken'|'programmes_registered'|'tags'|'emergency_name'|'emergency_phone'|'shirt_size'|'dietary'|'notes'>;
 
 export interface VolunteerFilters {
   search:string; tag:string|null; recruitedYear:number|null; gender:string|null; shirtSize:string|null; planningArea:string|null; electoralDivision:string|null; activity:'all'|'active'|'inactive';
