@@ -3,6 +3,7 @@ import { Alert, Button, Divider, Drawer, Group, NumberInput, Paper, SimpleGrid, 
 import { inspectVolunteerRemoval, removeTestVolunteer, updateVolunteer } from './api';
 import type { VolunteerRemovalPreflight } from './api';
 import type { VolunteerRow, VolunteerUpdate } from '../../lib/types';
+import { VolunteerProfileTabs } from './VolunteerProfileTabs';
 
 interface Props{volunteer:VolunteerRow|null;canWrite:boolean;canDelete:boolean;onClose:()=>void;onSaved:(row:VolunteerRow)=>void;onDeleted:()=>void;}
 const n=(value:string)=>value.trim()||null;
@@ -13,8 +14,8 @@ export function VolunteerDrawer({volunteer,canWrite,canDelete,onClose,onSaved,on
   useEffect(()=>{if(!volunteer)return;setForm({...volunteer,tags:volunteer.tags||[],programmes_registered:volunteer.programmes_registered||[]});setMessage(null);setRemoval(null);setConfirmation('');},[volunteer]);
   const set=(key:string,value:any)=>setForm((prev)=>({...prev,[key]:value}));
   async function save(){
-    if(!volunteer||!canWrite)return;if(!String(form.name||'').trim()){setMessage({kind:'error',text:'Name is required.'});return;}
-    const update:VolunteerUpdate={name:String(form.name).trim(),nric:n(form.nric||''),phone:n(form.phone||''),email:n(form.email||''),gender:n(form.gender||''),address:n(form.address||''),recruited_year:typeof form.recruited_year==='number'?form.recruited_year:null,chat_session:n(form.chat_session||''),chat_session_date:n(form.chat_session_date||''),interests:n(form.interests||''),languages_spoken:n(form.languages_spoken||''),programmes_registered:(form.programmes_registered||[]).map((v:string)=>v.trim()).filter(Boolean),tags:(form.tags||[]).map((v:string)=>v.trim()).filter(Boolean),emergency_name:n(form.emergency_name||''),emergency_phone:n(form.emergency_phone||''),shirt_size:n(form.shirt_size||''),dietary:n(form.dietary||''),notes:n(form.notes||'')};
+    if(!volunteer||!canWrite)return;
+    const update:VolunteerUpdate={nric:n(form.nric||''),gender:n(form.gender||''),address:n(form.address||''),recruited_year:typeof form.recruited_year==='number'?form.recruited_year:null,chat_session:n(form.chat_session||''),chat_session_date:n(form.chat_session_date||''),interests:n(form.interests||''),languages_spoken:n(form.languages_spoken||''),programmes_registered:(form.programmes_registered||[]).map((v:string)=>v.trim()).filter(Boolean),tags:(form.tags||[]).map((v:string)=>v.trim()).filter(Boolean),emergency_name:n(form.emergency_name||''),emergency_phone:n(form.emergency_phone||''),shirt_size:n(form.shirt_size||''),dietary:n(form.dietary||''),notes:n(form.notes||'')};
     setSaving(true);setMessage(null);try{const updated=await updateVolunteer(volunteer.id,volunteer.row_version,update);setMessage({kind:'success',text:'Volunteer updated.'});onSaved(updated);}catch(error){setMessage({kind:'error',text:error instanceof Error?error.message:'Could not update volunteer.'});}finally{setSaving(false);}
   }
   async function checkRemoval(){
@@ -32,17 +33,15 @@ export function VolunteerDrawer({volunteer,canWrite,canDelete,onClose,onSaved,on
     finally{setRemoving(false);}
   }
   const disabled=!canWrite;
-  return <Drawer opened={!!volunteer} onClose={onClose} title={volunteer?.name||'Volunteer'} position="right" size="xl">{volunteer&&<Stack gap="md">
+  return <Drawer opened={!!volunteer} onClose={onClose} title="Volunteer profile" position="right" size="min(960px, 100vw)">{volunteer&&<VolunteerProfileTabs volunteer={volunteer} adminContent={<Stack gap="md">
     {!canWrite&&<Alert color="blue">Read-only access.</Alert>}{message&&<Alert color={message.kind==='error'?'red':'green'}>{message.text}</Alert>}
     <Paper withBorder radius="md" p="md"><SimpleGrid cols={{base:1,md:2}}>
       <div><Text size="xs" c="dimmed">Date of birth</Text><Text fw={600}>{volunteer.date_of_birth?new Date(volunteer.date_of_birth+'T00:00:00').toLocaleDateString('en-SG'):'Not recorded'}</Text></div>
       <div><Text size="xs" c="dimmed">Age</Text><Text fw={600}>{volunteer.age??'Not recorded'}</Text>{volunteer.age_source==='staff_recorded'&&<Text size="xs" c="dimmed">Staff recorded; not recalculated from DOB</Text>}</div>
     </SimpleGrid></Paper>
+    <Text size="sm" c="dimmed">Canonical name, email and mobile are managed through Keluarga's identity and profile-review workflow. Other staff-maintained details can be edited below.</Text>
     <SimpleGrid cols={{base:1,md:2}}>
-      <TextInput label="Name" required value={form.name||''} onChange={(e)=>set('name',e.currentTarget.value)} disabled={disabled}/>
       <TextInput label="NRIC / FIN" value={form.nric||''} onChange={(e)=>set('nric',e.currentTarget.value)} disabled={disabled}/>
-      <TextInput label="Email" value={form.email||''} onChange={(e)=>set('email',e.currentTarget.value)} disabled={disabled}/>
-      <TextInput label="Phone" value={form.phone||''} onChange={(e)=>set('phone',e.currentTarget.value)} disabled={disabled}/>
       <TextInput label="Gender" value={form.gender||''} onChange={(e)=>set('gender',e.currentTarget.value)} disabled={disabled}/>
       <NumberInput label="Recruited year" value={form.recruited_year??''} min={1900} max={2100} onChange={(v)=>set('recruited_year',typeof v==='number'?v:null)} disabled={disabled}/>
       <TextInput label="Chat session" value={form.chat_session||''} onChange={(e)=>set('chat_session',e.currentTarget.value)} disabled={disabled}/>
@@ -92,5 +91,5 @@ export function VolunteerDrawer({volunteer,canWrite,canDelete,onClose,onSaved,on
         </Stack>
       </Paper>
     </>}
-  </Stack>}</Drawer>;
+  </Stack>}/>}</Drawer>;
 }
