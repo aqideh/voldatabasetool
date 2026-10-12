@@ -24,7 +24,10 @@ import {
   convertVolunteerLead,
   fetchVolunteerLeads,
   importFormSgLeads,
-  updateVolunteerLead,
+  fetchLeadActivities,
+  fetchLeadStaff,
+  takeLeadAction,
+  type LeadAction,
 } from './api';
 import type { LeadFilters, VolunteerLead, VolunteerLeadStatus } from '../../lib/types';
 
@@ -161,9 +164,14 @@ export function LeadsView({ canWrite }: Props) {
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebouncedValue(search, 250);
   const [status, setStatus] = useState<VolunteerLeadStatus | null>(null);
+  const [stream,setStream] = useState<string|null>(null);
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<VolunteerLead | null>(null);
   const [editStatus, setEditStatus] = useState<VolunteerLeadStatus>('new');
+  const [action, setAction] = useState<LeadAction>('note');
+  const [assignee, setAssignee] = useState<string|null>(null);
+  const [nextTask, setNextTask] = useState('');
+  const [due, setDue] = useState('');
   const [notes, setNotes] = useState('');
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -173,9 +181,10 @@ export function LeadsView({ canWrite }: Props) {
   const filters = useMemo<LeadFilters>(() => ({
     search: debouncedSearch,
     status,
+    pathway:stream,
     page,
     pageSize: PAGE_SIZE,
-  }), [debouncedSearch, status, page]);
+  }), [debouncedSearch, status, stream, page]);
 
   const leads = useQuery({
     queryKey: ['volunteer-leads', filters],
@@ -188,7 +197,11 @@ export function LeadsView({ canWrite }: Props) {
   function chooseLead(lead: VolunteerLead) {
     setSelected(lead);
     setEditStatus(lead.status);
-    setNotes(lead.staff_notes || '');
+    setNotes('');
+    setAction('note');
+    setAssignee(lead.responsible_user_id);
+    setNextTask(lead.next_action || '');
+    setDue(lead.next_action_due ? lead.next_action_due.slice(0,16) : '');
     setMessage(null);
     open();
   }
@@ -202,25 +215,21 @@ export function LeadsView({ canWrite }: Props) {
     ]);
   }
 
+  const staff=useQuery({queryKey:['lead-staff'],queryFn:fetchLeadStaff,enabled:opened});
+  const history=useQuery({queryKey:['lead-activities',selected?.id],queryFn:()=>fetchLeadActivities(selected!.id),enabled:opened&&!!selected});
+
   async function saveLead() {
-    if (!selected || !canWrite) return;
-    setSaving(true);
-    setMessage(null);
+    if(!selected||!canWrite)return;
+    setSaving(true);setMessage(null);
     try {
-      const updated = await updateVolunteerLead(selected.id, selected.row_version, {
-        status: editStatus,
-        staff_notes: notes.trim() || null,
-      });
-      setSelected(updated);
-      setEditStatus(updated.status);
-      setNotes(updated.staff_notes || '');
-      setMessage({ kind: 'success', text: 'Lead updated.' });
+      const updated=await takeLeadAction({leadId:selected.id,version:selected.row_version,action,
+        note:notes.trim(),assignee, nextAction:nextTask.trim(),due:due?new Date(due).toISOString():null,status:editStatus});
+      setSelected(updated);setEditStatus(updated.status);setNotes('');
+      setMessage({kind:'success',text:'Recruitment action saved and attributed to your staff account.'});
       await refresh();
-    } catch (error) {
-      setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Could not update lead.' });
-    } finally {
-      setSaving(false);
-    }
+      await queryClient.invalidateQueries({queryKey:['lead-activities',selected.id]});
+    }catch(error){setMessage({kind:'error',text:error instanceof Error?error.message:'Unable to record recruitment action.'});}
+    finally{setSaving(false);}
   }
 
   async function convertLead() {
@@ -297,6 +306,8 @@ export function LeadsView({ canWrite }: Props) {
 
       <Paper withBorder radius="lg" p="md">
         <Group align="flex-end" grow>
+          <Select label="Stream" clearable placeholder="All streams" value={stream} onChange={(value)=>{setStream(value);setPage(0);}}
+            data={[{value:'coach',label:'Coach'},{value:'mentor',label:'Mentor'},{value:'facilitator',label:'Facilitator'},{value:'professional_networks',label:'Professional Networks'},{value:'contributor',label:'Contributor'}]}/>
           <TextInput
             label="Search"
             placeholder="Name, email, phone, interest or notes"
@@ -327,7 +338,7 @@ export function LeadsView({ canWrite }: Props) {
               <Table.Tr>
                 <Table.Th>Lead</Table.Th>
                 <Table.Th>Contact</Table.Th>
-                <Table.Th>Interest</Table.Th>
+                <Table.Th>Stream</Table.Th><Table.Th>Next action</Table.Th>
                 <Table.Th>Status</Table.Th>
                 <Table.Th>Submitted</Table.Th>
                 <Table.Th>Volunteer</Table.Th>
@@ -344,7 +355,7 @@ export function LeadsView({ canWrite }: Props) {
                     <Text size="sm">{lead.email || '-'}</Text>
                     <Text size="xs" c="dimmed">{lead.phone || '-'}</Text>
                   </Table.Td>
-                  <Table.Td><Text size="sm" lineClamp={2}>{lead.interest_area || '-'}</Text></Table.Td>
+                  <Table.Td><Text size="sm">{lead.pathway ? lead.pathway.replaceAll('_',' ') : 'Needs categorisation'}{lead.contributor_type ? ' · '+lead.contributor_type.replaceAll('_',' ') : ''}</Text></Table.Td><Table.Td><Text size="sm" lineClamp={2}>{lead.next_action||'-'}</Text></Table.Td>
                   <Table.Td><Badge variant="light">{statusOptions.find((item) => item.value === lead.status)?.label || lead.status}</Badge></Table.Td>
                   <Table.Td>{lead.submitted_at ? new Date(lead.submitted_at).toLocaleDateString('en-SG') : '-'}</Table.Td>
                   <Table.Td>{lead.converted_volunteer_id ? <Badge color="green" variant="light">Converted</Badge> : '-'}</Table.Td>
@@ -420,22 +431,55 @@ export function LeadsView({ canWrite }: Props) {
               </Stack>
             )}
 
-            <Select
-              label="Lead status"
-              data={editableStatusOptions}
-              value={editStatus}
-              onChange={(value) => setEditStatus((value || 'new') as VolunteerLeadStatus)}
-              disabled={!canWrite || selected.status === 'converted'}
-            />
-            <Textarea
-              label="Staff notes"
-              minRows={4}
-              autosize
-              value={notes}
-              onChange={(event) => setNotes(event.currentTarget.value)}
-              disabled={!canWrite || selected.status === 'converted'}
-            />
 
+            <Paper withBorder p="md" radius="md">
+              <Stack gap="sm">
+                <Title order={5}>Recruitment case</Title>
+                <Group gap="xs">
+                  <Badge variant="light">{selected.pathway?.replaceAll('_',' ')||'Needs categorisation'}</Badge>
+                  {selected.contributor_type&&<Badge variant="outline">{selected.contributor_type.replaceAll('_',' ')}</Badge>}
+                  {selected.handover_state&&<Badge color="blue" variant="light">Handover: {selected.handover_state.replaceAll('_',' ')}</Badge>}
+                </Group>
+                <Text size="sm">Responsible: {staff.data?.find(x=>x.user_id===selected.responsible_user_id)?.email||'Unassigned'}</Text>
+                <Text size="sm">Next action: {selected.next_action||'Not scheduled'}{selected.next_action_due?' · '+new Date(selected.next_action_due).toLocaleString('en-SG'):''}</Text>
+                <Select label="Record action" value={action} onChange={v=>setAction((v||'note') as LeadAction)} disabled={!canWrite}
+                  data={[
+                    {value:'note',label:'Add activity note'},
+                    {value:'contact_attempt',label:'Contact attempted'},
+                    {value:'contacted',label:'Contact completed'},
+                    {value:'assign',label:'Assign responsibility'},
+                    {value:'next_action',label:'Set next action'},
+                    {value:'status_update',label:'Update recruitment status'},
+                    ...(selected.pathway==='coach'||selected.pathway==='professional_networks'?[
+                      {value:'handover_approve',label:'VM approve handover'},
+                      {value:'handover_clarification',label:'Request handover clarification'},
+                      {value:'handover_decline',label:'Do not hand over'},
+                      {value:'handover_sent',label:'Record handover sent'},
+                      {value:'handover_acknowledge',label:'Record departmental acknowledgement'},
+                    ]:[])
+                  ]}/>
+                {action==='assign'&&<Select clearable searchable label="Responsible colleague (optional)" placeholder="Unassigned"
+                  data={(staff.data||[]).map(x=>({value:x.user_id,label:x.email}))} value={assignee} onChange={setAssignee}/>}
+                {action==='next_action'&&<><TextInput label="Next action" value={nextTask} onChange={e=>setNextTask(e.currentTarget.value)}/>
+                  <TextInput label="Due date and time (SGT)" type="datetime-local" value={due} onChange={e=>setDue(e.currentTarget.value)}/></>}
+                {action==='status_update'&&<Select label="Status" data={editableStatusOptions}
+                  value={editStatus} onChange={v=>setEditStatus((v||'new') as VolunteerLeadStatus)}/>}
+                <Textarea label="Action details / evidence" description="For handover delivery, record the channel and recipient. Do not record sensitive screening information here."
+                  autosize minRows={2} value={notes} onChange={e=>setNotes(e.currentTarget.value)} disabled={!canWrite}/>
+                {canWrite&&<Button loading={saving} onClick={()=>void saveLead()}>Record action</Button>}
+              </Stack>
+            </Paper>
+            <Stack gap="xs">
+              <Title order={5}>Activity history</Title>
+              {history.isLoading&&<Loader size="sm"/>}
+              {history.error&&<Text c="red" size="sm">{(history.error as Error).message}</Text>}
+              {(history.data||[]).map(item=><Paper key={item.id} p="sm" withBorder radius="md">
+                <Text size="sm" fw={600}>{item.action.replaceAll('_',' ')}</Text>
+                <Text size="xs" c="dimmed">{staff.data?.find(x=>x.user_id===item.actor_user_id)?.email||'Staff account '+item.actor_user_id} · {new Date(item.occurred_at).toLocaleString('en-SG')}</Text>
+                {item.note&&<Text size="sm">{item.note}</Text>}
+              </Paper>)}
+              {!history.isLoading&&!history.data?.length&&<Text size="sm" c="dimmed">No recorded recruitment actions yet. Older updates may exist only in the database audit log.</Text>}
+            </Stack>
             {selected.converted_volunteer_id && (
               <Alert color="green" variant="light">
                 Converted to the volunteer database.
@@ -453,9 +497,7 @@ export function LeadsView({ canWrite }: Props) {
                 >
                   Convert to volunteer
                 </Button>
-                <Button loading={saving} onClick={() => void saveLead()}>
-                  Save lead
-                </Button>
+
               </Group>
             )}
           </Stack>
