@@ -1,6 +1,7 @@
 import type { VolunteerRow } from '../../lib/types';
 
 export interface VolunteerSearchRow extends VolunteerRow {
+  date_of_birth?:string|null;
   age?:number|null;
   age_source?:'date_of_birth'|'staff_recorded'|null;
   attended_event_count?:number;
