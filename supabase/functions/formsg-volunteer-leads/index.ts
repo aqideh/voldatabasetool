@@ -45,6 +45,23 @@ function findAnswer(
   return null;
 }
 
+
+const PATHWAY_FIELD_ID = "6abb1dfa4db467b6eb6a5657";
+const CONTRIBUTOR_FIELD_IDS = new Set(["6abb1f6648cec14a84ac1561","6abb32386bfbf1d55511a304"]);
+const PATHWAY_VALUES:Record<string,string> = {
+  "as a Coach":"coach","as a Mentor":"mentor","as a Facilitator":"facilitator",
+  "as a Professional Networks Member":"professional_networks","as a Contributor":"contributor"
+};
+function mapRouting(responses:FormField[]) {
+ const selected=answerFor(responses.find(f=>f._id===PATHWAY_FIELD_ID)||{});
+ const pathway=PATHWAY_VALUES[selected||""]||null;
+ const choice=answerFor(responses.find(f=>CONTRIBUTOR_FIELD_IDS.has(f._id||"")&&answerFor(f))||{});
+ const contributor_type=pathway==="contributor" ?
+    (choice==="I have specialised skills that I would like to contribute"?"specialised_skills":
+     choice==="I have an idea that will impact the community"?"project_idea":null):null;
+ return {pathway,contributor_type};
+}
+
 function mapLead(responses: FormField[]) {
   const fullName =
     findAnswer(
@@ -169,6 +186,11 @@ Deno.serve(async (req: Request) => {
     ? (decrypted.responses as FormField[])
     : [];
   const lead = mapLead(responses);
+  const routing = mapRouting(responses);
+  if(!routing.pathway||(routing.pathway==='contributor'&&!routing.contributor_type)){
+    console.error('Unmapped volunteer stream in FormSG submission',{submissionId});
+    return Response.json({message:'Volunteer stream cannot be mapped; contact form administrator'}, {status:422});
+  }
 
   if (!lead.fullName) {
     console.error("FormSG volunteer lead is missing a recognisable name field", {
@@ -203,10 +225,13 @@ Deno.serve(async (req: Request) => {
             ? new Date(submittedAt).toISOString()
             : new Date().toISOString(),
         status: "new",
+        pathway: routing.pathway,
+        contributor_type: routing.contributor_type,
+        handover_state: routing.pathway==='coach'||routing.pathway==='professional_networks'?'pending_review':null,
         full_name: lead.fullName,
         email: lead.email,
         phone: lead.phone,
-        interest_area: lead.interestArea,
+        interest_area: routing.pathway,
         motivation: lead.motivation,
         skills_experience: lead.skillsExperience,
         availability_notes: lead.availabilityNotes,
