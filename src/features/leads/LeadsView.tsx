@@ -223,7 +223,7 @@ export function LeadsView({ canWrite }: Props) {
     setSaving(true);setMessage(null);
     try {
       const updated=await takeLeadAction({leadId:selected.id,version:selected.row_version,action,
-        note:notes.trim(),assignee, nextAction:nextTask.trim(),due:due?new Date(due).toISOString():null,status:editStatus});
+        note:notes.trim(),assignee, nextAction:nextTask.trim(),due:due?new Date(due+'+08:00').toISOString():null,status:editStatus});
       setSelected(updated);setEditStatus(updated.status);setNotes('');
       setMessage({kind:'success',text:'Recruitment action saved and attributed to your staff account.'});
       await refresh();
