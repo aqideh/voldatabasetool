@@ -7,7 +7,7 @@ import type {
 } from './search-types';
 import type { VolunteerSearchRow } from './search-row';
 
-const REFRESH_SELECT='id,core_volunteer_id,volunteer_code,name,nric,email,phone,gender,address,neighbourhood,planning_area,electoral_division,recruited_year,chat_session,chat_session_date,interests,languages_spoken,programmes_registered,tags,emergency_name,emergency_phone,shirt_size,dietary,notes,updated_at,row_version,attendance_rows,total_credited_minutes,last_active,first_tag';
+const REFRESH_SELECT='*';
 
 function normalizeSearchPayload(data:unknown):VolunteerSearchResult {
   const result=(data??{}) as Partial<VolunteerSearchResult>;
@@ -65,10 +65,39 @@ export async function updateVolunteer(id:string,expectedVersion:number,update:Vo
   const{data,error}=await supabase.from('volunteers').update(update).eq('id',id).eq('row_version',expectedVersion).select('id').maybeSingle();
   if(error)throw error;
   if(!data)throw new Error('This volunteer was updated in another session. Reload before saving again.');
-  const refreshed=await supabase.from('maklom_volunteer_search_directory').select(REFRESH_SELECT).eq('id',id).maybeSingle();
+  const refreshed=await supabase.from('maklom_volunteer_search_v2').select(REFRESH_SELECT).eq('id',id).maybeSingle();
   if(refreshed.error)throw refreshed.error;
   if(!refreshed.data)throw new Error('Volunteer profile could not be reloaded.');
   return refreshed.data as VolunteerRow;
+}
+
+export interface VolunteerProfileDetails {
+  privateDetails:Record<string,unknown>|null;
+  familyProfile:Record<string,unknown>|null;
+  events:Array<{event_key:string;event_title:string;event_date:string;has_historical_source:boolean;has_keluarga_source:boolean}>;
+  contributions:Array<{id:string;event_title:string|null;occurred_at:string;status:string;approved_minutes:number|null;operational_minutes:number|null;approval_note:string|null}>;
+  changeRequests:Array<{id:string;field_name:string;status:string;old_value:string|null;new_value:string|null;source_changed_at:string}>;
+  audit:Array<{id:number;actor_user_id:string|null;action:string;occurred_at:string}>;
+}
+export async function fetchVolunteerProfileDetails(coreId:string,maklomId:string):Promise<VolunteerProfileDetails>{
+  const [priv,profile,events,contributions,changes,audit]=await Promise.all([
+    supabase.from('volunteer_private_details').select('*').eq('volunteer_id',coreId).maybeSingle(),
+    supabase.from('keluarga_volunteer_profiles').select('*').eq('volunteer_id',coreId).maybeSingle(),
+    supabase.from('maklom_event_participation').select('event_key,event_title,event_date,has_historical_source,has_keluarga_source').eq('core_volunteer_id',coreId).order('event_date',{ascending:false}).limit(500),
+    supabase.from('volunteer_contributions').select('id,event_title,occurred_at,status,approved_minutes,operational_minutes,approval_note').eq('volunteer_id',coreId).order('occurred_at',{ascending:false}).limit(200),
+    supabase.from('maklom_profile_change_review_queue').select('id,field_name,status,old_value,new_value,source_changed_at').eq('volunteer_id',coreId).order('source_changed_at',{ascending:false}).limit(50),
+    supabase.from('audit_log').select('id,actor_user_id,action,occurred_at').eq('entity_type','volunteers').eq('entity_id',maklomId).order('occurred_at',{ascending:false}).limit(50),
+  ]);
+  const failed=[priv,profile,events,contributions,changes,audit].find((result)=>result.error);
+  if(failed?.error)throw failed.error;
+  return{
+    privateDetails:(priv.data??null) as Record<string,unknown>|null,
+    familyProfile:(profile.data??null) as Record<string,unknown>|null,
+    events:(events.data??[]) as VolunteerProfileDetails['events'],
+    contributions:(contributions.data??[]) as VolunteerProfileDetails['contributions'],
+    changeRequests:(changes.data??[]) as VolunteerProfileDetails['changeRequests'],
+    audit:(audit.data??[]) as VolunteerProfileDetails['audit'],
+  };
 }
 
 export interface VolunteerRemovalPreflight {
