@@ -24,6 +24,7 @@ export interface VolunteerLead {
   status:VolunteerLeadStatus;full_name:string;email:string|null;phone:string|null;interest_area:string|null;motivation:string|null;
   skills_experience:string|null;availability_notes:string|null;referral_source:string|null;raw_payload:Record<string,unknown>;staff_notes:string|null;
   converted_volunteer_id:string|null;converted_at:string|null;created_at:string;updated_at:string;row_version:number;
+  pathway:string|null;contributor_type:string|null;responsible_user_id:string|null;next_action:string|null;next_action_due:string|null;handover_state:string|null;handover_approved_by:string|null;handover_approved_at:string|null;
 }
 export interface LeadFilters {search:string;status:VolunteerLeadStatus|null;page:number;pageSize:number;}
 
