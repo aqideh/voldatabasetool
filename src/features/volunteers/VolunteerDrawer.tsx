@@ -35,8 +35,8 @@ export function VolunteerDrawer({volunteer,canWrite,canDelete,onClose,onSaved,on
   return <Drawer opened={!!volunteer} onClose={onClose} title={volunteer?.name||'Volunteer'} position="right" size="xl">{volunteer&&<Stack gap="md">
     {!canWrite&&<Alert color="blue">Read-only access.</Alert>}{message&&<Alert color={message.kind==='error'?'red':'green'}>{message.text}</Alert>}
     <Paper withBorder radius="md" p="md"><SimpleGrid cols={{base:1,md:2}}>
-      <div><Text size="xs" c="dimmed">Date of birth</Text><Text fw={600}>{(volunteer as typeof volunteer & {date_of_birth?:string|null}).date_of_birth?new Date((volunteer as typeof volunteer & {date_of_birth?:string|null}).date_of_birth+'T00:00:00').toLocaleDateString('en-SG'):'Not recorded'}</Text></div>
-      <div><Text size="xs" c="dimmed">Age</Text><Text fw={600}>{(volunteer as typeof volunteer & {age?:number|null}).age??'Not recorded'}</Text>{(volunteer as typeof volunteer & {age_source?:string|null}).age_source==='staff_recorded'&&<Text size="xs" c="dimmed">Staff recorded; not recalculated from DOB</Text>}</div>
+      <div><Text size="xs" c="dimmed">Date of birth</Text><Text fw={600}>{volunteer.date_of_birth?new Date(volunteer.date_of_birth+'T00:00:00').toLocaleDateString('en-SG'):'Not recorded'}</Text></div>
+      <div><Text size="xs" c="dimmed">Age</Text><Text fw={600}>{volunteer.age??'Not recorded'}</Text>{volunteer.age_source==='staff_recorded'&&<Text size="xs" c="dimmed">Staff recorded; not recalculated from DOB</Text>}</div>
     </SimpleGrid></Paper>
     <SimpleGrid cols={{base:1,md:2}}>
       <TextInput label="Name" required value={form.name||''} onChange={(e)=>set('name',e.currentTarget.value)} disabled={disabled}/>
