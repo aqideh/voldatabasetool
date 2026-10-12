@@ -1,7 +1,9 @@
 -- Authorised MakLom volunteer team can view Keluarga's existing private and skills records.
 -- No new synced copies are created. All records are still RLS-protected.
+DROP POLICY IF EXISTS "MakLom volunteers read private details" ON public.volunteer_private_details;
 CREATE POLICY "MakLom volunteers read private details" ON public.volunteer_private_details FOR SELECT TO authenticated
 USING ((select public.maklom_can('volunteers.read')));
+DROP POLICY IF EXISTS "MakLom volunteers read skills profile" ON public.keluarga_volunteer_profiles;
 CREATE POLICY "MakLom volunteers read skills profile" ON public.keluarga_volunteer_profiles FOR SELECT TO authenticated
 USING ((select public.maklom_can('volunteers.read')));
 CREATE OR REPLACE VIEW public.maklom_volunteer_search_v2 WITH (security_invoker=true) AS
