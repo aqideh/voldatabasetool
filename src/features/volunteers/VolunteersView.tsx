@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Badge, Button, Group, Loader, Pagination, Paper, ScrollArea, Select, Stack, Table, Text, TextInput, Title,
+  Badge, Button, Checkbox, Group, Loader, Menu, Pagination, Paper, ScrollArea, Select, Stack, Table, Text, TextInput, Title,
 } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,41 @@ import type { VolunteerRow } from '../../lib/types';
 import { minutesLabel } from '../../lib/utils';
 
 const PAGE_SIZE=50;
+const columns=[
+  {id:'contact',label:'Contact'},{id:'area',label:'Area'},{id:'grc',label:'GRC / SMC'},
+  {id:'gender',label:'Gender'},{id:'dob',label:'Date of birth'},{id:'age',label:'Age'},
+  {id:'postal',label:'Postal code'},{id:'qualification',label:'Qualification'},
+  {id:'skills',label:'Skills'},{id:'availability',label:'Availability'},
+  {id:'recruited',label:'Recruited'},{id:'tags',label:'Tags'},
+  {id:'programmes',label:'Programmes'},{id:'attended',label:'Attended'},
+  {id:'registered',label:'Registered'},{id:'hours',label:'Hours'},
+  {id:'active',label:'Last active'},{id:'mobile_review',label:'Mobile review'},
+] as const;
+type ColumnId=typeof columns[number]['id'];
+const defaultColumns:ColumnId[]=['contact','area','dob','age','programmes','attended','hours','active'];
+function cell(row:VolunteerSearchRow,column:ColumnId){
+  switch(column){
+    case 'contact':return <><Text size="sm">{row.email||'-'}</Text><Text size="xs" c="dimmed">{row.phone||'-'}</Text></>;
+    case 'area':return row.neighbourhood||row.planning_area||'-';
+    case 'grc':return row.electoral_division||'-';
+    case 'gender':return row.gender||'-';
+    case 'dob':return row.date_of_birth?new Date(row.date_of_birth+'T00:00:00').toLocaleDateString('en-SG'):'-';
+    case 'age':return <><Text size="sm">{row.age??'-'}</Text>{row.age_source==='staff_recorded'?<Text size="xs" c="dimmed">Staff recorded</Text>:null}</>;
+    case 'postal':return row.postal_code||'-';
+    case 'qualification':return row.highest_qualification||'-';
+    case 'skills':return <Text size="sm" lineClamp={2}>{(row.skills||[]).join(', ')||'-'}</Text>;
+    case 'availability':return <Text size="sm" lineClamp={2}>{(row.availability_slots||[]).join(', ')||row.preferred_commitment||'-'}</Text>;
+    case 'recruited':return row.recruited_year||'-';
+    case 'tags':return <Group gap={4}>{(row.tags||[]).slice(0,3).map((tag)=><Badge key={tag} variant="light" size="xs">{tag}</Badge>)}</Group>;
+    case 'programmes':return <Text size="sm" lineClamp={2}>{(row.programmes_registered||[]).join(', ')||'-'}</Text>;
+    case 'attended':return row.attended_event_count||0;
+    case 'registered':return row.registered_event_count||0;
+    case 'hours':return minutesLabel(row.total_credited_minutes||0);
+    case 'active':return row.last_active?new Date(row.last_active+'T00:00:00').toLocaleDateString('en-SG'):'-';
+    case 'mobile_review':return row.mobile_needs_review?<Badge color="orange" variant="light">Review</Badge>:'-';
+  }
+}
+
 function csvCell(value:unknown){const text=value==null?'':String(value);return `"${text.replaceAll('"','""')}"`;}
 function countConditions(node:VolunteerQueryNode):number{
   return node.type==='condition'?1:node.children.reduce((sum,child)=>sum+countConditions(child),0);
@@ -29,6 +64,7 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
   const[selected,setSelected]=useState<VolunteerRow|null>(null);
   const[exporting,setExporting]=useState(false);
   const[filtersOpen,setFiltersOpen]=useState(false);
+  const[visibleColumns,setVisibleColumns]=useState<ColumnId[]>(defaultColumns);
   const activeFilterCount=countConditions(query);
 
   const filters=useMemo<VolunteerSearchFilters>(()=>({
@@ -59,9 +95,9 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
     setExporting(true);
     try{
       const rows=await fetchVolunteerExportRows({...filters,page:0});
-      const header=['KEL ID','Name','Email','Phone','Neighbourhood','Planning area','GRC / SMC','Gender','Date of birth','Age','Age source','Recruited year','Tags','Programmes','Events attended','Events registered','Total hours','First participation','Last active'];
+      const header=['KEL ID','Name','Email','Phone','Neighbourhood','Planning area','GRC / SMC','Gender','Date of birth','Age','Age source','Postal code','Qualification','Institution','Field of study','Skills','Interests','Availability','Preferred commitment','Mobile discrepancy','Recruited year','Tags','Programmes','Events attended','Events registered','Total hours','First participation','Last active'];
       const lines=[header,...rows.map((row)=>[
-        row.volunteer_code,row.name,row.email,row.phone,row.neighbourhood,row.planning_area,row.electoral_division,row.gender,row.date_of_birth,row.age,row.age_source==='date_of_birth'?'Calculated from date of birth':row.age_source==='staff_recorded'?'Staff recorded':'',row.recruited_year,
+        row.volunteer_code,row.name,row.email,row.phone,row.neighbourhood,row.planning_area,row.electoral_division,row.gender,row.date_of_birth,row.age,row.age_source==='date_of_birth'?'Calculated from date of birth':row.age_source==='staff_recorded'?'Staff recorded':'',row.postal_code,row.highest_qualification,row.institution,row.field_of_study,(row.skills||[]).join('; '),(row.profile_interests||[]).join('; '),(row.availability_slots||[]).join('; '),row.preferred_commitment,row.mobile_needs_review?'Needs review':'',row.recruited_year,
         (row.tags||[]).join('; '),(row.programmes_registered||[]).join('; '),row.attended_event_count||0,row.registered_event_count||0,
         ((row.total_credited_minutes||0)/60).toFixed(2),row.first_event_date,row.last_active,
       ])].map((row)=>row.map(csvCell).join(','));
@@ -132,6 +168,17 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
             onChange={(value)=>{setSort((value||'name-asc') as VolunteerSearchSort);resetPage();}}
             style={{minWidth:220}}
           />
+          <Menu shadow="md" width={240} closeOnItemClick={false} withinPortal>
+            <Menu.Target><Button variant="default">Columns ({visibleColumns.length})</Button></Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>Choose table columns</Menu.Label>
+              {columns.map((column)=><Menu.Item key={column.id} onClick={()=>setVisibleColumns((current)=>current.includes(column.id)?current.filter((id)=>id!==column.id):[...current,column.id])}>
+                <Checkbox checked={visibleColumns.includes(column.id)} readOnly label={column.label}/>
+              </Menu.Item>)}
+              <Menu.Divider/>
+              <Menu.Item onClick={()=>setVisibleColumns(defaultColumns)}>Reset columns</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
           <Button variant={filtersOpen?'light':'default'} onClick={()=>setFiltersOpen((value)=>!value)}>
             Filters{activeFilterCount? ` (${activeFilterCount})`:''}
           </Button>
@@ -158,28 +205,14 @@ export function VolunteersView({canWrite,canDelete}:{canWrite:boolean;canDelete:
 
     <Paper withBorder radius="lg" p={0} style={{overflow:'hidden'}}>
       <ScrollArea>
-        <Table striped highlightOnHover verticalSpacing="sm" horizontalSpacing="md" miw={1450}>
-          <Table.Thead><Table.Tr>
-            <Table.Th>Name</Table.Th><Table.Th>Contact</Table.Th><Table.Th>Area</Table.Th><Table.Th>GRC / SMC</Table.Th>
-            <Table.Th>Gender</Table.Th><Table.Th>Date of birth</Table.Th><Table.Th>Age</Table.Th><Table.Th>Recruited</Table.Th><Table.Th>Tags</Table.Th><Table.Th>Programmes</Table.Th>
-            <Table.Th>Attended</Table.Th><Table.Th>Registered</Table.Th><Table.Th>Hours</Table.Th><Table.Th>Last active</Table.Th>
+        <Table striped highlightOnHover verticalSpacing="sm" horizontalSpacing="md" miw={900}>
+          <Table.Thead><Table.Tr><Table.Th>Volunteer</Table.Th>
+            {columns.filter((column)=>visibleColumns.includes(column.id)).map((column)=><Table.Th key={column.id}>{column.label}</Table.Th>)}
           </Table.Tr></Table.Thead>
           <Table.Tbody>
             {resultRows.map((row)=><Table.Tr key={row.id} onClick={()=>setSelected(row)} style={{cursor:'pointer'}}>
               <Table.Td><Text fw={700}>{row.name}</Text><Text size="xs" c="dimmed">{row.volunteer_code}</Text></Table.Td>
-              <Table.Td><Text size="sm">{row.email||'-'}</Text><Text size="xs" c="dimmed">{row.phone||'-'}</Text></Table.Td>
-              <Table.Td><Text size="sm">{row.neighbourhood||row.planning_area||'-'}</Text>{row.neighbourhood&&row.planning_area&&row.neighbourhood!==row.planning_area?<Text size="xs" c="dimmed">{row.planning_area}</Text>:null}</Table.Td>
-              <Table.Td>{row.electoral_division||'-'}</Table.Td>
-              <Table.Td>{row.gender||'-'}</Table.Td>
-              <Table.Td>{row.date_of_birth?new Date(row.date_of_birth+'T00:00:00').toLocaleDateString('en-SG'):'-'}</Table.Td>
-              <Table.Td><Text size="sm">{row.age??'-'}</Text>{row.age!=null&&row.age_source==='staff_recorded'?<Text size="xs" c="dimmed">Staff recorded</Text>:null}</Table.Td>
-              <Table.Td>{row.recruited_year||'-'}</Table.Td>
-              <Table.Td><Group gap={4} wrap="wrap">{(row.tags||[]).slice(0,4).map((item)=><Badge key={item} variant="light" size="sm">{item}</Badge>)}</Group></Table.Td>
-              <Table.Td><Text size="sm" lineClamp={2}>{(row.programmes_registered||[]).join(', ')||'-'}</Text></Table.Td>
-              <Table.Td>{row.attended_event_count||0}</Table.Td>
-              <Table.Td>{row.registered_event_count||0}</Table.Td>
-              <Table.Td>{minutesLabel(row.total_credited_minutes||0)}</Table.Td>
-              <Table.Td>{row.last_active?new Date(row.last_active+'T00:00:00').toLocaleDateString('en-SG'):'-'}</Table.Td>
+              {columns.filter((column)=>visibleColumns.includes(column.id)).map((column)=><Table.Td key={column.id}>{cell(row,column.id)}</Table.Td>)}
             </Table.Tr>)}
           </Table.Tbody>
         </Table>
