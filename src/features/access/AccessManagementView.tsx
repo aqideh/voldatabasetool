@@ -8,6 +8,7 @@ type Staff={user_id:string;email:string;role:MaklomRole;active:boolean;updated_a
 const roleOptions=[
  {value:'platform_admin',label:'Platform Admin'},
  {value:'volunteer_manager',label:'Volunteer Manager'},
+ {value:'recruitment_staff',label:'Recruitment Staff (all streams)'},
  {value:'data_steward',label:'Data Steward'},
  {value:'operations_staff',label:'Operations Staff'},
  {value:'reporting_viewer',label:'Reporting Viewer'}
