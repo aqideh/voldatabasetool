@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Alert, Badge, Group, Loader, Paper, ScrollArea, SimpleGrid, Stack, Tabs, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { fetchVolunteerProfileDetails } from './api';
@@ -14,7 +15,7 @@ const shown=(value:unknown):string=>{
 function Info({label,value}:{label:string;value:unknown}){
   return <div><Text c="dimmed" size="xs">{label}</Text><Text size="sm" fw={500} style={{overflowWrap:'anywhere'}}>{shown(value)}</Text></div>;
 }
-function Section({title,children}:{title:string;children:React.ReactNode}){
+function Section({title,children}:{title:string;children:ReactNode}){
   return <Paper withBorder radius="md" p="md"><Stack gap="sm">
     <Title order={4}>{title}</Title>{children}
   </Stack></Paper>;
@@ -24,7 +25,7 @@ function Fields({items}:{items:Array<[string,unknown]>}){
 }
 const date=(value:string|null|undefined)=>value?new Date(value.length===10?value+'T00:00:00':value).toLocaleDateString('en-SG'):'Not provided';
 
-export function VolunteerProfileTabs({volunteer,adminContent}:{volunteer:VolunteerRow;adminContent:React.ReactNode}){
+export function VolunteerProfileTabs({volunteer,adminContent}:{volunteer:VolunteerRow;adminContent:ReactNode}){
   const details=useQuery({
     queryKey:['complete-volunteer-profile',volunteer.core_volunteer_id,volunteer.id],
     queryFn:()=>fetchVolunteerProfileDetails(volunteer.core_volunteer_id,volunteer.id),
