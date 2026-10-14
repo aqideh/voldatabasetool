@@ -43,7 +43,7 @@ type PreviewRow = Omit<HistoricalAttendanceImportRow,
   'id'|'batch_id'|'committed_attendance_id'|'reviewed_at'|'reviewed_by'|'duplicate_of_attendance_id'|'row_version'
   |'matched_keluarga_event_id'|'matched_keluarga_timeslot_id'|'committed_keluarga_session_id'|'pending_identity_id'
   |'source_check_out_at'|'source_check_out_kind'|'paired_source_row_id'|'pair_role'
-  |'source_sign_in_original_at'|'source_check_out_original_at'|'effective_sign_in_at'|'effective_sign_out_at'
+  |'source_sign_in_original_at'|'source_check_out_original_at'|'effective_sign_in_at'|'effective_sign_out_at'|'effective_timing_overridden'
   |'sign_in_evidence_type'|'sign_out_evidence_type'
 >;
 
