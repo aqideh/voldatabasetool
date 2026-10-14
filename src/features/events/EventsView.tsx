@@ -271,11 +271,12 @@ function resolveStagedShift(
   if(!row.matched_core_volunteer_id){
     return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'Resolve the volunteer first.'};
   }
-  if(!row.source_sign_in_at){
+  if(!row.source_sign_in_at&&!row.effective_sign_in_at){
     return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'No usable source sign-in time.'};
   }
 
-  const signIn=new Date(row.source_sign_in_at).getTime();
+  const effectiveStart=row.effective_timing_overridden ? row.effective_sign_in_at : row.source_sign_in_at;
+  const signIn=new Date(effectiveStart||'').getTime();
   if(!Number.isFinite(signIn)){
     return {safe:false,timeslotId:null,candidateTimeslotIds:[],reason:'The source sign-in time is invalid.'};
   }
@@ -285,7 +286,9 @@ function resolveStagedShift(
     .map(singaporeShiftWindow)
     .filter((window):window is NonNullable<ReturnType<typeof singaporeShiftWindow>>=>Boolean(window));
 
-  const sourceCheckOut=row.source_check_out_at||row.source_feedback_at;
+  const sourceCheckOut=row.effective_timing_overridden
+    ?row.effective_sign_out_at
+    :(row.source_check_out_at||row.source_feedback_at);
   if(sourceCheckOut){
     const checkOut=new Date(sourceCheckOut).getTime();
     if(!Number.isFinite(checkOut)||checkOut<signIn){
@@ -389,7 +392,8 @@ function StagedAttendanceTimingEditor({
   const effectiveIn=fromSingaporeLocal(signIn);
   const effectiveOut=fromSingaporeLocal(signOut);
   const dirty=!sameTimestamp(effectiveIn,persistedSignIn)
-    ||!sameTimestamp(effectiveOut,persistedSignOut);
+    ||!sameTimestamp(effectiveOut,persistedSignOut)
+    ||(effectiveOut!==null&&signOutEvidence!==(row.sign_out_evidence_type||(row.source_check_out_at?'SOURCE_CAPTURED':'STAFF_CONFIRMED')));
 
   async function saveTiming() {
     if(!effectiveIn){setError('Enter an effective sign-in time.');return;}
@@ -873,8 +877,11 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
                 <StagedAttendanceTimingEditor
                   row={row}
                   shift={timingShift}
-                  disabled={busy}
-                  onSaved={async()=>{setMessage({kind:'success',text:'Attendance timing saved. Review the refreshed row, then accept it.'});await reload();}}
+                  disabled={!canWrite||busy}
+                  onSaved={async()=>{
+                    setMessage({kind:'success',text:'Attendance timing saved. Review the refreshed row, then accept it.'});
+                    try{await reload();}catch{setMessage({kind:'error',text:'Timing saved, but refreshing failed. Reopen this event before confirming.'});}
+                  }}
                 />
               </div>
               {canWrite&&<Group gap="xs" wrap="nowrap">
