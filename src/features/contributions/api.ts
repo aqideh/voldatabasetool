@@ -119,11 +119,6 @@ export async function fetchContributionReviewEvents():Promise<ContributionReview
       .order('reporting_at',{ascending:false})
       .limit(250),
     supabase
-      .from('phaseone_attendance_session_shifts')
-      .select('session_id,roster_id')
-      .eq('event_id',eventId)
-      .limit(10000),
-    supabase
       .from('volunteer_contributions')
       .select('event_id,status')
       .in('status',['pending','needs_review'])
@@ -169,6 +164,11 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
     supabase
       .from('phaseone_attendance_sessions')
       .select('id,event_id,attendance_date,person_key,origin_roster_id,checked_in_at,checked_out_at,updated_at')
+      .eq('event_id',eventId)
+      .limit(10000),
+    supabase
+      .from('phaseone_attendance_session_shifts')
+      .select('session_id,roster_id')
       .eq('event_id',eventId)
       .limit(10000),
     supabase
