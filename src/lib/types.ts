@@ -40,6 +40,8 @@ export interface EventRow {
 export interface EventShiftRow {
   id:string;event_id:string;name:string;shift_date:string;start_time:string|null;end_time:string|null;notes:string|null;row_version:number;
   source?:'maklom'|'keluarga';keluarga_timeslot_id?:string|null;
+  canonical_status?:'scheduled'|'cancelled';canonical_sort_order?:number;canonical_capacity?:number|null;
+  canonical_starts_at?:string;canonical_ends_at?:string|null;
 }
 export interface EventImpactMetricRow {id:string;event_id:string;label:string;value:number;unit:string|null;row_version:number;}
 
