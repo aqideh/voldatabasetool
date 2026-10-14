@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { HistoricalAttendanceImportRow } from '../../lib/types';
 import { safeDateTime } from '../../lib/utils';
+import { historicalEffectiveSignOut, historicalSourceSignOut } from './sign-out-evidence';
 import { createEvent } from '../events/api';
 import {
   approveAllSafeHistoricalRows,
@@ -315,7 +316,7 @@ export function HistoricalAttendanceView({
         <Table striped highlightOnHover verticalSpacing="sm" miw={1200}>
           <Table.Thead><Table.Tr>
             <Table.Th>Source</Table.Th><Table.Th>Volunteer</Table.Th><Table.Th>Source event</Table.Th>
-            <Table.Th>Sign in</Table.Th><Table.Th>Sign out / feedback</Table.Th><Table.Th>Match</Table.Th><Table.Th>Decision</Table.Th><Table.Th>Feedback</Table.Th>
+            <Table.Th>Sign in</Table.Th><Table.Th>Sign out</Table.Th><Table.Th>Match</Table.Th><Table.Th>Decision</Table.Th><Table.Th>Feedback</Table.Th>
           </Table.Tr></Table.Thead>
           <Table.Tbody>{visible.map((row)=><Table.Tr
             key={row.id}
@@ -326,7 +327,7 @@ export function HistoricalAttendanceView({
             <Table.Td><Text fw={700} size="sm">{row.full_name}</Text><Text size="xs" c="dimmed">{row.email||row.phone||'No identifier'}</Text></Table.Td>
             <Table.Td><Text size="sm">{row.event_name}</Text><Text size="xs" c="dimmed">{row.matched_keluarga_event_id?'Keluarga event linked':row.matched_event_id?'MakLom event linked':'No canonical event'}</Text></Table.Td>
             <Table.Td><Text size="sm">{safeDateTime(row.source_sign_in_at)}</Text></Table.Td>
-            <Table.Td><Text size="sm">{safeDateTime(row.source_check_out_at||row.source_feedback_at)}</Text><Text size="xs" c="dimmed">{row.source_check_out_at?'Explicit check-out':row.source_feedback_at?'Feedback timestamp':'No sign-out evidence'}</Text></Table.Td>
+            <Table.Td><Text size="sm">{safeDateTime(historicalEffectiveSignOut(row))}</Text><Text size="xs" c="dimmed">{row.effective_timing_overridden?'Staff-adjusted sign-out':historicalSourceSignOut(row).origin==='feedback'?'Feedback submission (sign-out)':historicalSourceSignOut(row).origin==='checkout'?'Captured sign-out':'No confirmed sign-out'}</Text></Table.Td>
             <Table.Td>
               <Badge color={statusColor(row.match_status)} variant="light">{row.match_status==='duplicate'&&row.duplicate_of_attendance_id?'matched existing attendance':row.match_status.replaceAll('_',' ')}</Badge>
               {row.review_flags.length>0&&<Text size="xs" c="dimmed" mt={4}>{row.review_flags.slice(0,2).map((x)=>x.replaceAll('_',' ')).join(' · ')}{row.review_flags.length>2?' …':''}</Text>}
@@ -376,7 +377,7 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
   const [newEventVenue,setNewEventVenue]=useState(historicalEventVenue(row.event_name));
   const [newEventProgramme,setNewEventProgramme]=useState(historicalProgramme(row.event_name));
   const persistedEffectiveSignIn=row.effective_sign_in_at||row.source_sign_in_at;
-  const persistedEffectiveSignOut=row.effective_sign_out_at||row.source_check_out_at;
+  const persistedEffectiveSignOut=historicalEffectiveSignOut(row);
   const [effectiveSignIn,setEffectiveSignIn]=useState(singaporeDateTimeInput(persistedEffectiveSignIn));
   const [effectiveSignOut,setEffectiveSignOut]=useState(singaporeDateTimeInput(persistedEffectiveSignOut));
   const [signInEvidenceType,setSignInEvidenceType]=useState<string>(row.sign_in_evidence_type||'SOURCE_CAPTURED');
@@ -570,8 +571,8 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
         <Text size="sm"><b>Event:</b> {row.event_name}</Text>
         <Text size="sm"><b>Canonical date:</b> {row.event_date}</Text>
         <Text size="sm"><b>Original source sign-in:</b> {safeDateTime(row.source_sign_in_original_at||row.source_sign_in_at)}</Text>
-        <Text size="sm"><b>Original source sign-out:</b> {safeDateTime(row.source_check_out_original_at||row.source_check_out_at)}</Text>
-        <Text size="sm"><b>Feedback timestamp:</b> {safeDateTime(row.source_feedback_at)}</Text>
+        <Text size="sm"><b>Source sign-out:</b> {safeDateTime(historicalSourceSignOut(row).at)} {historicalSourceSignOut(row).origin==='feedback'?'(feedback submitted)':historicalSourceSignOut(row).origin==='checkout'?'(check-out recorded)':''}</Text>
+        {row.source_feedback_at&&!historicalSourceSignOut(row).at&&<Text size="xs" c="orange">Feedback could not be safely matched to this sign-out. Resolve the source match before using its timestamp.</Text>}
         {(row.effective_sign_in_at||row.effective_sign_out_at)&&<Text size="xs" c="dimmed" mt={4}>
           Effective attendance: {safeDateTime(row.effective_sign_in_at||row.source_sign_in_at)}
           {row.effective_sign_out_at?' – '+safeDateTime(row.effective_sign_out_at):' · no effective sign-out'}
@@ -668,14 +669,14 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
             type="datetime-local"
             label="Effective sign-in"
             value={effectiveSignIn}
-            onChange={(event)=>setEffectiveSignIn(event.currentTarget.value)}
+            onChange={(event)=>{setEffectiveSignIn(event.currentTarget.value);setSignInEvidenceType('ADMIN_CORRECTED');}}
             disabled={!canWrite}
           />
           <TextInput
             type="datetime-local"
             label="Effective sign-out"
             value={effectiveSignOut}
-            onChange={(event)=>setEffectiveSignOut(event.currentTarget.value)}
+            onChange={(event)=>{setEffectiveSignOut(event.currentTarget.value);setSignOutEvidenceType('ADMIN_CORRECTED');}}
             disabled={!canWrite}
           />
           <Select
@@ -747,18 +748,18 @@ function HistoricalRowEditor({row,volunteers,events,shifts,canWrite,onSaved}:any
 
     <NumberInput
       label="Reviewed credited minutes"
-      description={row.source_check_out_at
-        ? 'Use the source sign-in and sign-out evidence above when reviewing credited time.'
-        : row.source_feedback_at
-          ? 'No explicit sign-out is recorded. Feedback submission is shown separately as supporting evidence.'
-          : 'No sign-out evidence is available; review credited minutes manually.'}
+      description={historicalSourceSignOut(row).at
+        ? historicalSourceSignOut(row).origin==='feedback'
+          ? 'The matched feedback submission is the source sign-out time. Staff corrections, when saved, override it.'
+          : 'Use the source sign-in and sign-out evidence above when reviewing credited time.'
+        : 'No confirmed sign-out is available. Review timing or resolve the feedback match before confirming credited time.'}
       min={0} value={minutes} onChange={setMinutes} disabled={!canWrite}
     />
     <Textarea label="Review note" value={note} onChange={(event)=>setNote(event.currentTarget.value)} disabled={!canWrite}/>
 
     {Object.keys(row.feedback_payload||{}).length>0&&<Paper withBorder radius="md" p="md">
       <Text fw={700}>Attached feedback evidence</Text>
-      <Text size="xs" c="dimmed" mt="xs">Submitted {safeDateTime(row.source_feedback_at)}</Text>
+      <Text size="xs" c="dimmed" mt="xs">{historicalSourceSignOut(row).origin==='feedback'?'Submitted at sign-out':'Feedback submitted'} {safeDateTime(row.source_feedback_at)}</Text>
       <ScrollArea h={180} mt="sm">
         <Table verticalSpacing="xs">
           <Table.Tbody>{Object.entries(row.feedback_payload).filter(([,value])=>String(value??'').trim()).map(([key,value])=><Table.Tr key={key}>
