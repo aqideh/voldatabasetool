@@ -618,7 +618,15 @@ export async function resolveHistoricalAttendanceTimes(input:{
     p_reason_note:input.reasonNote,
     p_batch_id:input.batchId,
   });
-  if(error)throw error;
+  if(error){
+    const known:Record<string,string>={
+      P1201:'This attendance record changed. Refresh before saving again.',
+      P1202:'Attendance was already reviewed. Use Correct attendance instead.',
+      P1203:'The selected captured evidence does not match the imported record.',
+      '42501':'MakLom attendance editing permission was denied.',
+    };
+    throw new Error(known[error.code]||error.message||'Attendance timing could not be saved.');
+  }
   return data as HistoricalAttendanceImportRow;
 }
 
