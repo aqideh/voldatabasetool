@@ -676,7 +676,12 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
           });
           accepted+=1;
         }catch(error){
-          failures.push(row.full_name+': '+(error instanceof Error?error.message:'Could not accept this row.'));
+          failures.push(row.full_name+': '+(
+            error instanceof Error ? error.message
+              : error && typeof error==='object' && 'message' in error && typeof error.message==='string'
+                ? error.message
+                : 'Could not accept this row.'
+          ));
         }
       }
       await reload();
