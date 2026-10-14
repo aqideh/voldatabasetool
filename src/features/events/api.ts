@@ -8,7 +8,7 @@ type KeluargaEventRow = {
 };
 
 type KeluargaTimeslotRow = {
-  id:string; event_id:string; label:string|null; starts_at:string; ends_at:string; status:string; sort_order:number;
+  id:string; event_id:string; label:string|null; starts_at:string; ends_at:string|null; status:string; sort_order:number; registration_capacity:number|null;
 };
 
 export type EventRosterDetailRow = {
@@ -103,7 +103,7 @@ export async function fetchEventsBundle() {
     supabase.from('event_shifts').select('*').order('shift_date').order('start_time'),
     supabase.from('event_impact_metrics').select('*').order('label'),
     supabase.from('phaseone_event_timeslots')
-      .select('id,event_id,label,starts_at,ends_at,status,sort_order')
+      .select('id,event_id,label,starts_at,ends_at,status,sort_order,registration_capacity')
       .order('sort_order')
       .order('starts_at'),
   ]);
@@ -117,7 +117,7 @@ export async function fetchEventsBundle() {
 
   const projectedShifts:EventShiftRow[] = canonicalTimeslots.map((slot) => {
     const start = singaporeParts(slot.starts_at);
-    const end = singaporeParts(slot.ends_at);
+    const end = singaporeParts(slot.ends_at ?? slot.starts_at);
     return {
       id: `keluarga:${slot.id}`,
       event_id: `keluarga:${slot.event_id}`,
@@ -129,6 +129,12 @@ export async function fetchEventsBundle() {
       row_version: 1,
       source: 'keluarga',
       keluarga_timeslot_id: slot.id,
+      canonical_status: slot.status as 'scheduled'|'cancelled',
+      canonical_sort_order: slot.sort_order,
+      canonical_capacity: slot.registration_capacity,
+      canonical_starts_at: slot.starts_at,
+      canonical_ends_at: slot.ends_at,
+      canonical_label: slot.label,
     };
   });
 
@@ -469,6 +475,54 @@ export async function updateCanonicalEventDetails(input:{
     opportunity_category:string|null;
     updated_at:string;
   };
+}
+
+export type CanonicalScheduleShiftInput = {
+  id:string|null;
+  label:string|null;
+  starts_at:string;
+  ends_at:string;
+  expected_label?:string|null;
+  expected_starts_at?:string;
+  expected_ends_at?:string|null;
+  expected_status?:string;
+  expected_sort_order?:number;
+  expected_registration_capacity?:number|null;
+  status?:'scheduled';
+};
+
+export async function saveCanonicalEventSchedule(input:{
+  eventId:string;
+  expectedUpdatedAt:string;
+  reasonNote:string;
+  shifts:CanonicalScheduleShiftInput[];
+}){
+  const {data,error}=await supabase.rpc('maklom_event_save_schedule',{
+    p_event_id:input.eventId,
+    p_expected_updated_at:input.expectedUpdatedAt,
+    p_shifts:input.shifts,
+    p_reason_note:input.reasonNote,
+  });
+  if(error)throw error;
+  return data as {event_id:string;changed_count:number;new_shift_ids:string[];reporting_at:string};
+}
+
+export async function correctDirectRosterAttendance(input:{
+  rosterId:string;
+  expectedUpdatedAt:string;
+  signedInAt:string;
+  signedOutAt:string|null;
+  reasonNote:string;
+}){
+  const {data,error}=await supabase.rpc('maklom_event_correct_direct_roster_attendance',{
+    p_roster_id:input.rosterId,
+    p_expected_updated_at:input.expectedUpdatedAt,
+    p_signed_in_at:input.signedInAt,
+    p_signed_out_at:input.signedOutAt,
+    p_reason_note:input.reasonNote,
+  });
+  if(error)throw error;
+  return data as Record<string,unknown>;
 }
 
 export async function createEvent(input: Omit<EventRow, 'id' | 'updated_at' | 'row_version' | 'source' | 'keluarga_event_id'>) {

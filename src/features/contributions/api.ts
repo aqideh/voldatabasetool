@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import type { ContributionAuditRow, ContributionStatus } from '../../lib/types';
+import { attendanceMinutesFromEvidence, attendanceStatusFromEvidence } from './attendance-state';
 
 export type ContributionReviewEvent = {
   id:string;
@@ -35,6 +36,7 @@ export type ContributionSheetRow = {
   sign_out_at:string|null;
   session_id:string|null;
   session_origin_roster_id:string|null;
+  direct_attendance_updated_at:string|null;
   contribution_id:string|null;
   operational_minutes:number|null;
   approved_minutes:number|null;
@@ -73,6 +75,7 @@ type RawAttendanceState = {
   signed_in_at:string|null;
   signed_out_at:string|null;
   non_attendance_status:string|null;
+  updated_at:string;
 };
 
 type RawSession = {
@@ -136,7 +139,7 @@ export async function fetchContributionReviewEvents():Promise<ContributionReview
 }
 
 export async function fetchContributionEventSheet(eventId:string):Promise<ContributionEventSheet>{
-  const [eventRes,shiftsRes,rosterRes,effectiveRes,sessionsRes,contributionsRes]=await Promise.all([
+  const [eventRes,shiftsRes,rosterRes,effectiveRes,sessionsRes,sessionShiftsRes,contributionsRes]=await Promise.all([
     supabase
       .from('phaseone_events')
       .select('id,title,venue,reporting_at')
@@ -156,12 +159,17 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
       .limit(10000),
     supabase
       .from('phaseone_attendance')
-      .select('roster_id,signed_in_at,signed_out_at,non_attendance_status')
+      .select('roster_id,signed_in_at,signed_out_at,non_attendance_status,updated_at')
       .eq('event_id',eventId)
       .limit(10000),
     supabase
       .from('phaseone_attendance_sessions')
       .select('id,event_id,attendance_date,person_key,origin_roster_id,checked_in_at,checked_out_at,updated_at')
+      .eq('event_id',eventId)
+      .limit(10000),
+    supabase
+      .from('phaseone_attendance_session_shifts')
+      .select('session_id,roster_id')
       .eq('event_id',eventId)
       .limit(10000),
     supabase
@@ -177,6 +185,7 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
   if(rosterRes.error)throw rosterRes.error;
   if(effectiveRes.error)throw effectiveRes.error;
   if(sessionsRes.error)throw sessionsRes.error;
+  if(sessionShiftsRes.error)throw sessionShiftsRes.error;
   if(contributionsRes.error)throw contributionsRes.error;
 
   const shifts=(shiftsRes.data||[]) as ContributionSheetShift[];
@@ -185,6 +194,12 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
   const attendanceByRoster=new Map(((effectiveRes.data||[]) as RawAttendanceState[]).map((row)=>[row.roster_id,row]));
   const sessions=(sessionsRes.data||[]) as RawSession[];
   const sessionById=new Map(sessions.map((session)=>[session.id,session]));
+  const linkedSessionByRoster=new Map<string,RawSession>();
+  for(const link of sessionShiftsRes.data||[]){
+    const session=sessionById.get(link.session_id);
+    if(session)linkedSessionByRoster.set(link.roster_id,session);
+  }
+  for(const session of sessions)linkedSessionByRoster.set(session.origin_roster_id,session);
   const sessionsByPerson=new Map<string,RawSession[]>();
   for(const session of sessions){
     const current=sessionsByPerson.get(session.person_key)||[];
@@ -202,8 +217,8 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
       ? attendance.non_attendance_status
       : null;
 
-    let session:RawSession|null=null;
-    if(!session&&!nonAttendance&&rosterRow.attendance_person_key){
+    let session:RawSession|null=linkedSessionByRoster.get(rosterRow.id)||null;
+    if(!session&&!nonAttendance&&!attendance?.signed_in_at&&rosterRow.attendance_person_key){
       const candidates=(sessionsByPerson.get(rosterRow.attendance_person_key)||[])
         .map((candidate)=>({candidate,overlap:overlapMs(candidate,shift)}))
         .filter((entry)=>entry.overlap>0)
@@ -211,12 +226,13 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
       session=candidates[0]?.candidate||null;
     }
 
-    let status:ContributionSheetRowStatus='no_record';
-    if(nonAttendance==='withdrawn')status='withdrawn';
-    else if(nonAttendance==='absent')status='absent';
-    else if(session?.checked_out_at)status='attended';
-    else if(session?.checked_in_at)status='checked_in';
-    else if(Date.parse(shift.ends_at)<Date.now())status='absent';
+    const status:ContributionSheetRowStatus=attendanceStatusFromEvidence({
+      nonAttendanceStatus:nonAttendance,
+      sessionIn:session?.checked_in_at??null,
+      sessionOut:session?.checked_out_at??null,
+      directIn:attendance?.signed_in_at??null,
+      directOut:attendance?.signed_out_at??null,
+    });
 
     const contribution=session?contributionBySession.get(session.id)||null:null;
 
@@ -247,10 +263,14 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
       sign_out_at:session?.checked_out_at||attendance?.signed_out_at||null,
       session_id:session?.id||null,
       session_origin_roster_id:session?.origin_roster_id||null,
+      direct_attendance_updated_at:attendance?.updated_at||null,
       contribution_id:contribution?.id||null,
-      operational_minutes:contribution?.operational_minutes??(session?.checked_out_at
-        ? Math.max(0,Math.floor((Date.parse(session.checked_out_at)-Date.parse(session.checked_in_at))/60000))
-        : null),
+      operational_minutes:contribution?.operational_minutes??attendanceMinutesFromEvidence({
+        sessionIn:session?.checked_in_at??null,
+        sessionOut:session?.checked_out_at??null,
+        directIn:attendance?.signed_in_at??null,
+        directOut:attendance?.signed_out_at??null,
+      }),
       approved_minutes:contribution?.approved_minutes??null,
       contribution_status:contribution?.status??null,
       approval_note:contribution?.approval_note??null,

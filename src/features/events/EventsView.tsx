@@ -27,9 +27,11 @@ import {
   updateEvent,
 } from './api';
 import type { AttendanceRow, EventRow, EventShiftRow, HistoricalAttendanceImportRow } from '../../lib/types';
-import { fetchContributionEventSheet, type ContributionSheetRowStatus } from '../contributions/api';
+import { fetchContributionEventSheet, type ContributionSheetRowStatus, type ContributionSheetRow } from '../contributions/api';
 import type { EventRosterDetailRow, StagedIdentityCandidate } from './api';
 import { resolveHistoricalAttendanceTimes } from '../historical-attendance/api';
+import { CanonicalScheduleEditor } from './CanonicalScheduleEditor';
+import { DirectAttendanceCorrectionEditor } from './DirectAttendanceCorrectionEditor';
 
 interface Props {
   canWrite: boolean;
@@ -481,6 +483,7 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
   const [busy,setBusy]=useState(false);
   const [overrideRow,setOverrideRow]=useState<EventRosterDetailRow|null>(null);
   const [attendanceRow,setAttendanceRow]=useState<AttendanceRow|null>(null);
+  const [directAttendanceRow,setDirectAttendanceRow]=useState<ContributionSheetRow|null>(null);
   const [identityRow,setIdentityRow]=useState<HistoricalAttendanceImportRow|null>(null);
   const [manualShiftByRow,setManualShiftByRow]=useState<Record<string,string>>({});
   const [editingEventDetails,setEditingEventDetails]=useState(false);
@@ -728,6 +731,8 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
       </Group>
     </Paper>
 
+    <CanonicalScheduleEditor event={event as EventRow} shifts={shifts as EventShiftRow[]} canWrite={canWrite} onSaved={reload}/>
+
     <Paper withBorder radius="lg" p="md">
       <Group justify="space-between" align="flex-start">
         <div>
@@ -773,7 +778,11 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
                   ? <Text size="sm" fw={row.operational_minutes!=null?600:400}>{durationLabel(row.operational_minutes)}</Text>
                   : <Text size="xs" c="dimmed">Included in shared session</Text>}
               </Table.Td>
-              <Table.Td>{canWrite&&attendanceRecord&&<Button size="xs" variant="subtle" onClick={()=>setAttendanceRow(attendanceRecord)}>Correct</Button>}</Table.Td>
+              <Table.Td>{canWrite&&(attendanceRecord
+                ? <Button size="xs" variant="subtle" onClick={()=>setAttendanceRow(attendanceRecord)}>Correct</Button>
+                : !row.session_id&&row.direct_attendance_updated_at
+                  ? <Button size="xs" variant="subtle" onClick={()=>setDirectAttendanceRow(row)}>Correct</Button>
+                  : null)}</Table.Td>
             </Table.Tr>;
           })}
           {legacyAttendanceRows.map((row)=>{
@@ -1003,6 +1012,10 @@ function KeluargaEventWorkspace({event,shifts,canWrite,onRefresh,focusedRows=[]}
 
     <Modal opened={Boolean(overrideRow)} onClose={()=>setOverrideRow(null)} title={overrideRow?'Operational override · '+overrideRow.volunteer_name:'Operational override'} size="lg">
       {overrideRow&&<RosterOverrideEditor row={overrideRow} onSaved={async()=>{setOverrideRow(null);await reload();}}/>}
+    </Modal>
+
+    <Modal opened={Boolean(directAttendanceRow)} onClose={()=>setDirectAttendanceRow(null)} title={directAttendanceRow?'Correct attendance · '+directAttendanceRow.volunteer_name:'Correct attendance'} size="lg">
+      {directAttendanceRow&&<DirectAttendanceCorrectionEditor row={directAttendanceRow} onSaved={async()=>{setDirectAttendanceRow(null);await reload();}}/>}
     </Modal>
 
     <Modal opened={Boolean(attendanceRow)} onClose={()=>setAttendanceRow(null)} title={attendanceRow?'Correct attendance · '+attendanceRow.name:'Correct attendance'} size="lg">
