@@ -17,6 +17,7 @@ import { FormAttendanceView } from './features/form-attendance/FormAttendanceVie
 import { HistoricalAttendanceView } from './features/historical-attendance/HistoricalAttendanceView';
 import { DataOperationsView } from './features/data-operations/DataOperationsView';
 import { VolunteerIntelligenceView } from './features/intelligence/VolunteerIntelligenceView';
+import { DashboardErrorBoundary } from './features/intelligence/DashboardErrorBoundary';
 import { ProfileReconciliationView } from './features/profile-reconciliation/ProfileReconciliationView';
 import { WorkView, type WorkTarget } from './features/work/WorkView';
 import {fetchMaklomAccess,hasAccess,type MaklomAccess} from './lib/maklom-access';
@@ -136,7 +137,7 @@ export default function App(){
         onOpenEvent={(eventId,eventName,rowIds)=>{setRequestedEventId(eventId);setRequestedEventName(eventName);setRequestedEventRowIds(rowIds);setSection('Events');close();}}
         onResolveEventMatch={(eventName,eventDate,rowIds)=>{setHistoricalFocus({eventName,eventDate,rowIds});setSection('Historical Attendance');close();}}
       />}
-      {effectiveSection==='Data Dashboard'&&allowed('analytics.read')&&<VolunteerIntelligenceView/>}
+      {effectiveSection==='Data Dashboard'&&allowed('analytics.read')&&<DashboardErrorBoundary><VolunteerIntelligenceView/></DashboardErrorBoundary>}
       {effectiveSection==='Volunteer Leads'&&allowed('leads.read')&&<LeadsView canWrite={allowed('leads.write')}/>}
       {effectiveSection==='Volunteers'&&allowed('volunteers.read')&&<VolunteersView canWrite={allowed('volunteers.write')} canDelete={canDelete}/>}
       {effectiveSection==='Events'&&allowed('ops.read')&&<EventsView canWrite={allowed('ops.write')} canDelete={canDelete} requestedEventId={requestedEventId} requestedEventName={requestedEventName} requestedRowIds={requestedEventRowIds} onRequestedEventHandled={()=>{setRequestedEventId(null);setRequestedEventName(null);setRequestedEventRowIds([]);}}/>}
