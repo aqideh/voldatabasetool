@@ -43,7 +43,7 @@ type PreviewRow = Omit<HistoricalAttendanceImportRow,
   'id'|'batch_id'|'committed_attendance_id'|'reviewed_at'|'reviewed_by'|'duplicate_of_attendance_id'|'row_version'
   |'matched_keluarga_event_id'|'matched_keluarga_timeslot_id'|'committed_keluarga_session_id'|'pending_identity_id'
   |'source_check_out_at'|'source_check_out_kind'|'paired_source_row_id'|'pair_role'
-  |'source_sign_in_original_at'|'source_check_out_original_at'|'effective_sign_in_at'|'effective_sign_out_at'
+  |'source_sign_in_original_at'|'source_check_out_original_at'|'effective_sign_in_at'|'effective_sign_out_at'|'effective_timing_overridden'
   |'sign_in_evidence_type'|'sign_out_evidence_type'
 >;
 
@@ -618,7 +618,15 @@ export async function resolveHistoricalAttendanceTimes(input:{
     p_reason_note:input.reasonNote,
     p_batch_id:input.batchId,
   });
-  if(error)throw error;
+  if(error){
+    const known:Record<string,string>={
+      P1201:'This attendance record changed. Refresh before saving again.',
+      P1202:'Attendance was already reviewed. Use Correct attendance instead.',
+      P1203:'The selected captured evidence does not match the imported record.',
+      '42501':'MakLom attendance editing permission was denied.',
+    };
+    throw new Error(known[error.code]||error.message||'Attendance timing could not be saved.');
+  }
   return data as HistoricalAttendanceImportRow;
 }
 
