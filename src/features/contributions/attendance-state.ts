@@ -22,8 +22,11 @@ export function attendanceMinutesFromEvidence(input:{
   directIn:string|null;
   directOut:string|null;
 }):number|null {
-  const checkIn=input.sessionIn||input.directIn;
-  const checkOut=input.sessionOut||input.directOut;
+  const [checkIn,checkOut]=input.sessionIn&&input.sessionOut
+    ? [input.sessionIn,input.sessionOut]
+    : input.directIn&&input.directOut
+      ? [input.directIn,input.directOut]
+      : [null,null];
   if(!checkIn||!checkOut)return null;
   const start=Date.parse(checkIn);
   const end=Date.parse(checkOut);
