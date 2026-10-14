@@ -75,6 +75,18 @@ begin
          or v_current.registration_capacity is distinct from (v_item->>'expected_registration_capacity')::integer then
         raise exception 'A shift changed in another session. Refresh before saving' using errcode='40001';
       end if;
+      -- Do not silently move actual attendance to a different calendar day.
+      if timezone('Asia/Singapore',v_current.starts_at)::date
+           is distinct from timezone('Asia/Singapore',v_start)::date
+         and exists (
+           select 1 from public.phaseone_roster r
+           join public.phaseone_attendance a on a.roster_id=r.id
+           where r.timeslot_id=v_id
+             and (a.signed_in_at is not null or a.signed_out_at is not null)
+         ) then
+        raise exception 'This shift already has attendance. Its date cannot be moved through a schedule correction'
+          using errcode='22023';
+      end if;
       v_seen_ids := array_append(v_seen_ids,v_id);
       if v_current.starts_at is distinct from v_start
          or v_current.ends_at is distinct from v_end
