@@ -117,7 +117,7 @@ export async function fetchEventsBundle() {
 
   const projectedShifts:EventShiftRow[] = canonicalTimeslots.map((slot) => {
     const start = singaporeParts(slot.starts_at);
-    const end = singaporeParts(slot.ends_at);
+    const end = singaporeParts(slot.ends_at ?? slot.starts_at);
     return {
       id: `keluarga:${slot.id}`,
       event_id: `keluarga:${slot.event_id}`,
@@ -134,6 +134,7 @@ export async function fetchEventsBundle() {
       canonical_capacity: slot.registration_capacity,
       canonical_starts_at: slot.starts_at,
       canonical_ends_at: slot.ends_at,
+      canonical_label: slot.label,
     };
   });
 
