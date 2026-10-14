@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import type { ContributionAuditRow, ContributionStatus } from '../../lib/types';
+import { attendanceMinutesFromEvidence, attendanceStatusFromEvidence } from './attendance-state';
 
 export type ContributionReviewEvent = {
   id:string;
@@ -225,14 +226,13 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
       session=candidates[0]?.candidate||null;
     }
 
-    let status:ContributionSheetRowStatus='no_record';
-    if(nonAttendance==='withdrawn')status='withdrawn';
-    else if(nonAttendance==='absent')status='absent';
-    else if(session?.checked_out_at)status='attended';
-    else if(session?.checked_in_at)status='checked_in';
-    else if(attendance?.signed_out_at)status='attended';
-    else if(attendance?.signed_in_at)status='checked_in';
-    // A completed shift with no evidence is unresolved, not an explicitly marked absence.
+    const status:ContributionSheetRowStatus=attendanceStatusFromEvidence({
+      nonAttendanceStatus:nonAttendance,
+      sessionIn:session?.checked_in_at??null,
+      sessionOut:session?.checked_out_at??null,
+      directIn:attendance?.signed_in_at??null,
+      directOut:attendance?.signed_out_at??null,
+    });
 
     const contribution=session?contributionBySession.get(session.id)||null:null;
 
@@ -265,11 +265,12 @@ export async function fetchContributionEventSheet(eventId:string):Promise<Contri
       session_origin_roster_id:session?.origin_roster_id||null,
       direct_attendance_updated_at:attendance?.updated_at||null,
       contribution_id:contribution?.id||null,
-      operational_minutes:contribution?.operational_minutes??(session?.checked_out_at
-        ? Math.max(0,Math.floor((Date.parse(session.checked_out_at)-Date.parse(session.checked_in_at))/60000))
-        : attendance?.signed_in_at&&attendance?.signed_out_at
-          ? Math.max(0,Math.floor((Date.parse(attendance.signed_out_at)-Date.parse(attendance.signed_in_at))/60000))
-          : null),
+      operational_minutes:contribution?.operational_minutes??attendanceMinutesFromEvidence({
+        sessionIn:session?.checked_in_at??null,
+        sessionOut:session?.checked_out_at??null,
+        directIn:attendance?.signed_in_at??null,
+        directOut:attendance?.signed_out_at??null,
+      }),
       approved_minutes:contribution?.approved_minutes??null,
       contribution_status:contribution?.status??null,
       approval_note:contribution?.approval_note??null,
