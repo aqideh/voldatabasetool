@@ -39,6 +39,7 @@ function LoginScreen(){
     <div className="maklom-brand"><img src="/maklom-logo.svg" alt="MakLom"/><div><Title order={1}>MakLom</Title><Text c="dimmed">Volunteer operations database</Text></div></div>
     <TextInput label="Email" autoComplete="username" value={email} onChange={(e)=>setEmail(e.currentTarget.value)}/>
     <PasswordInput label="Password" autoComplete="current-password" value={password} onChange={(e)=>setPassword(e.currentTarget.value)} onKeyDown={(e)=>{if(e.key==='Enter')void submit();}}/>
+    <Text c="dimmed" size="sm">Use your Keluarga MENDAKI staff password to sign in.</Text>
     {error&&<Text c="red" size="sm">{error}</Text>}<Button loading={loading} onClick={()=>void submit()}>Sign in</Button>
   </Stack></Paper></Center>;
 }
