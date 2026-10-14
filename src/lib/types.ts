@@ -157,7 +157,7 @@ export interface IntelligenceMonthlyRow {
   historical_credited_minutes:number; approved_keluarga_minutes:number;
 }
 export interface VolunteerIntelligenceRow {
-  maklom_volunteer_id:string; core_volunteer_id:string; name:string; email:string|null; phone:string|null; recruited_year:number|null;
+  maklom_volunteer_id:string; core_volunteer_id:string; name:string|null; email:string|null; phone:string|null; recruited_year:number|null;
   tags:string[]; programmes_registered:string[]; event_count:number; first_event_date:string|null; last_event_date:string|null;
   repeat_engaged:boolean; events_last_90d:number; active_last_90d:boolean; historical_credited_minutes:number;
   approved_keluarga_minutes:number; accepted_insights:number; accepted_reviews:number; accepted_follow_up_reviews:number;

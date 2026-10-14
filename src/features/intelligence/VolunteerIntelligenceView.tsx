@@ -5,6 +5,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { buildIntelligenceReport, fetchIntelligenceDataset } from './api';
 import type { IntelligenceDateRange, IntelligenceFilters, VolunteerIntelligenceRow } from '../../lib/types';
 import { minutesLabel } from '../../lib/utils';
+import { compareIntelligenceRows, volunteerDisplayName } from './row-format';
 
 const PAGE_SIZE=50;
 function rate(value:number|null){return value==null?'—':`${Number(value).toFixed(1)}%`;}
@@ -45,11 +46,7 @@ export function VolunteerIntelligenceView(){
     else if(engagement==='active90')rows=rows.filter((row)=>row.active_last_90d);
     else if(engagement==='inactive')rows=rows.filter((row)=>row.event_count===0);
     if(recruitedYear)rows=rows.filter((row)=>row.recruited_year===recruitedYear);
-    if(sort==='events')rows.sort((a,b)=>b.event_count-a.event_count||a.name.localeCompare(b.name));
-    else if(sort==='historical-hours')rows.sort((a,b)=>b.historical_credited_minutes-a.historical_credited_minutes||a.name.localeCompare(b.name));
-    else if(sort==='approved-hours')rows.sort((a,b)=>b.approved_keluarga_minutes-a.approved_keluarga_minutes||a.name.localeCompare(b.name));
-    else if(sort==='last-active')rows.sort((a,b)=>(b.last_event_date||'').localeCompare(a.last_event_date||'')||a.name.localeCompare(b.name));
-    else rows.sort((a,b)=>a.name.localeCompare(b.name));
+    rows.sort((a,b)=>compareIntelligenceRows(a,b,sort));
     return rows;
   },[report,debounced,engagement,recruitedYear,sort]);
   const totalPages=Math.max(1,Math.ceil(filteredRows.length/PAGE_SIZE));
@@ -134,7 +131,7 @@ export function VolunteerIntelligenceView(){
     </Group></Paper>
     <Paper withBorder radius="lg" p={0} style={{overflow:'hidden'}}><ScrollArea><Table striped highlightOnHover verticalSpacing="sm" miw={1250}>
       <Table.Thead><Table.Tr><Table.Th>Volunteer</Table.Th><Table.Th ta="right">Events</Table.Th><Table.Th>Engagement</Table.Th><Table.Th>First event</Table.Th><Table.Th>Last event</Table.Th><Table.Th ta="right">Historical time</Table.Th><Table.Th ta="right">Approved KELUARGA</Table.Th><Table.Th ta="right">Reviewed signals</Table.Th></Table.Tr></Table.Thead>
-      <Table.Tbody>{pageRows.map((r)=><Table.Tr key={r.core_volunteer_id}><Table.Td><Text fw={700}>{r.name}</Text><Text size="xs" c="dimmed">{r.email||r.phone||'—'}</Text></Table.Td><Table.Td ta="right">{r.event_count}</Table.Td><Table.Td><Group gap={4}>{r.repeat_engaged&&<Badge variant="light">Repeat</Badge>}{r.active_last_90d&&<Badge color="green" variant="light">90d active</Badge>}{!r.event_count&&<Badge color="gray" variant="light">Not deployed in range</Badge>}</Group></Table.Td><Table.Td>{dateLabel(r.first_event_date)}</Table.Td><Table.Td>{dateLabel(r.last_event_date)}</Table.Td><Table.Td ta="right">{minutesLabel(Number(r.historical_credited_minutes))}</Table.Td><Table.Td ta="right">{minutesLabel(Number(r.approved_keluarga_minutes))}</Table.Td><Table.Td ta="right">{r.accepted_insights+r.accepted_reviews}</Table.Td></Table.Tr>)}</Table.Tbody>
+      <Table.Tbody>{pageRows.map((r)=><Table.Tr key={r.core_volunteer_id}><Table.Td><Text fw={700}>{volunteerDisplayName(r.name)}</Text><Text size="xs" c="dimmed">{r.email||r.phone||'—'}</Text></Table.Td><Table.Td ta="right">{r.event_count}</Table.Td><Table.Td><Group gap={4}>{r.repeat_engaged&&<Badge variant="light">Repeat</Badge>}{r.active_last_90d&&<Badge color="green" variant="light">90d active</Badge>}{!r.event_count&&<Badge color="gray" variant="light">Not deployed in range</Badge>}</Group></Table.Td><Table.Td>{dateLabel(r.first_event_date)}</Table.Td><Table.Td>{dateLabel(r.last_event_date)}</Table.Td><Table.Td ta="right">{minutesLabel(Number(r.historical_credited_minutes))}</Table.Td><Table.Td ta="right">{minutesLabel(Number(r.approved_keluarga_minutes))}</Table.Td><Table.Td ta="right">{r.accepted_insights+r.accepted_reviews}</Table.Td></Table.Tr>)}</Table.Tbody>
     </Table></ScrollArea>{!dataset.isLoading&&!pageRows.length&&<Text c="dimmed" ta="center" p="xl">No volunteers match these filters.</Text>}</Paper>
     <Group justify="space-between"><Text size="sm" c="dimmed">{filteredRows.length.toLocaleString()} volunteers · page {page+1} of {totalPages}</Text><Pagination total={totalPages} value={Math.min(page+1,totalPages)} onChange={(v)=>setPage(v-1)}/></Group>
     <Paper withBorder radius="lg" p="lg"><Title order={5}>Counting rules</Title><Stack gap={4} mt="xs"><Text size="sm">Participation = one linked volunteer per deduplicated attended event inside the selected date range.</Text><Text size="sm">Blank From means Start of all time; blank To means End of all time.</Text><Text size="sm">Repeat engagement = at least two distinct attended events inside the selected range.</Text><Text size="sm">Historical credited time and MakLom-approved KELUARGA contribution time remain separate and are filtered by event/contribution date.</Text></Stack></Paper>
